@@ -1,0 +1,171 @@
+/* TableroPedidos.css */
+.tablero-wrapper {
+  padding: 20px;
+  background-color: #f4f4f9;
+  min-height: 100vh;
+  font-family: 'Segoe UI', Roboto, Helvetica, sans-serif;
+}
+
+.tablero-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 30px;
+  padding-bottom: 15px;
+  border-bottom: 3px solid #d32f2f; /* Rojo corporativo */
+}
+
+.tablero-header h2 {
+  color: #2c3e50;
+  margin: 0;
+  font-size: 28px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.btn-fullscreen {
+  background-color: #d32f2f;
+  color: white;
+  border: none;
+  padding: 12px 24px;
+  font-size: 16px;
+  font-weight: bold;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 6px rgba(211, 47, 47, 0.3);
+}
+
+.btn-fullscreen:hover {
+  background-color: #b71c1c;
+  transform: translateY(-2px);
+}
+
+.grid-pedidos {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 25px;
+}
+
+/* Animación de entrada para las tarjetas */
+@keyframes slideIn {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.tarjeta-pedido {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 8px 15px rgba(0,0,0,0.05);
+  overflow: hidden;
+  animation: slideIn 0.5s ease-out forwards;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+  border-top: 6px solid #d32f2f; /* Toque rojo principal */
+}
+
+.tarjeta-pedido:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 12px 20px rgba(0,0,0,0.1);
+}
+
+.pedido-header {
+  padding: 15px 20px;
+  background-color: #fafafa;
+  border-bottom: 1px solid #eee;
+}
+
+.pedido-header-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.mesa-badge {
+  background-color: #d32f2f;
+  color: white;
+  padding: 5px 12px;
+  border-radius: 20px;
+  font-weight: bold;
+  font-size: 18px;
+}
+
+/* Animación de parpadeo para pedidos pendientes */
+@keyframes pulse {
+  0% { opacity: 1; }
+  50% { opacity: 0.7; }
+  100% { opacity: 1; }
+}
+
+.estado-badge {
+  font-size: 13px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 12px;
+  text-transform: uppercase;
+}
+
+.estado-pendiente { background-color: #ff9800; color: white; animation: pulse 2s infinite; }
+.estado-preparacion { background-color: #2196f3; color: white; }
+.estado-listo { background-color: #4caf50; color: white; }
+
+.pedido-body {
+  padding: 20px;
+}
+
+.menu-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.menu-item {
+  display: flex;
+  justify-content: flex-start;
+  align-items: baseline;
+  margin-bottom: 12px;
+  font-size: 16px;
+  color: #333;
+}
+
+.cantidad {
+  background-color: #eee;
+  color: #d32f2f;
+  font-weight: bold;
+  padding: 3px 8px;
+  border-radius: 6px;
+  margin-right: 12px;
+  font-size: 14px;
+}
+
+.nota {
+  display: block;
+  font-size: 13px;
+  color: #d32f2f;
+  font-style: italic;
+  margin-top: 4px;
+  margin-left: 40px;
+}
+
+.pedido-footer {
+  padding: 15px 20px;
+  background-color: #fafafa;
+  border-top: 1px solid #eee;
+}
+
+.btn-accion {
+  width: 100%;
+  padding: 12px;
+  border: none;
+  border-radius: 6px;
+  background-color: #2c3e50;
+  color: white;
+  font-weight: bold;
+  font-size: 15px;
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
+
+.btn-accion:hover {
+  background-color: #1a252f;
+}
