@@ -3,9 +3,9 @@ import { User } from '../types';
 const MOCK_USERS: Record<string, User & { email: string }> = {
   'repartidor123': { id: '1', username: 'repartidor123', role: 'repartidor', name: 'Carlos (Moto 1)', email: 'repartidor@saborexpress.com' },
   'cocinero123': { id: '2', username: 'cocinero123', role: 'cocinero', name: 'Chef María', email: 'cocinero@saborexpress.com' },
-  // 'mesero123': { id: '3', username: 'mesero123', role: 'mesero', name: 'Juan Pérez', email: 'mesero@saborexpress.com' },
   'mesero123': { id: '3', username: 'mesero123', role: 'mesero', name: 'Juan Pérez', email: 'yersonstivencuellarrubiano@gmail.com' },
   'cajero123': { id: '4', username: 'cajero123', role: 'cajero', name: 'Ana Caja Principal', email: 'cajero@saborexpress.com' },
+  'cliente123': { id: '5', username: 'cliente123', role: 'cliente', name: 'Cliente Frecuente', email: 'cliente@saborexpress.com' },
 };
 
 const MOCK_VALID_CODE = '123456';

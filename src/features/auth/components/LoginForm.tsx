@@ -1,7 +1,5 @@
 'use client';
-
 import React, { useState, useEffect } from 'react';
-// IMPORTANTE: Asegúrate de importar Modal
 import { View, Text, TextInput, StyleSheet, ActivityIndicator, Image, TouchableOpacity, KeyboardAvoidingView, Platform, ScrollView, Modal } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../hooks/useAuth';
@@ -13,7 +11,6 @@ export const LoginForm = () => {
 
     const [activeView, setActiveView] = useState<'login' | 'forgot'>('login');
     
-    // NUEVO ESTADO: Controla si se muestra la alerta de éxito flotante
     const [showSuccessModal, setShowSuccessModal] = useState(false);
 
     const { user, loading, error, handleLogin, handleLogout } = useAuth();
@@ -22,24 +19,21 @@ export const LoginForm = () => {
 
     useEffect(() => {
         if (user && user.role) {
-            // 1. Cuando el login es exitoso, mostramos el modal
             setShowSuccessModal(true);
             
-            // 2. Esperamos 3 segundos (3000 ms)
             setTimeout(() => {
-                // 3. Cerramos el modal
                 setShowSuccessModal(false);
                 setIsNavigating(true);
                 
-                // 4. Redirigimos al usuario a su panel correspondiente
                 const role = user.role.toLowerCase();
                 if (role === 'cajero') router.replace('/cashier');
                 else if (role === 'repartidor') router.replace('/delivery');
                 else if (role === 'mesero') router.replace('/waiter');
                 else if (role === 'cocinero') router.replace('/chef');
+                else if(role === 'cliente') router.replace('/client');
                 else setIsNavigating(false);
                 
-            }, 3000); // <-- 3 segundos de espera
+            }, 3000); 
 
         } else {
             setIsNavigating(false);
@@ -146,7 +140,6 @@ export const LoginForm = () => {
                 </View>
             </ScrollView>
 
-            {/* NUEVO: MODAL DE ÉXITO QUE SE CIERRA AUTOMÁTICAMENTE */}
             <Modal
                 transparent={true}
                 visible={showSuccessModal}
@@ -154,7 +147,6 @@ export const LoginForm = () => {
             >
                 <View style={styles.modalOverlay}>
                     <View style={styles.modalContent}>
-                        {/* Puedes poner un icono de checkmark de Flaticon aquí */}
                         <Image source={{ uri: 'https://cdn-icons-png.flaticon.com/512/190/190411.png' }} style={styles.successIcon} />
                         <Text style={styles.modalTitle}>¡Ingreso Exitoso!</Text>
                         <Text style={styles.modalText}>
@@ -213,7 +205,6 @@ const styles = StyleSheet.create({
 
     BigText: { fontSize: 15, color: '#334155' },
 
-    // ESTILOS PARA EL MODAL DE ÉXITO
     modalOverlay: {
         flex: 1,
         backgroundColor: 'rgba(0, 0, 0, 0.5)',
