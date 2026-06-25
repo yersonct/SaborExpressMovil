@@ -98,11 +98,7 @@ export const WaiterSettingsView = () => {
           </View>
         </View>
 
-        {/* BOTÓN CERRAR SESIÓN */}
-        <TouchableOpacity style={styles.logoutButton} onPress={onLogoutPress}>
-          <Ionicons name="log-out-outline" size={22} color="#FFFFFF" />
-          <Text style={styles.logoutButtonText}>Finalizar Turno y Salir</Text>
-        </TouchableOpacity>
+   
 
       </ScrollView>
     </SafeAreaView>
@@ -127,6 +123,5 @@ const styles = StyleSheet.create({
   settingDesc: { fontSize: 13, color: '#94A3B8' },
   divider: { height: 1, backgroundColor: '#F1F5F9' },
   
-  logoutButton: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', backgroundColor: '#E61C24', paddingVertical: 16, borderRadius: 16, marginTop: 10, shadowColor: '#E61C24', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 5 },
-  logoutButtonText: { color: '#FFFFFF', fontSize: 16, fontWeight: 'bold', marginLeft: 10 }
+  
 });

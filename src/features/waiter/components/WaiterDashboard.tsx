@@ -1,20 +1,13 @@
+import React, { useState } from 'react';
+import { Alert, LayoutAnimation, Platform, SafeAreaView, Text, TouchableOpacity, UIManager, View, Modal, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { DrawerActions } from '@react-navigation/native';
 import { useNavigation } from 'expo-router';
-import React, { useState } from 'react';
-import {
-  Alert,
-  FlatList,
-  LayoutAnimation,
-  Platform,
-  SafeAreaView,
-  ScrollView,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  UIManager,
-  View
-} from 'react-native';
+
+// 🔥 Importaciones de tus nuevos componentes separados
+import { TablesGridView } from './TablesGridView';
+import { ActiveOrdersView } from './ActiveOrdersView';
+import { OrderTakingView } from './OrderTakingView';
 
 import { styles } from './style/WaiterDashboardStyles';
 
@@ -24,7 +17,7 @@ if (Platform.OS === 'android') {
   }
 }
 
-// 1. DATOS SIMULADOS
+// Datos Simulados
 const INITIAL_TABLES = [
   { id: 't1', name: 'Mesa 1', capacity: 2, status: 'Libre', type: 'normal' },
   { id: 't2', name: 'Mesa 2', capacity: 4, status: 'Ocupada', type: 'normal' },
@@ -46,40 +39,47 @@ const INITIAL_ORDERS = [
       { id: 'm1', name: 'Hamburguesa Sabor', quantity: 2, price: 15000, category: 'COCINA', cartId: 'c1', isToGo: false },
       { id: 'm3', name: 'Papas Francesas', quantity: 1, price: 5000, category: 'COCINA', cartId: 'c2', isToGo: true }
     ]
+  },
+  {
+    id: 'ORD-002',
+    tableId: 't2',
+    tableName: 'Mesa 2',
+    time: '12:30 PM',
+    status: 'LISTO',
+    total: 35000,
+    items: [
+      { id: 'm1', name: 'Hamburguesa Sabor', quantity: 2, price: 15000, category: 'COCINA', cartId: 'c1', isToGo: false },
+      { id: 'm3', name: 'Papas Francesas', quantity: 1, price: 5000, category: 'COCINA', cartId: 'c2', isToGo: true }
+    ]
   }
-];
-
-const MENU_ITEMS = [
-  { id: 'm1', name: 'Hamburguesa Sabor', price: 15000, desc: 'Doble carne, queso cheddar.', category: 'COCINA' },
-  { id: 'm2', name: 'Pizza Express', price: 18000, desc: 'Pepperoni y extra queso.', category: 'COCINA' },
-  { id: 'm3', name: 'Papas Francesas', price: 5000, desc: 'Porción grande.', category: 'COCINA' },
-  { id: 'm4', name: 'Gaseosa 500ml', price: 4000, desc: 'Coca-Cola o Sprite.', category: 'SOLO_PASAR' },
-  { id: 'm5', name: 'Jugo Natural', price: 6000, desc: 'Mango o Mora.', category: 'SOLO_PASAR' },
 ];
 
 export const WaiterDashboard = () => {
   const navigation = useNavigation();
 
-  // Estados principales del Dashboard
+  // Estados principales
   const [activeTab, setActiveTab] = useState<'MESAS' | 'ORDENES'>('MESAS');
   const [tables, setTables] = useState<any[]>(INITIAL_TABLES);
   const [activeOrders, setActiveOrders] = useState<any[]>(INITIAL_ORDERS);
   const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
 
-  // Estados para el flujo de tomar pedido y Carrito
+  // 🔥 NUEVO ESTADO: Para controlar el Modal del menú QR
+  const [isQrMenuVisible, setIsQrMenuVisible] = useState(false);
+
+  // Estados para tomar pedido
   const [activeTableForOrder, setActiveTableForOrder] = useState<any>(null);
   const [orderItems, setOrderItems] = useState<any[]>([]);
   const [isCartExpanded, setIsCartExpanded] = useState(false);
 
-  // Estados exclusivos para cuando se inicia un pedido "Para Llevar" global
+  // Estados para "Para Llevar"
   const [destType, setDestType] = useState<'particular' | 'mesa'>('particular');
   const [linkedTableId, setLinkedTableId] = useState<string | null>(null);
-  const [toGoCustomerName, setToGoCustomerName] = useState(''); // Nombre de la persona particular
+  const [toGoCustomerName, setToGoCustomerName] = useState('');
 
-  // --- LÓGICA DE NAVEGACIÓN Y SELECCIÓN ---
+  // --- LOGICA DE BOTONES ---
   const handleTablePress = (table: any) => {
     if (table.status === 'Ocupada') {
-      Alert.alert('Mesa Ocupada', 'Ve a la pestaña "Órdenes Activas" para ver o agregar productos a esta mesa.', [
+      Alert.alert('Mesa Ocupada', 'Ve a la pestaña "Órdenes Activas" para ver o agregar productos.', [
         { text: 'Ver Órdenes', onPress: () => setActiveTab('ORDENES') },
         { text: 'Cancelar', style: 'cancel' }
       ]);
@@ -92,11 +92,7 @@ export const WaiterDashboard = () => {
 
   const handleStartToGoOrder = () => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setActiveTableForOrder({
-      id: `temp_togo`,
-      name: `Pedido Para Llevar`,
-      isGlobalToGo: true
-    });
+    setActiveTableForOrder({ id: `temp_togo`, name: `Pedido Para Llevar`, isGlobalToGo: true });
     setDestType('particular');
     setLinkedTableId(null);
     setToGoCustomerName('');
@@ -105,50 +101,29 @@ export const WaiterDashboard = () => {
 
   const handleAddMoreToOrder = (existingOrder: any) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    let table = tables.find(t => t.id === existingOrder.tableId) ||
-      { id: existingOrder.tableId, name: existingOrder.tableName, status: 'Ocupada', isGlobalToGo: false };
-
+    let table = tables.find(t => t.id === existingOrder.tableId) || { id: existingOrder.tableId, name: existingOrder.tableName, status: 'Ocupada', isGlobalToGo: false };
     setActiveTableForOrder(table);
     setOrderItems([...existingOrder.items]);
     setIsCartExpanded(false);
   };
 
-  // 🔥 CANCELAR PEDIDO CON ALERTA DE SEGURIDAD
   const handleCancelOrder = (orderToCancel: any) => {
-    Alert.alert(
-      '⚠ Cancelar Pedido',
-      'Señor usuario, tenga en cuenta que una vez el pedido esté en preparación en cocina, no se podrá cancelar para evitar pérdidas de ingredientes.\n\n¿Está seguro de anular completamente este pedido?',
-      [
-        { text: 'No, Volver', style: 'cancel' },
-        {
-          text: 'Sí, Cancelar',
-          style: 'destructive',
-          onPress: () => {
-            LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-
-            // 1. Eliminar la orden activa
-            const updatedOrders = activeOrders.filter(o => o.id !== orderToCancel.id);
-            setActiveOrders(updatedOrders);
-
-            // 2. Liberar la mesa (cambiar a 'Libre') si era una orden de mesa física
-            if (!orderToCancel.tableId.includes('particular')) {
-              setTables(tables.map(t =>
-                t.id === orderToCancel.tableId ? { ...t, status: 'Libre' } : t
-              ));
-            }
-
-            Alert.alert('Cancelado', 'El pedido ha sido eliminado correctamente.');
-          }
-        }
-      ]
-    );
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setActiveOrders(activeOrders.filter(o => o.id !== orderToCancel.id));
+    
+    if (!orderToCancel.tableId.includes('particular')) {
+      setTables(tables.map(t => t.id === orderToCancel.tableId ? { ...t, status: 'Libre' } : t));
+    }
   };
 
-  // --- LÓGICA DEL CARRITO ---
+  const handleDeliverOrder = (orderToDeliver: any) => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setActiveOrders(activeOrders.filter(o => o.id !== orderToDeliver.id));
+  };
+
   const handleAddItem = (product: any) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     const defaultToGo = activeTableForOrder?.isGlobalToGo ? true : false;
-
     const existingIndex = orderItems.findIndex(item => item.id === product.id && item.isToGo === defaultToGo);
 
     if (existingIndex >= 0) {
@@ -186,7 +161,7 @@ export const WaiterDashboard = () => {
         const personName = toGoCustomerName.trim() !== '' ? toGoCustomerName.trim() : 'Particular';
         finalTableName = `Llevar - ${personName}`;
       } else {
-        if (!linkedTableId) return Alert.alert('Aviso', 'Selecciona a qué mesa asignar este pedido para llevar.');
+        if (!linkedTableId) return Alert.alert('Aviso', 'Selecciona a qué mesa asignar este pedido.');
         const t = tables.find(x => x.id === linkedTableId);
         finalTableId = t.id;
         finalTableName = t.name;
@@ -200,14 +175,8 @@ export const WaiterDashboard = () => {
     const existingOrderIndex = activeOrders.findIndex(o => o.tableId === finalTableId);
 
     if (existingOrderIndex >= 0) {
-      const currentOrder = activeOrders[existingOrderIndex];
       const updatedOrders = [...activeOrders];
-      updatedOrders[existingOrderIndex] = {
-        ...currentOrder,
-        items: orderItems,
-        total: orderTotal,
-        status: 'PREPARANDO'
-      };
+      updatedOrders[existingOrderIndex] = { ...activeOrders[existingOrderIndex], items: orderItems, total: orderTotal, status: 'PREPARANDO' };
       setActiveOrders(updatedOrders);
       Alert.alert('¡Pedido Actualizado!', `Se actualizó la cuenta de ${finalTableName}.`);
     } else {
@@ -234,156 +203,47 @@ export const WaiterDashboard = () => {
     setActiveTab('ORDENES');
   };
 
-  // --- VISTA 1: TOMANDO EL PEDIDO ---
+  // --- RENDER ---
   if (activeTableForOrder) {
-    const orderTotal = orderItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-
-    let paddingBottom = isCartExpanded ? 350 : 150;
-    if (activeTableForOrder.isGlobalToGo && isCartExpanded) paddingBottom = 450;
-
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.orderHeader}>
-          <TouchableOpacity style={styles.backButton} onPress={() => setActiveTableForOrder(null)}>
-            <Ionicons name="arrow-back" size={24} color="#FFF" />
-          </TouchableOpacity>
-          <View>
-            <Text style={styles.orderHeaderTitle}>Tomando pedido</Text>
-            <Text style={styles.orderHeaderTable}>{activeTableForOrder.name}</Text>
-          </View>
-        </View>
-
-        <FlatList
-          data={MENU_ITEMS}
-          keyExtractor={item => item.id}
-          contentContainerStyle={[styles.menuList, { paddingBottom }]}
-          renderItem={({ item }) => (
-            <TouchableOpacity style={styles.menuCard} onPress={() => handleAddItem(item)} activeOpacity={0.7}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.menuItemName}>{item.name}</Text>
-                <Text style={styles.menuItemDesc}>{item.desc}</Text>
-                <Text style={styles.menuItemPrice}>${item.price.toLocaleString()}</Text>
-              </View>
-              <View style={styles.addButton}><Text style={styles.addButtonText}>+</Text></View>
-            </TouchableOpacity>
-          )}
-        />
-
-        <View style={styles.floatingCart}>
-          <TouchableOpacity
-            style={styles.cartHeader}
-            activeOpacity={0.8}
-            onPress={() => { LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut); setIsCartExpanded(!isCartExpanded); }}
-          >
-            <Text style={styles.cartHeaderText}>Ver Carrito ({orderItems.reduce((acc, it) => acc + it.quantity, 0)} Productos)</Text>
-            <Ionicons name={isCartExpanded ? "chevron-down" : "chevron-up"} size={20} color="#64748B" />
-          </TouchableOpacity>
-
-          {isCartExpanded && (
-            <ScrollView style={styles.cartExpandedArea} showsVerticalScrollIndicator={false}>
-              {orderItems.length === 0 ? <Text style={styles.emptyCartText}>Aún no hay productos.</Text> :
-                orderItems.map((item) => (
-                  <View key={item.cartId} style={styles.cartItemRow}>
-                    <View style={styles.cartItemInfo}>
-                      <Text style={styles.cartItemText}>
-                        <Text style={{ fontWeight: '900', color: '#E61C24' }}>{item.quantity}x </Text>{item.name}
-                      </Text>
-                      <TouchableOpacity
-                        style={[styles.toGoToggleBtn, item.isToGo && styles.toGoToggleBtnActive]}
-                        onPress={() => toggleItemToGo(item.cartId)}
-                      >
-                        <Text style={[styles.toGoToggleText, item.isToGo && styles.toGoToggleTextActive]}>
-                          {item.isToGo ? '🛍️ Empacar para llevar' : '🍽️ Consumo en Mesa'}
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
-                    <Text style={styles.cartItemPrice}>${(item.price * item.quantity).toLocaleString()}</Text>
-                    <TouchableOpacity onPress={() => handleRemoveItem(item.cartId)} style={styles.deleteButton}>
-                      <Text style={styles.deleteButtonText}>✕</Text>
-                    </TouchableOpacity>
-                  </View>
-                ))
-              }
-
-              {activeTableForOrder.isGlobalToGo && orderItems.length > 0 && (
-                <View style={styles.destinationBox}>
-                  <Text style={styles.destinationTitle}>¿Para quién es este pedido?</Text>
-
-                  <View style={styles.destTabs}>
-                    <TouchableOpacity style={[styles.destTab, destType === 'particular' && styles.destTabActive]} onPress={() => setDestType('particular')}>
-                      <Text style={[styles.destTabText, destType === 'particular' && styles.destTabTextActive]}>👤 Particular</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={[styles.destTab, destType === 'mesa' && styles.destTabActive]} onPress={() => setDestType('mesa')}>
-                      <Text style={[styles.destTabText, destType === 'mesa' && styles.destTabTextActive]}>🪑 A una Mesa</Text>
-                    </TouchableOpacity>
-                  </View>
-
-                  {destType === 'particular' && (
-                    <TextInput
-                      style={styles.inlineInput}
-                      placeholder="Nombre del cliente (Opcional)"
-                      placeholderTextColor="#94A3B8"
-                      value={toGoCustomerName}
-                      onChangeText={setToGoCustomerName}
-                    />
-                  )}
-
-                  {destType === 'mesa' && (
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tablesScroll}>
-                      {tables.map(t => (
-                        <TouchableOpacity
-                          key={t.id}
-                          style={[styles.miniTableBtn, linkedTableId === t.id && styles.miniTableBtnActive]}
-                          onPress={() => setLinkedTableId(t.id)}
-                        >
-                          <Text style={[styles.miniTableText, linkedTableId === t.id && styles.miniTableTextActive]}>{t.name}</Text>
-                        </TouchableOpacity>
-                      ))}
-                    </ScrollView>
-                  )}
-                </View>
-              )}
-            </ScrollView>
-          )}
-
-          <View style={styles.cartFooter}>
-            <View>
-              <Text style={styles.cartTotalLabel}>Total:</Text>
-              <Text style={styles.cartTotalAmount}>${orderTotal.toLocaleString()}</Text>
-            </View>
-            <TouchableOpacity
-              style={[styles.submitButton, orderItems.length === 0 && styles.submitButtonDisabled]}
-              disabled={orderItems.length === 0} onPress={handleSubmitOrder}
-            >
-              <Text style={styles.submitButtonText}>Enviar a Cocina</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </SafeAreaView>
-    );
+    return <OrderTakingView 
+      activeTableForOrder={activeTableForOrder} setActiveTableForOrder={setActiveTableForOrder} 
+      orderItems={orderItems} isCartExpanded={isCartExpanded} setIsCartExpanded={setIsCartExpanded} 
+      destType={destType} setDestType={setDestType} toGoCustomerName={toGoCustomerName} 
+      setToGoCustomerName={setToGoCustomerName} tables={tables} linkedTableId={linkedTableId} 
+      setLinkedTableId={setLinkedTableId} handleAddItem={handleAddItem} handleRemoveItem={handleRemoveItem} 
+      toggleItemToGo={toggleItemToGo} handleSubmitOrder={handleSubmitOrder} 
+    />;
   }
 
-  // --- VISTAS 2 Y 3: DASHBOARD PRINCIPAL (MESAS Y ÓRDENES) ---
   return (
     <SafeAreaView style={styles.container}>
-
       <View style={styles.mainHeader}>
-        <TouchableOpacity
-          style={styles.menuHamburgerBtn}
-          onPress={() => navigation.dispatch(DrawerActions.openDrawer())}
-        >
+        <TouchableOpacity style={styles.menuHamburgerBtn} onPress={() => navigation.dispatch(DrawerActions.openDrawer())}>
           <Ionicons name="menu" size={32} color="#1E293B" />
         </TouchableOpacity>
-
         <View style={styles.headerTitlesBox}>
           <Text style={styles.mainTitle}>saborEXPRESS</Text>
           <Text style={styles.mainSubtitle}>Panel de Mesero</Text>
         </View>
+        
+        {/* BOTONES SUPERIORES */}
+        <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+          
+          {/* BOTÓN DEL CÓDIGO QR PARA MOSTRAR LA CARTA */}
+          <TouchableOpacity 
+            style={[styles.toGoButton, { backgroundColor: '#334155', paddingHorizontal: 12 }]} 
+            onPress={() => setIsQrMenuVisible(true)}
+          >
+            <Ionicons name="qr-code-outline" size={20} color="#FFF" />
+          </TouchableOpacity>
 
-        <TouchableOpacity style={styles.toGoButton} onPress={handleStartToGoOrder}>
-          <Ionicons name="bag-handle-outline" size={20} color="#FFF" />
-          <Text style={styles.toGoButtonText}>Para Llevar</Text>
-        </TouchableOpacity>
+          {/* BOTÓN DE PARA LLEVAR */}
+          <TouchableOpacity style={styles.toGoButton} onPress={handleStartToGoOrder}>
+            <Ionicons name="bag-handle-outline" size={20} color="#FFF" />
+            <Text style={styles.toGoButtonText}>Para Llevar</Text>
+          </TouchableOpacity>
+        </View>
+
       </View>
 
       <View style={styles.tabsContainer}>
@@ -393,135 +253,61 @@ export const WaiterDashboard = () => {
         </TouchableOpacity>
         <TouchableOpacity style={[styles.tab, activeTab === 'ORDENES' && styles.activeTab]} onPress={() => setActiveTab('ORDENES')}>
           <Ionicons name="receipt-outline" size={20} color={activeTab === 'ORDENES' ? '#E61C24' : '#64748B'} />
-          <Text style={[styles.tabText, activeTab === 'ORDENES' && styles.activeTabText]}>Órdenes Activas ({activeOrders.length})</Text>
+          <Text style={[styles.tabText, activeTab === 'ORDENES' && styles.activeTabText]}>Órdenes ({activeOrders.length})</Text>
         </TouchableOpacity>
       </View>
 
       <View style={styles.content}>
-
-        {activeTab === 'MESAS' && (
-          <FlatList
-            data={tables}
-            keyExtractor={item => item.id}
-            numColumns={2}
-            contentContainerStyle={styles.content} // 🔥 ESTILO APLICADO PARA CENTRAR
-            columnWrapperStyle={{ justifyContent: 'space-between' }}
-            showsVerticalScrollIndicator={false}
-            ListHeaderComponent={<Text style={styles.instructionsText}>Toca una mesa libre para tomar el pedido.</Text>}
-            renderItem={({ item }) => {
-              const isOccupied = item.status === 'Ocupada';
-              let iconName = 'restaurant-outline';
-              if (item.type === 'outdoor') iconName = 'partly-sunny-outline';
-              if (item.type === 'bar') iconName = 'wine-outline';
-              if (item.type === 'vip') iconName = 'star-outline';
-
-              return (
-                <TouchableOpacity
-                  style={[styles.tableGridCard, isOccupied && styles.tableGridCardOccupied]}
-                  onPress={() => handleTablePress(item)}
-                  activeOpacity={0.8}
-                >
-                  <View style={[styles.statusDot, isOccupied ? { backgroundColor: '#EF4444' } : { backgroundColor: '#10B981' }]} />
-                  <Ionicons name={iconName as any} size={40} color={isOccupied ? '#991B1B' : '#1E293B'} style={{ marginBottom: 10 }} />
-                  <Text style={[styles.gridTableName, isOccupied && { color: '#991B1B' }]}>{item.name}</Text>
-
-                  <View style={styles.capacityBadge}>
-                    <Ionicons name="people" size={14} color="#64748B" />
-                    <Text style={styles.capacityText}>{item.capacity} personas</Text>
-                  </View>
-                  <Text style={[styles.gridTableStatus, isOccupied ? { color: '#EF4444' } : { color: '#10B981' }]}>
-                    {item.status}
-                  </Text>
-                </TouchableOpacity>
-              )
-            }}
+        {activeTab === 'MESAS' ? 
+          <TablesGridView tables={tables} handleTablePress={handleTablePress} /> 
+          : 
+          <ActiveOrdersView 
+            activeOrders={activeOrders} 
+            expandedOrderId={expandedOrderId} 
+            setExpandedOrderId={setExpandedOrderId} 
+            handleAddMoreToOrder={handleAddMoreToOrder} 
+            handleCancelOrder={handleCancelOrder} 
+            handleDeliverOrder={handleDeliverOrder}
           />
-        )}
-
-        {activeTab === 'ORDENES' && (
-          <FlatList
-            data={activeOrders}
-            keyExtractor={item => item.id}
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={styles.content} // 🔥 ESTILO APLICADO PARA CENTRAR
-            ListEmptyComponent={
-              <View style={styles.emptyOrders}>
-                <Ionicons name="checkmark-circle-outline" size={60} color="#CBD5E1" />
-                <Text style={styles.emptyOrdersText}>No tienes órdenes activas.</Text>
-              </View>
-            }
-            renderItem={({ item }) => {
-              const isExpanded = expandedOrderId === item.id;
-              const isReady = item.status === 'LISTO';
-              return (
-                <View style={styles.activeOrderCard}>
-                  <TouchableOpacity
-                    style={styles.activeOrderHeader}
-                    activeOpacity={0.8}
-                    onPress={() => {
-                      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-                      setExpandedOrderId(isExpanded ? null : item.id);
-                    }}
-                  >
-                    <View>
-                      <Text style={styles.orderIdText}>{item.id}</Text>
-                      <Text style={styles.orderTableText}>{item.tableName}</Text>
-                      <Text style={styles.orderTimeText}>⌚ {item.time}</Text>
-                    </View>
-                    <View style={{ alignItems: 'flex-end' }}>
-                      <View style={[styles.badgeStatus, isReady ? styles.badgeReady : styles.badgePrep]}>
-                        <Text style={[styles.badgeStatusText, isReady ? styles.badgeReadyText : styles.badgePrepText]}>
-                          {isReady ? '✅ Listo' : '👨‍🍳 Preparando'}
-                        </Text>
-                      </View>
-                      <Text style={styles.expandText}>{isExpanded ? 'Ocultar' : 'Ver productos'}</Text>
-                    </View>
-                  </TouchableOpacity>
-
-                  {isExpanded && (
-                    <View style={styles.activeOrderDetails}>
-                      <View style={styles.divider} />
-                      {item.items.map((prod: any, idx: number) => (
-                        <View key={idx} style={styles.orderItemRow}>
-                          <View style={styles.orderItemMain}>
-                            <Text style={styles.orderItemQty}>{prod.quantity}x</Text>
-                            <View>
-                              <Text style={styles.orderItemName}>{prod.name}</Text>
-                              <View style={{ flexDirection: 'row', gap: 6, marginTop: 4 }}>
-                                {prod.isToGo ? <Text style={styles.badgeToGo}>🛍️ Empacar</Text> : <Text style={styles.badgeMesa}>🍽️ Mesa</Text>}
-                                {prod.category === 'SOLO_PASAR' ? <Text style={styles.miniBadgeBarra}>🥤 Servir</Text> : <Text style={styles.miniBadgeCocina}>🔥 Cocina</Text>}
-                              </View>
-                            </View>
-                          </View>
-                        </View>
-                      ))}
-
-                      <View style={styles.orderActions}>
-                        <TouchableOpacity style={styles.actionAddBtn} onPress={() => handleAddMoreToOrder(item)}>
-                          <Text style={styles.actionAddText}>+ Agregar productos</Text>
-                        </TouchableOpacity>
-
-                        {isReady && (
-                          <TouchableOpacity style={styles.actionDeliverBtn}>
-                            <Text style={styles.actionDeliverText}>Entregado</Text>
-                          </TouchableOpacity>
-                        )}
-
-                        {/* 🔥 BOTÓN CANCELAR PEDIDO */}
-                        {!isReady && (
-                          <TouchableOpacity style={styles.actionCancelBtn} onPress={() => handleCancelOrder(item)}>
-                            <Text style={styles.actionCancelText}>Cancelar</Text>
-                          </TouchableOpacity>
-                        )}
-                      </View>
-                    </View>
-                  )}
-                </View>
-              );
-            }}
-          />
-        )}
+        }
       </View>
+
+      {/* 🔥 MODAL PARA MOSTRAR LA CARTA DIGITAL AL CLIENTE */}
+      <Modal transparent visible={isQrMenuVisible} animationType="fade">
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' }}>
+          <View style={{ backgroundColor: '#FFFFFF', padding: 24, borderRadius: 24, alignItems: 'center', width: '85%', shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 10, elevation: 10 }}>
+            
+            {/* Icono de menú/libro en vez del escáner */}
+            <View style={{ width: 60, height: 60, borderRadius: 30, backgroundColor: '#FEE2E2', justifyContent: 'center', alignItems: 'center', marginBottom: 15 }}>
+              <Ionicons name="book-outline" size={32} color="#E61C24" />
+            </View>
+
+            <Text style={{ fontSize: 22, fontWeight: 'bold', color: '#1E293B', marginBottom: 8, textAlign: 'center' }}>
+              Carta Digital
+            </Text>
+            
+            <Text style={{ fontSize: 15, color: '#64748B', textAlign: 'center', marginBottom: 20, lineHeight: 22 }}>
+              Muéstrale este código al cliente para que lea el <Text style={{fontWeight: 'bold', color: '#E61C24'}}>menú en su celular</Text>. Una vez decida, tú le tomas el pedido.
+            </Text>
+            
+          {/* Generador de QR Gratuito apuntando a la futura página de la carta */}
+            <View style={{ padding: 15, backgroundColor: '#FFF', borderRadius: 16, borderWidth: 1, borderColor: '#E2E8F0', shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 10, elevation: 2 }}>
+              <Image 
+              source={{ uri: 'https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=http://10.3.234.202:3000/letter' }} 
+              style={{ width: 220, height: 220 }} 
+            />
+            </View>
+
+            <TouchableOpacity 
+              style={{ marginTop: 25, backgroundColor: '#F1F5F9', width: '100%', paddingVertical: 14, borderRadius: 12, alignItems: 'center' }} 
+              onPress={() => setIsQrMenuVisible(false)}
+            >
+              <Text style={{ color: '#475569', fontWeight: 'bold', fontSize: 16 }}>Ocultar QR</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
     </SafeAreaView>
   );
 };

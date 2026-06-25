@@ -4,13 +4,15 @@ import { View, Text, TextInput, StyleSheet, ActivityIndicator, Image, TouchableO
 import { useRouter } from 'expo-router';
 import { useAuth } from '../hooks/useAuth';
 import { ForgotPasswordFlow } from './ForgotPasswordFlow';
+import { Ionicons } from '@expo/vector-icons'; 
 
 export const LoginForm = () => {
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
+    
+    const [showPassword, setShowPassword] = useState(false);
 
     const [activeView, setActiveView] = useState<'login' | 'forgot'>('login');
-    
     const [showSuccessModal, setShowSuccessModal] = useState(false);
 
     const { user, loading, error, handleLogin, handleLogout } = useAuth();
@@ -96,7 +98,7 @@ export const LoginForm = () => {
                             <View style={[styles.inputWrapper, error ? styles.inputErrorBorder : null]}>
                                 <TextInput
                                     style={styles.input}
-                                    placeholder="Ej: cajero123"
+                                    placeholder="cajero123"
                                     placeholderTextColor="#A0A0A0"
                                     value={username}
                                     onChangeText={setUsername}
@@ -111,10 +113,20 @@ export const LoginForm = () => {
                                     style={styles.input}
                                     placeholder="******"
                                     placeholderTextColor="#A0A0A0"
-                                    secureTextEntry
+                                    secureTextEntry={!showPassword}
                                     value={password}
                                     onChangeText={setPassword}
                                 />
+                                <TouchableOpacity 
+                                    onPress={() => setShowPassword(!showPassword)}
+                                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} // Área de toque más grande
+                                >
+                                    <Ionicons 
+                                        name={showPassword ?  'eye-outline': 'eye-off-outline'} 
+                                        size={22} 
+                                        color="#64748B" 
+                                    />
+                                </TouchableOpacity>
                             </View>
 
                             <TouchableOpacity onPress={() => setActiveView('forgot')} style={{ alignItems: 'flex-end', marginBottom: 10 }}>
@@ -185,9 +197,22 @@ const styles = StyleSheet.create({
     forgotText: { color: '#E61C24', fontSize: 13, fontWeight: '600' },
 
     inputLabel: { fontSize: 13, fontWeight: '600', color: '#334155', marginBottom: 8, marginLeft: 4 },
-    inputWrapper: { height: 50, backgroundColor: '#FFFFFF', borderRadius: 8, paddingHorizontal: 16, justifyContent: 'center', borderWidth: 1, borderColor: '#CBD5E1', marginBottom: 16 },
+    
+    inputWrapper: { 
+        flexDirection: 'row', 
+        alignItems: 'center', 
+        height: 50, 
+        backgroundColor: '#FFFFFF', 
+        borderRadius: 8, 
+        paddingHorizontal: 16, 
+        borderWidth: 1, 
+        borderColor: '#CBD5E1', 
+        marginBottom: 16 
+    },
     inputErrorBorder: { borderColor: '#E61C24' },
-    input: { fontSize: 15, color: '#0F172A' },
+    
+    input: { flex: 1, fontSize: 15, color: '#0F172A' },
+    
     errorText: { color: '#E61C24', fontSize: 14, textAlign: 'center', marginBottom: 15 },
     loader: { marginTop: 20 },
     loginButton: { height: 52, backgroundColor: '#E61C24', borderRadius: 8, justifyContent: 'center', alignItems: 'center', marginTop: 5 },

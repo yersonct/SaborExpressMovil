@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { SafeAreaView, View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Image, Platform } from 'react-native';
+import { SafeAreaView, View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Image, Platform, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from 'expo-router';
 import { DrawerActions } from '@react-navigation/native';
@@ -8,16 +8,61 @@ export const WaiterProfileView = () => {
   const navigation = useNavigation();
   const [isEditing, setIsEditing] = useState(false);
   
+  // Estado principal de los datos
   const [waiterData, setWaiterData] = useState({
     name: 'Juan Pérez',
     phone: '+57 300 111 2233',
     email: 'juan.perez@saborexpress.com',
-    pin: '****' // PIN para aprobar pagos o cancelaciones
+    pin: '1234' // Es mejor manejarlo como números reales en lugar de '****' para validarlo
+  });
+
+  // 🔥 NUEVO: Estado para manejar los mensajes de error
+  const [errors, setErrors] = useState({
+    name: '',
+    pin: ''
   });
 
   const handleSaveProfile = () => {
-    setIsEditing(false);
-    // Lógica para guardar en BD
+    let isValid = true;
+    let newErrors = { name: '', pin: '' };
+
+    // 1. Validar Nombre
+    if (!waiterData.name.trim()) {
+      newErrors.name = 'El nombre es obligatorio.';
+      isValid = false;
+    } else if (waiterData.name.trim().length < 3) {
+      newErrors.name = 'El nombre debe tener al menos 3 caracteres.';
+      isValid = false;
+    }
+
+    // 2. Validar PIN
+    const pinRegex = /^\d{4}$/; // Expresión regular que exige exactamente 4 números
+    if (!waiterData.pin.trim()) {
+      newErrors.pin = 'El PIN es obligatorio.';
+      isValid = false;
+    } else if (!pinRegex.test(waiterData.pin.trim())) {
+      newErrors.pin = 'El PIN debe ser exactamente de 4 dígitos numéricos.';
+      isValid = false;
+    }
+
+    // Actualizamos el estado de los errores en la pantalla
+    setErrors(newErrors);
+
+    // Si todo es válido, guardamos
+    if (isValid) {
+      setIsEditing(false);
+      Alert.alert('¡Perfil Actualizado!', 'Tus datos han sido guardados correctamente.');
+      // Lógica para guardar en BD...
+    }
+  };
+
+  // Función auxiliar para limpiar el error al escribir
+  const handleChangeText = (field: string, value: string) => {
+    setWaiterData({ ...waiterData, [field]: value });
+    // Si había un error en este campo, lo borramos en cuanto el usuario empieza a escribir
+    if (errors[field as keyof typeof errors]) {
+      setErrors({ ...errors, [field]: '' });
+    }
   };
 
   return (
@@ -63,16 +108,24 @@ export const WaiterProfileView = () => {
               <Image source={{ uri: 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png' }} style={styles.avatar} />
             </View>
 
+            {/* INPUT NOMBRE */}
             <View style={styles.inputGroup}>
               <Text style={styles.inputLabel}>Nombre completo</Text>
               <TextInput
-                style={[styles.input, !isEditing && styles.inputDisabled]}
+                style={[
+                  styles.input, 
+                  !isEditing && styles.inputDisabled,
+                  errors.name ? styles.inputError : null // 🔥 Borde rojo si hay error
+                ]}
                 value={waiterData.name}
-                onChangeText={(text) => setWaiterData({...waiterData, name: text})}
+                onChangeText={(text) => handleChangeText('name', text)}
                 editable={isEditing}
               />
+              {/* 🔥 Mensaje de error */}
+              {errors.name ? <Text style={styles.errorText}>{errors.name}</Text> : null}
             </View>
 
+            {/* INPUT CORREO */}
             <View style={styles.inputGroup}>
               <Text style={styles.inputLabel}>Correo Electrónico</Text>
               <TextInput
@@ -82,16 +135,24 @@ export const WaiterProfileView = () => {
               />
             </View>
 
+            {/* INPUT PIN */}
             <View style={styles.inputGroup}>
               <Text style={styles.inputLabel}>PIN de Autorización</Text>
               <TextInput
-                style={[styles.input, !isEditing && styles.inputDisabled]}
-                value={waiterData.pin}
-                onChangeText={(text) => setWaiterData({...waiterData, pin: text})}
-                secureTextEntry
+                style={[
+                  styles.input, 
+                  !isEditing && styles.inputDisabled,
+                  errors.pin ? styles.inputError : null // 🔥 Borde rojo si hay error
+                ]}
+                value={isEditing ? waiterData.pin : '****'} // Ocultamos el PIN si no está editando
+                onChangeText={(text) => handleChangeText('pin', text)}
+                secureTextEntry={isEditing} 
                 keyboardType="numeric"
+                maxLength={4} // Bloquea el teclado para no escribir más de 4
                 editable={isEditing}
               />
+              {/* 🔥 Mensaje de error */}
+              {errors.pin ? <Text style={styles.errorText}>{errors.pin}</Text> : null}
             </View>
           </View>
         </View>
@@ -128,4 +189,8 @@ const styles = StyleSheet.create({
   inputLabel: { fontSize: 13, color: '#64748B', marginBottom: 6, fontWeight: '600', textTransform: 'uppercase' },
   input: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#CBD5E1', borderRadius: 10, paddingHorizontal: 15, paddingVertical: 12, fontSize: 16, color: '#1E293B' },
   inputDisabled: { backgroundColor: '#F8FAFC', borderColor: '#E2E8F0', color: '#64748B' },
+  
+  // 🔥 ESTILOS NUEVOS PARA LOS ERRORES
+  inputError: { borderColor: '#EF4444', borderWidth: 1.5 },
+  errorText: { color: '#EF4444', fontSize: 12, marginTop: 5, marginLeft: 4, fontWeight: '500' },
 });
