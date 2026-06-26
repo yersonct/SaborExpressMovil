@@ -8,7 +8,8 @@ import {
   TouchableOpacity, 
   TextInput,
   Image,
-  Platform
+  Platform,
+  Alert
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from 'expo-router';
@@ -26,9 +27,65 @@ export default function ClientProfile() {
     email: 'cliente@saborexpress.com'
   });
 
+  // 🔥 Estado para manejar los mensajes de validación en rojo
+  const [errors, setErrors] = useState({
+    name: '',
+    phone: '',
+    address: ''
+  });
+
+  // Datos simulados del repartidor que trae el domicilio (para que el cliente lo tenga)
+  const [driverData] = useState({
+    name: 'Carlos Gómez',
+    vehicle: 'Moto Honda - Placa: XYZ-123',
+    phone: '+57 311 987 6543' // 🔥 Número del repartidor
+  });
+
   const handleSaveProfile = () => {
-    // Aquí iría la lógica para guardar en la base de datos (ej. Firebase)
-    setIsEditing(false);
+    let isValid = true;
+    let newErrors = { name: '', phone: '', address: '' };
+
+    // 1. Validación de Nombre
+    if (!userData.name.trim()) {
+      newErrors.name = 'El nombre no puede estar vacío.';
+      isValid = false;
+    } else if (userData.name.trim().length < 3) {
+      newErrors.name = 'El nombre debe tener mínimo 3 caracteres.';
+      isValid = false;
+    }
+
+    // 2. Validación de Teléfono (Solo números y longitud mínima)
+    const phoneRegex = /^[0-9+ ]{10,}$/;
+    if (!userData.phone.trim()) {
+      newErrors.phone = 'El teléfono es obligatorio.';
+      isValid = false;
+    } else if (!phoneRegex.test(userData.phone.trim().replace(/\s/g, ''))) {
+      newErrors.phone = 'El teléfono debe tener al menos 10 dígitos.';
+      isValid = false;
+    }
+
+    // 3. Validación de Dirección
+    if (!userData.address.trim()) {
+      newErrors.address = 'La dirección es obligatoria.';
+      isValid = false;
+    }
+
+    setErrors(newErrors);
+
+    // Si todo está bien, guardamos
+    if (isValid) {
+      setIsEditing(false);
+      Alert.alert('✅ ¡Guardado!', 'Tu información personal se ha actualizado exitosamente.');
+      // Lógica de base de datos iría aquí...
+    }
+  };
+
+  const handleChangeText = (field: string, value: string) => {
+    setUserData({ ...userData, [field]: value });
+    // Limpiamos el error en tiempo real a medida que el cliente escribe
+    if (errors[field as keyof typeof errors]) {
+      setErrors({ ...errors, [field]: '' });
+    }
   };
 
   return (
@@ -76,10 +133,11 @@ export default function ClientProfile() {
                 <Text style={{fontSize: 24}}>🛵</Text>
               </View>
               <View style={styles.driverDetails}>
-                <Text style={styles.driverName}>Carlos Gómez</Text>
-                <Text style={styles.driverVehicle}>Moto Honda - Placa: XYZ-123</Text>
+                <Text style={styles.driverName}>{driverData.name}</Text>
+                <Text style={styles.driverVehicle}>{driverData.vehicle}</Text>
+                <Text style={styles.driverPhoneLabel}>Contacto: <Text style={styles.driverPhone}>{driverData.phone}</Text></Text>
               </View>
-              <TouchableOpacity style={styles.callButton}>
+              <TouchableOpacity style={styles.callButton} onPress={() => Alert.alert('Llamando...', `Llamando al repartidor ${driverData.name} al número ${driverData.phone}`)}>
                 <Ionicons name="call" size={20} color="#FFFFFF" />
               </TouchableOpacity>
             </View>
@@ -104,45 +162,64 @@ export default function ClientProfile() {
               <Image source={{ uri: 'https://cdn-icons-png.flaticon.com/512/4140/4140048.png' }} style={styles.avatar} />
             </View>
 
+            {/* Nombre */}
             <View style={styles.inputGroup}>
               <Text style={styles.inputLabel}>Nombre completo</Text>
               <TextInput
-                style={[styles.input, !isEditing && styles.inputDisabled]}
+                style={[
+                  styles.input, 
+                  !isEditing && styles.inputDisabled,
+                  errors.name ? styles.inputError : null
+                ]}
                 value={userData.name}
-                onChangeText={(text) => setUserData({...userData, name: text})}
+                onChangeText={(text) => handleChangeText('name', text)}
                 editable={isEditing}
               />
+              {errors.name ? <Text style={styles.errorText}>{errors.name}</Text> : null}
             </View>
 
+            {/* Correo */}
             <View style={styles.inputGroup}>
               <Text style={styles.inputLabel}>Correo electrónico</Text>
               <TextInput
-                style={[styles.input, styles.inputDisabled]} // El correo no suele editarse por seguridad
+                style={[styles.input, styles.inputDisabled]} 
                 value={userData.email}
                 editable={false}
               />
             </View>
 
+            {/* Teléfono */}
             <View style={styles.inputGroup}>
               <Text style={styles.inputLabel}>Teléfono móvil</Text>
               <TextInput
-                style={[styles.input, !isEditing && styles.inputDisabled]}
+                style={[
+                  styles.input, 
+                  !isEditing && styles.inputDisabled,
+                  errors.phone ? styles.inputError : null
+                ]}
                 value={userData.phone}
-                onChangeText={(text) => setUserData({...userData, phone: text})}
+                onChangeText={(text) => handleChangeText('phone', text)}
                 keyboardType="phone-pad"
                 editable={isEditing}
               />
+              {errors.phone ? <Text style={styles.errorText}>{errors.phone}</Text> : null}
             </View>
 
+            {/* Dirección */}
             <View style={styles.inputGroup}>
               <Text style={styles.inputLabel}>Dirección de entrega predeterminada</Text>
               <TextInput
-                style={[styles.input, !isEditing && styles.inputDisabled]}
+                style={[
+                  styles.input, 
+                  !isEditing && styles.inputDisabled,
+                  errors.address ? styles.inputError : null
+                ]}
                 value={userData.address}
-                onChangeText={(text) => setUserData({...userData, address: text})}
+                onChangeText={(text) => handleChangeText('address', text)}
                 multiline
                 editable={isEditing}
               />
+              {errors.address ? <Text style={styles.errorText}>{errors.address}</Text> : null}
             </View>
           </View>
         </View>
@@ -185,6 +262,8 @@ const styles = StyleSheet.create({
   driverDetails: { flex: 1, marginLeft: 15 },
   driverName: { fontSize: 16, fontWeight: 'bold', color: '#1E293B' },
   driverVehicle: { fontSize: 13, color: '#64748B', marginTop: 2 },
+  driverPhoneLabel: { fontSize: 13, color: '#334155', marginTop: 4 },
+  driverPhone: { fontWeight: 'bold', color: '#3B82F6' },
   callButton: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#E61C24', justifyContent: 'center', alignItems: 'center', shadowColor: '#E61C24', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4 },
   
   etaContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFBEB', padding: 12, borderRadius: 10, marginTop: 15, borderWidth: 1, borderColor: '#FDE68A' },
@@ -203,4 +282,8 @@ const styles = StyleSheet.create({
   inputLabel: { fontSize: 13, color: '#64748B', marginBottom: 6, fontWeight: '600', textTransform: 'uppercase' },
   input: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#CBD5E1', borderRadius: 10, paddingHorizontal: 15, paddingVertical: 12, fontSize: 16, color: '#1E293B' },
   inputDisabled: { backgroundColor: '#F8FAFC', borderColor: '#E2E8F0', color: '#64748B' },
+  
+  // Estilos para errores
+  inputError: { borderColor: '#EF4444', borderWidth: 1.5 },
+  errorText: { color: '#EF4444', fontSize: 12, marginTop: 5, marginLeft: 4, fontWeight: '500' },
 });

@@ -1,6 +1,6 @@
 import React from 'react';
 import { StatusBar } from 'react-native';
-import CashierDashboard from '../../features/cashier/components/CashierCalculator';
+import CashierDashboard from '../../features/cashier/components/CashierDashboard';
 
 export default function CashierScreen() {
   return (
