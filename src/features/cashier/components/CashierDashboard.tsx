@@ -8,7 +8,6 @@ import { styles } from './style/CashierStyles';
 // 🔥 Importaciones Modulares
 import { INITIAL_ORDERS, STAFF_TODAY, Order, Employee } from './CashierData';
 import { OrdersFeature } from './OrdersFeature';
-import { StaffFeature } from './StaffFeature';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -17,8 +16,9 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 export default function CashierDashboard() {
   const navigation = useNavigation();
 
-  // Estados Globales (Main)
-  const [activeTab, setActiveTab] = useState<'pedidos' | 'transferencias' | 'personal'>('pedidos');
+  // 🔥 ESTADOS DE LAS PESTAÑAS ACTUALIZADOS
+  const [activeTab, setActiveTab] = useState<'mesa' | 'llevar' | 'personal'>('mesa');
+  
   const [orders, setOrders] = useState<Order[]>(INITIAL_ORDERS);
   const [staff, setStaff] = useState<Employee[]>(STAFF_TODAY);
   const [paidHistory, setPaidHistory] = useState<Order[]>([
@@ -95,25 +95,28 @@ export default function CashierDashboard() {
         </View>
       </View>
 
+      {/* 🔥 PESTAÑAS ACTUALIZADAS (Mesa, Llevar, Personal) */}
       <View style={styles.tabContainer}>
-        <TouchableOpacity style={[styles.tabButton, activeTab === 'pedidos' && styles.tabButtonActive]} onPress={() => setActiveTab('pedidos')}>
-          <Text style={[styles.tabText, activeTab === 'pedidos' && styles.tabTextActive]}>Pedidos ({orders.filter(o => o.status === 'pendiente').length})</Text>
+        <TouchableOpacity style={[styles.tabButton, activeTab === 'mesa' && styles.tabButtonActive]} onPress={() => setActiveTab('mesa')}>
+          <Text style={[styles.tabText, activeTab === 'mesa' && styles.tabTextActive]}>
+            En Mesa ({orders.filter(o => o.type === 'mesa' && o.status !== 'pagado').length})
+          </Text>
         </TouchableOpacity>
-        <TouchableOpacity style={[styles.tabButton, activeTab === 'transferencias' && styles.tabButtonActive]} onPress={() => setActiveTab('transferencias')}>
-          <Text style={[styles.tabText, activeTab === 'transferencias' && styles.tabTextActive]}>Transferencias {orders.filter(o => o.status === 'pagando_transferencia').length > 0 ? '🔴' : ''}</Text>
+
+        <TouchableOpacity style={[styles.tabButton, activeTab === 'llevar' && styles.tabButtonActive]} onPress={() => setActiveTab('llevar')}>
+          <Text style={[styles.tabText, activeTab === 'llevar' && styles.tabTextActive]}>
+            Para Llevar {orders.some(o => o.type === 'llevar' && o.status === 'pagando_transferencia') ? '🔴' : ''} ({orders.filter(o => o.type === 'llevar' && o.status !== 'pagado').length})
+          </Text>
         </TouchableOpacity>
-        <TouchableOpacity style={[styles.tabButton, activeTab === 'personal' && styles.tabButtonActive]} onPress={() => setActiveTab('personal')}>
-          <Text style={[styles.tabText, activeTab === 'personal' && styles.tabTextActive]}>Personal ({staff.length})</Text>
-        </TouchableOpacity>
+
+
       </View>
 
       <View style={styles.content}>
-        {(activeTab === 'pedidos' || activeTab === 'transferencias') && (
+        {(activeTab === 'mesa' || activeTab === 'llevar') && (
           <OrdersFeature orders={orders} setOrders={setOrders} setPaidHistory={setPaidHistory} showToast={showToast} filterType={activeTab} setActiveTab={setActiveTab} />
         )}
-        {activeTab === 'personal' && (
-          <StaffFeature staff={staff} setStaff={setStaff} showToast={showToast} />
-        )}
+      
       </View>
 
       <Modal animationType="fade" transparent={true} visible={closeRegisterModal} onRequestClose={() => setCloseRegisterModal(false)}>
