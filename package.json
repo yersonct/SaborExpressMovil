@@ -15,6 +15,7 @@
     "expo-constants": "*",
     "expo-dev-client": "*",
     "expo-device": "*",
+    "expo-document-picker": "~14.0.8",
     "expo-font": "*",
     "expo-glass-effect": "*",
     "expo-image": "*",

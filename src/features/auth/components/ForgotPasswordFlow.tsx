@@ -6,9 +6,8 @@ const StepProgress = ({ currentStep }: { currentStep: number }) => (
     <View style={styles.progressContainer}>
         {[1, 2, 3].map((step) => (
             <View key={step} style={styles.stepWrapper}>
-                <View style={[
-                    styles.dot, 
-                    step === currentStep ? styles.dotActive : (step < currentStep ? styles.dotCompleted : styles.dotInactive)
+                <View style={[styles.dot,
+                step === currentStep ? styles.dotActive : (step < currentStep ? styles.dotCompleted : styles.dotInactive)
                 ]} />
                 {step < 3 && <View style={[styles.line, step < currentStep ? styles.lineCompleted : styles.lineInactive]} />}
             </View>
@@ -16,20 +15,30 @@ const StepProgress = ({ currentStep }: { currentStep: number }) => (
     </View>
 );
 
-export const ForgotPasswordFlow = ({ 
-    onSuccess, 
-    onCancel 
-}: { 
+export const ForgotPasswordFlow = ({
+    onSuccess,
+    onCancel,
+    t,
+    themeColors
+}: {
     onSuccess: () => void,
-    onCancel: () => void 
+    onCancel: () => void,
+    t?: Record<string, string>,
+    themeColors?: Record<string, string>
 }) => {
     const [step, setStep] = useState(1);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
 
-    const [email, setEmail] = useState('');
-    const [code, setCode] = useState('');
-    const [newPassword, setNewPassword] = useState('');
+    const defaultT = t || {};
+    const defaultColors = themeColors || {
+        text: '#0F172A',
+        mutedText: '#64748B',
+        background: '#F8FAFC',
+        surface: '#FFFFFF',
+        border: '#CBD5E1',
+        inputBackground: '#FFFFFF',
+    };
 
     const handleSendCode = async () => {
         if (!email) { setError('Ingresa un correo electrónico'); return; }
@@ -73,34 +82,34 @@ export const ForgotPasswordFlow = ({
     };
 
     return (
-        <View style={styles.container}>
+        <View style={[styles.container, { backgroundColor: defaultColors.background }]}>
             <StepProgress currentStep={step} />
 
             <View style={styles.header}>
-                <Text style={styles.title}>
-                    {step === 1 ? 'Recuperar Contraseña' : step === 2 ? 'Ingresa el Código' : 'Nueva Contraseña'}
+                <Text style={[styles.title, { color: defaultColors.text }]}>
+                    {step === 1 ? defaultT.forgotPasswordStep1Title || 'Recuperar Contraseña' : step === 2 ? defaultT.forgotPasswordStep2Title || 'Ingresa el Código' : defaultT.forgotPasswordStep3Title || 'Nueva Contraseña'}
                 </Text>
-                <Text style={styles.subtitle}>
-                    {step === 1 ? 'Ingresa tu correo para recibir un código.' : step === 2 ? 'Revisa tu bandeja de entrada.' : 'Crea tu nueva contraseña segura.'}
+                <Text style={[styles.subtitle, { color: defaultColors.mutedText }]}>
+                    {step === 1 ? defaultT.forgotPasswordStep1Subtitle || 'Ingresa tu correo para recibir un código.' : step === 2 ? defaultT.forgotPasswordStep2Subtitle || 'Revisa tu bandeja de entrada.' : defaultT.forgotPasswordStep3Subtitle || 'Crea tu nueva contraseña segura.'}
                 </Text>
             </View>
 
             {step === 1 && (
                 <View>
-                    <Text style={styles.inputLabel}>Correo electrónico</Text>
+                    <Text style={[styles.inputLabel, { color: defaultColors.text }]}>{defaultT.forgotPasswordEmail || 'Correo electrónico'}</Text>
                     <TextInput
-                        style={[styles.input, error ? styles.inputError : null]}
-                        placeholder="Ej: cajero@saborexpress.com"
+                        style={[styles.input, error ? styles.inputError : null, { backgroundColor: defaultColors.inputBackground, borderColor: defaultColors.border, color: defaultColors.text }]}
+                        placeholder={defaultT.forgotPasswordPlaceholder || 'Ej: cajero@saborexpress.com'}
                         value={email}
                         onChangeText={(val) => { setEmail(val); setError(''); }}
                         keyboardType="email-address"
                         autoCapitalize="none"
                     />
                     {error ? <Text style={styles.errorText}>{error}</Text> : null}
-                    
+
                     {loading ? <ActivityIndicator size="large" color="#E61C24" style={styles.loader} /> : (
-                        <TouchableOpacity style={styles.primaryButton} onPress={handleSendCode}>
-                            <Text style={styles.primaryButtonText}>Enviar Código</Text>
+                        <TouchableOpacity style={[styles.primaryButton, { backgroundColor: '#E61C24' }]} onPress={handleSendCode}>
+                            <Text style={styles.primaryButtonText}>{defaultT.forgotPasswordSendCode || 'Enviar Código'}</Text>
                         </TouchableOpacity>
                     )}
                 </View>
@@ -108,9 +117,9 @@ export const ForgotPasswordFlow = ({
 
             {step === 2 && (
                 <View>
-                    <Text style={styles.inputLabel}>Código de 6 dígitos</Text>
+                    <Text style={[styles.inputLabel, { color: defaultColors.text }]}>{defaultT.forgotPasswordCode || 'Código de 6 dígitos'}</Text>
                     <TextInput
-                        style={[styles.input, styles.inputCenter, error ? styles.inputError : null]}
+                        style={[styles.input, styles.inputCenter, error ? styles.inputError : null, { backgroundColor: defaultColors.inputBackground, borderColor: defaultColors.border, color: defaultColors.text }]}
                         placeholder="123456"
                         maxLength={6}
                         value={code}
@@ -120,8 +129,8 @@ export const ForgotPasswordFlow = ({
                     {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
                     {loading ? <ActivityIndicator size="large" color="#E61C24" style={styles.loader} /> : (
-                        <TouchableOpacity style={styles.primaryButton} onPress={handleVerifyCode}>
-                            <Text style={styles.primaryButtonText}>Verificar Código</Text>
+                        <TouchableOpacity style={[styles.primaryButton, { backgroundColor: '#E61C24' }]} onPress={handleVerifyCode}>
+                            <Text style={styles.primaryButtonText}>{defaultT.forgotPasswordVerifyCode || 'Verificar Código'}</Text>
                         </TouchableOpacity>
                     )}
                 </View>
@@ -129,9 +138,9 @@ export const ForgotPasswordFlow = ({
 
             {step === 3 && (
                 <View>
-                    <Text style={styles.inputLabel}>Nueva Contraseña</Text>
+                    <Text style={[styles.inputLabel, { color: defaultColors.text }]}>{defaultT.forgotPasswordNewPassword || 'Nueva Contraseña'}</Text>
                     <TextInput
-                        style={[styles.input, error ? styles.inputError : null]}
+                        style={[styles.input, error ? styles.inputError : null, { backgroundColor: defaultColors.inputBackground, borderColor: defaultColors.border, color: defaultColors.text }]}
                         placeholder="******"
                         secureTextEntry
                         value={newPassword}
@@ -140,8 +149,8 @@ export const ForgotPasswordFlow = ({
                     {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
                     {loading ? <ActivityIndicator size="large" color="#E61C24" style={styles.loader} /> : (
-                        <TouchableOpacity style={styles.primaryButton} onPress={handleResetPassword}>
-                            <Text style={styles.primaryButtonText}>Guardar Contraseña</Text>
+                        <TouchableOpacity style={[styles.primaryButton, { backgroundColor: '#E61C24' }]} onPress={handleResetPassword}>
+                            <Text style={styles.primaryButtonText}>{defaultT.forgotPasswordSavePassword || 'Guardar Contraseña'}</Text>
                         </TouchableOpacity>
                     )}
                 </View>
