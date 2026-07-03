@@ -8,6 +8,8 @@ import { useNavigation } from 'expo-router';
 import { TablesGridView } from './TablesGridView';
 import { ActiveOrdersView } from './ActiveOrdersView';
 import { OrderTakingView } from './OrderTakingView';
+import { useWaiterTheme } from '@/features/waiter/context/WaiterThemeContext';
+import { useWaiterLanguage } from '@/features/waiter/context/WaiterLanguageContext';
 
 import { styles } from './style/WaiterDashboardStyles';
 
@@ -56,6 +58,8 @@ const INITIAL_ORDERS = [
 
 export const WaiterDashboard = () => {
   const navigation = useNavigation();
+  const { colors } = useWaiterTheme();
+  const { t } = useWaiterLanguage();
 
   // Estados principales
   const [activeTab, setActiveTab] = useState<'MESAS' | 'ORDENES'>('MESAS');
@@ -79,9 +83,9 @@ export const WaiterDashboard = () => {
   // --- LOGICA DE BOTONES ---
   const handleTablePress = (table: any) => {
     if (table.status === 'Ocupada') {
-      Alert.alert('Mesa Ocupada', 'Ve a la pestaña "Órdenes Activas" para ver o agregar productos.', [
-        { text: 'Ver Órdenes', onPress: () => setActiveTab('ORDENES') },
-        { text: 'Cancelar', style: 'cancel' }
+      Alert.alert(t.tableOccupiedTitle || 'Mesa Ocupada', t.tableOccupiedMessage || 'Ve a la pestaña de órdenes activas para ver o agregar productos.', [
+        { text: t.tableOccupiedViewOrders || 'Ver Órdenes', onPress: () => setActiveTab('ORDENES') },
+        { text: t.tableOccupiedCancel || 'Cancelar', style: 'cancel' }
       ]);
       return;
     }
@@ -121,19 +125,29 @@ export const WaiterDashboard = () => {
     setActiveOrders(activeOrders.filter(o => o.id !== orderToDeliver.id));
   };
 
-  const handleAddItem = (product: any) => {
+  const handleMarkOrderReady = (orderToMarkReady: any) => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setActiveOrders(activeOrders.map(order => order.id === orderToMarkReady.id ? { ...order, status: 'LISTO' } : order));
+  };
+
+  const handleAddItem = (product: any, note: string = '') => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     const defaultToGo = activeTableForOrder?.isGlobalToGo ? true : false;
-    const existingIndex = orderItems.findIndex(item => item.id === product.id && item.isToGo === defaultToGo);
+    const existingIndex = orderItems.findIndex(item => item.id === product.id && item.isToGo === defaultToGo && (item.note || '') === note);
 
     if (existingIndex >= 0) {
       const newItems = [...orderItems];
       newItems[existingIndex].quantity += 1;
       setOrderItems(newItems);
     } else {
-      setOrderItems([...orderItems, { ...product, quantity: 1, isToGo: defaultToGo, cartId: Math.random().toString() }]);
+      setOrderItems([...orderItems, { ...product, quantity: 1, isToGo: defaultToGo, note, cartId: Math.random().toString() }]);
     }
     if (orderItems.length === 0) setIsCartExpanded(true);
+  };
+
+  const handleUpdateItemNote = (cartId: string, note: string) => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setOrderItems(items => items.map(item => item.cartId === cartId ? { ...item, note } : item));
   };
 
   const handleRemoveItem = (cartId: string) => {
@@ -211,19 +225,19 @@ export const WaiterDashboard = () => {
       destType={destType} setDestType={setDestType} toGoCustomerName={toGoCustomerName} 
       setToGoCustomerName={setToGoCustomerName} tables={tables} linkedTableId={linkedTableId} 
       setLinkedTableId={setLinkedTableId} handleAddItem={handleAddItem} handleRemoveItem={handleRemoveItem} 
-      toggleItemToGo={toggleItemToGo} handleSubmitOrder={handleSubmitOrder} 
+      toggleItemToGo={toggleItemToGo} handleUpdateItemNote={handleUpdateItemNote} handleSubmitOrder={handleSubmitOrder} 
     />;
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.mainHeader}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+      <View style={[styles.mainHeader, { backgroundColor: colors.header, borderColor: colors.border }]}>
         <TouchableOpacity style={styles.menuHamburgerBtn} onPress={() => navigation.dispatch(DrawerActions.openDrawer())}>
-          <Ionicons name="menu" size={32} color="#1E293B" />
+          <Ionicons name="menu" size={32} color={colors.text} />
         </TouchableOpacity>
         <View style={styles.headerTitlesBox}>
-          <Text style={styles.mainTitle}>saborEXPRESS</Text>
-          <Text style={styles.mainSubtitle}>Panel de Mesero</Text>
+          <Text style={[styles.mainTitle, { color: colors.text }]}>saborEXPRESS</Text>
+          <Text style={[styles.mainSubtitle, { color: colors.mutedText }]}>{t.dashboardWaiterPanel || 'Panel de Mesero'}</Text>
         </View>
         
         {/* BOTONES SUPERIORES */}
@@ -231,33 +245,33 @@ export const WaiterDashboard = () => {
           
           {/* BOTÓN DEL CÓDIGO QR PARA MOSTRAR LA CARTA */}
           <TouchableOpacity 
-            style={[styles.toGoButton, { backgroundColor: '#334155', paddingHorizontal: 12 }]} 
+            style={[styles.toGoButton, { backgroundColor: colors.elevatedSurface, paddingHorizontal: 12, borderWidth: 1, borderColor: colors.border }]} 
             onPress={() => setIsQrMenuVisible(true)}
           >
-            <Ionicons name="qr-code-outline" size={20} color="#FFF" />
+            <Ionicons name="qr-code-outline" size={20} color={colors.text} />
           </TouchableOpacity>
 
           {/* BOTÓN DE PARA LLEVAR */}
           <TouchableOpacity style={styles.toGoButton} onPress={handleStartToGoOrder}>
             <Ionicons name="bag-handle-outline" size={20} color="#FFF" />
-            <Text style={styles.toGoButtonText}>Para Llevar</Text>
+            <Text style={styles.toGoButtonText}>{t.dashboardParaLlevar || 'Para Llevar'}</Text>
           </TouchableOpacity>
         </View>
 
       </View>
 
-      <View style={styles.tabsContainer}>
+      <View style={[styles.tabsContainer, { backgroundColor: colors.header, borderColor: colors.border }]}>
         <TouchableOpacity style={[styles.tab, activeTab === 'MESAS' && styles.activeTab]} onPress={() => setActiveTab('MESAS')}>
-          <Ionicons name="grid-outline" size={20} color={activeTab === 'MESAS' ? '#E61C24' : '#64748B'} />
-          <Text style={[styles.tabText, activeTab === 'MESAS' && styles.activeTabText]}>Plano de Mesas</Text>
+          <Ionicons name="grid-outline" size={20} color={activeTab === 'MESAS' ? colors.accent : colors.mutedText} />
+          <Text style={[styles.tabText, { color: colors.mutedText }, activeTab === 'MESAS' && { color: colors.accent }]}>{t.dashboardTabTables || 'Plano de Mesas'}</Text>
         </TouchableOpacity>
         <TouchableOpacity style={[styles.tab, activeTab === 'ORDENES' && styles.activeTab]} onPress={() => setActiveTab('ORDENES')}>
-          <Ionicons name="receipt-outline" size={20} color={activeTab === 'ORDENES' ? '#E61C24' : '#64748B'} />
-          <Text style={[styles.tabText, activeTab === 'ORDENES' && styles.activeTabText]}>Órdenes ({activeOrders.length})</Text>
+          <Ionicons name="receipt-outline" size={20} color={activeTab === 'ORDENES' ? colors.accent : colors.mutedText} />
+          <Text style={[styles.tabText, { color: colors.mutedText }, activeTab === 'ORDENES' && { color: colors.accent }]}>{t.dashboardTabOrders || 'Órdenes'} ({activeOrders.length})</Text>
         </TouchableOpacity>
       </View>
 
-      <View style={styles.content}>
+      <View style={[styles.content, { backgroundColor: colors.background }]}>
         {activeTab === 'MESAS' ? 
           <TablesGridView tables={tables} handleTablePress={handleTablePress} /> 
           : 
@@ -267,6 +281,7 @@ export const WaiterDashboard = () => {
             setExpandedOrderId={setExpandedOrderId} 
             handleAddMoreToOrder={handleAddMoreToOrder} 
             handleCancelOrder={handleCancelOrder} 
+            handleMarkOrderReady={handleMarkOrderReady}
             handleDeliverOrder={handleDeliverOrder}
           />
         }
@@ -275,23 +290,23 @@ export const WaiterDashboard = () => {
       {/* 🔥 MODAL PARA MOSTRAR LA CARTA DIGITAL AL CLIENTE */}
       <Modal transparent visible={isQrMenuVisible} animationType="fade">
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' }}>
-          <View style={{ backgroundColor: '#FFFFFF', padding: 24, borderRadius: 24, alignItems: 'center', width: '85%', shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 10, elevation: 10 }}>
+          <View style={{ backgroundColor: colors.card, padding: 24, borderRadius: 24, alignItems: 'center', width: '85%', shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 10, elevation: 10, borderWidth: 1, borderColor: colors.border }}>
             
             {/* Icono de menú/libro en vez del escáner */}
-            <View style={{ width: 60, height: 60, borderRadius: 30, backgroundColor: '#FEE2E2', justifyContent: 'center', alignItems: 'center', marginBottom: 15 }}>
-              <Ionicons name="book-outline" size={32} color="#E61C24" />
+            <View style={{ width: 60, height: 60, borderRadius: 30, backgroundColor: colors.accentSoft, justifyContent: 'center', alignItems: 'center', marginBottom: 15 }}>
+              <Ionicons name="book-outline" size={32} color={colors.accent} />
             </View>
 
-            <Text style={{ fontSize: 22, fontWeight: 'bold', color: '#1E293B', marginBottom: 8, textAlign: 'center' }}>
-              Carta Digital
+            <Text style={{ fontSize: 22, fontWeight: 'bold', color: colors.text, marginBottom: 8, textAlign: 'center' }}>
+              {t.dashboardQrTitle || 'Carta Digital'}
             </Text>
             
-            <Text style={{ fontSize: 15, color: '#64748B', textAlign: 'center', marginBottom: 20, lineHeight: 22 }}>
-              Muéstrale este código al cliente para que lea el <Text style={{fontWeight: 'bold', color: '#E61C24'}}>menú en su celular</Text>. Una vez decida, tú le tomas el pedido.
+            <Text style={{ fontSize: 15, color: colors.mutedText, textAlign: 'center', marginBottom: 20, lineHeight: 22 }}>
+              {t.dashboardQrDescription || 'Muéstrale este código al cliente para que lea el menú en su celular. Una vez decida, tú le tomas el pedido.'}
             </Text>
             
           {/* Generador de QR Gratuito apuntando a la futura página de la carta */}
-            <View style={{ padding: 15, backgroundColor: '#FFF', borderRadius: 16, borderWidth: 1, borderColor: '#E2E8F0', shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 10, elevation: 2 }}>
+            <View style={{ padding: 15, backgroundColor: colors.surface, borderRadius: 16, borderWidth: 1, borderColor: colors.border, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 10, elevation: 2 }}>
               <Image 
               source={{ uri: 'https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=http://10.3.234.202:3000/letter' }} 
               style={{ width: 220, height: 220 }} 
@@ -299,10 +314,10 @@ export const WaiterDashboard = () => {
             </View>
 
             <TouchableOpacity 
-              style={{ marginTop: 25, backgroundColor: '#F1F5F9', width: '100%', paddingVertical: 14, borderRadius: 12, alignItems: 'center' }} 
+              style={{ marginTop: 25, backgroundColor: colors.elevatedSurface, width: '100%', paddingVertical: 14, borderRadius: 12, alignItems: 'center', borderWidth: 1, borderColor: colors.border }} 
               onPress={() => setIsQrMenuVisible(false)}
             >
-              <Text style={{ color: '#475569', fontWeight: 'bold', fontSize: 16 }}>Ocultar QR</Text>
+              <Text style={{ color: colors.text, fontWeight: 'bold', fontSize: 16 }}>{t.dashboardQrHide || 'Ocultar QR'}</Text>
             </TouchableOpacity>
           </View>
         </View>

@@ -3,9 +3,13 @@ import { SafeAreaView, View, Text, StyleSheet, ScrollView, TouchableOpacity, Tex
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from 'expo-router';
 import { DrawerActions } from '@react-navigation/native';
+import { useWaiterTheme } from '@/features/waiter/context/WaiterThemeContext';
+import { useWaiterLanguage } from '@/features/waiter/context/WaiterLanguageContext';
 
 export const WaiterProfileView = () => {
   const navigation = useNavigation();
+  const { colors } = useWaiterTheme();
+  const { t } = useWaiterLanguage();
   const [isEditing, setIsEditing] = useState(false);
   
   // Estado principal de los datos
@@ -28,20 +32,20 @@ export const WaiterProfileView = () => {
 
     // 1. Validar Nombre
     if (!waiterData.name.trim()) {
-      newErrors.name = 'El nombre es obligatorio.';
+      newErrors.name = t.profileNameErrorRequired || 'El nombre es obligatorio.';
       isValid = false;
     } else if (waiterData.name.trim().length < 3) {
-      newErrors.name = 'El nombre debe tener al menos 3 caracteres.';
+      newErrors.name = t.profileNameErrorMin || 'El nombre debe tener al menos 3 caracteres.';
       isValid = false;
     }
 
     // 2. Validar PIN
     const pinRegex = /^\d{4}$/; // Expresión regular que exige exactamente 4 números
     if (!waiterData.pin.trim()) {
-      newErrors.pin = 'El PIN es obligatorio.';
+      newErrors.pin = t.profilePinErrorRequired || 'El PIN es obligatorio.';
       isValid = false;
     } else if (!pinRegex.test(waiterData.pin.trim())) {
-      newErrors.pin = 'El PIN debe ser exactamente de 4 dígitos numéricos.';
+      newErrors.pin = t.profilePinErrorFormat || 'El PIN debe ser exactamente de 4 dígitos numéricos.';
       isValid = false;
     }
 
@@ -51,7 +55,7 @@ export const WaiterProfileView = () => {
     // Si todo es válido, guardamos
     if (isValid) {
       setIsEditing(false);
-      Alert.alert('¡Perfil Actualizado!', 'Tus datos han sido guardados correctamente.');
+      Alert.alert(t.profileUpdatedTitle || '¡Perfil Actualizado!', t.profileUpdatedMessage || 'Tus datos han sido guardados correctamente.');
       // Lógica para guardar en BD...
     }
   };
@@ -66,30 +70,30 @@ export const WaiterProfileView = () => {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <View style={styles.header}>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
+      <View style={[styles.header, { backgroundColor: colors.header, borderColor: colors.border }]}>
         <TouchableOpacity style={styles.menuButton} onPress={() => navigation.dispatch(DrawerActions.openDrawer())}>
-          <Ionicons name="menu" size={28} color="#1E293B" />
+          <Ionicons name="menu" size={28} color={colors.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Mi Perfil</Text>
+        <Text style={[styles.headerTitle, { color: colors.text }]}>{t.profileTitle || 'Mi Perfil'}</Text>
       </View>
 
-      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={[styles.container, { backgroundColor: colors.background }]} showsVerticalScrollIndicator={false}>
         
         {/* DESEMPEÑO DEL TURNO */}
         <View style={styles.statsSection}>
-          <Text style={styles.sectionTitle}>Desempeño del Turno</Text>
-          <View style={styles.statsCard}>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>{t.profilePerformanceTitle || 'Desempeño del Turno'}</Text>
+          <View style={[styles.statsCard, { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border }]}>
             <View style={styles.statColumn}>
               <Ionicons name="receipt" size={28} color="#3B82F6" />
-              <Text style={styles.statValue}>24</Text>
-              <Text style={styles.statLabel}>Mesas Atendidas</Text>
+              <Text style={[styles.statValue, { color: colors.text }]}>24</Text>
+              <Text style={[styles.statLabel, { color: colors.mutedText }]}>{t.profileStatsTables || 'Mesas Atendidas'}</Text>
             </View>
-            <View style={styles.dividerVertical} />
+            <View style={[styles.dividerVertical, { backgroundColor: colors.border }]} />
             <View style={styles.statColumn}>
               <Ionicons name="cash" size={28} color="#10B981" />
-              <Text style={styles.statValue}>$45k</Text>
-              <Text style={styles.statLabel}>Propinas</Text>
+              <Text style={[styles.statValue, { color: colors.text }]}>$45k</Text>
+              <Text style={[styles.statLabel, { color: colors.mutedText }]}>{t.profileStatsTips || 'Propinas'}</Text>
             </View>
           </View>
         </View>
@@ -97,23 +101,24 @@ export const WaiterProfileView = () => {
         {/* DATOS PERSONALES */}
         <View style={styles.profileSection}>
           <View style={styles.profileHeaderRow}>
-            <Text style={styles.sectionTitle}>Mis Datos</Text>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>{t.profileDataTitle || 'Mis Datos'}</Text>
             <TouchableOpacity onPress={() => isEditing ? handleSaveProfile() : setIsEditing(true)}>
-              <Text style={styles.editButtonText}>{isEditing ? 'Guardar' : 'Editar'}</Text>
+              <Text style={[styles.editButtonText, { color: colors.accent }]}>{isEditing ? (t.profileSave || 'Guardar') : (t.profileEdit || 'Editar')}</Text>
             </TouchableOpacity>
           </View>
 
-          <View style={styles.profileCard}>
+          <View style={[styles.profileCard, { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border }]}>
             <View style={styles.avatarContainer}>
               <Image source={{ uri: 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png' }} style={styles.avatar} />
             </View>
 
             {/* INPUT NOMBRE */}
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Nombre completo</Text>
+              <Text style={[styles.inputLabel, { color: colors.mutedText }]}>{t.profileNameLabel || 'Nombre completo'}</Text>
               <TextInput
                 style={[
-                  styles.input, 
+                  styles.input,
+                  { backgroundColor: colors.surface, color: colors.text, borderColor: colors.border },
                   !isEditing && styles.inputDisabled,
                   errors.name ? styles.inputError : null // 🔥 Borde rojo si hay error
                 ]}
@@ -127,9 +132,9 @@ export const WaiterProfileView = () => {
 
             {/* INPUT CORREO */}
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Correo Electrónico</Text>
+              <Text style={[styles.inputLabel, { color: colors.mutedText }]}>{t.profileEmailLabel || 'Correo Electrónico'}</Text>
               <TextInput
-                style={[styles.input, styles.inputDisabled]}
+                style={[styles.input, { backgroundColor: colors.surface, color: colors.text, borderColor: colors.border }, styles.inputDisabled]}
                 value={waiterData.email}
                 editable={false}
               />
@@ -137,10 +142,11 @@ export const WaiterProfileView = () => {
 
             {/* INPUT PIN */}
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>PIN de Autorización</Text>
+              <Text style={[styles.inputLabel, { color: colors.mutedText }]}>{t.profilePinLabel || 'PIN de Autorización'}</Text>
               <TextInput
                 style={[
-                  styles.input, 
+                  styles.input,
+                  { backgroundColor: colors.surface, color: colors.text, borderColor: colors.border },
                   !isEditing && styles.inputDisabled,
                   errors.pin ? styles.inputError : null // 🔥 Borde rojo si hay error
                 ]}

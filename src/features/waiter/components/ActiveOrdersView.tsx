@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { FlatList, Text, TouchableOpacity, View, LayoutAnimation, Modal, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { styles } from './style/WaiterDashboardStyles';
+import { useWaiterLanguage } from '@/features/waiter/context/WaiterLanguageContext';
 
 export const ActiveOrdersView = ({ 
   activeOrders, 
@@ -9,8 +10,10 @@ export const ActiveOrdersView = ({
   setExpandedOrderId, 
   handleAddMoreToOrder, 
   handleCancelOrder,
+  handleMarkOrderReady,
   handleDeliverOrder 
 }: any) => {
+  const { t } = useWaiterLanguage();
 
   // 🔥 1. ESTADOS PARA NUESTRO MODAL PERSONALIZADO
   const [isModalVisible, setIsModalVisible] = useState(false);
@@ -45,7 +48,7 @@ export const ActiveOrdersView = ({
         ListEmptyComponent={
           <View style={styles.emptyOrders}>
             <Ionicons name="checkmark-circle-outline" size={60} color="#CBD5E1" />
-            <Text style={styles.emptyOrdersText}>No tienes órdenes activas.</Text>
+            <Text style={styles.emptyOrdersText}>{t.ordersEmpty || 'No tienes órdenes activas.'}</Text>
           </View>
         }
         renderItem={({ item }) => {
@@ -69,10 +72,10 @@ export const ActiveOrdersView = ({
                 <View style={{ alignItems: 'flex-end' }}>
                   <View style={[styles.badgeStatus, isReady ? styles.badgeReady : styles.badgePrep]}>
                     <Text style={[styles.badgeStatusText, isReady ? styles.badgeReadyText : styles.badgePrepText]}>
-                      {isReady ? '✅ Listo' : '👨‍🍳 Preparando'}
+                      {isReady ? `✅ ${t.ordersReady || 'Listo'}` : `👨‍🍳 ${t.ordersPreparing || 'Preparando'}`}
                     </Text>
                   </View>
-                  <Text style={styles.expandText}>{isExpanded ? 'Ocultar' : 'Ver productos'}</Text>
+                  <Text style={styles.expandText}>{isExpanded ? (t.ordersHide || 'Ocultar') : (t.ordersShowProducts || 'Ver productos')}</Text>
                 </View>
               </TouchableOpacity>
 
@@ -85,6 +88,7 @@ export const ActiveOrdersView = ({
                         <Text style={styles.orderItemQty}>{prod.quantity}x</Text>
                         <View>
                           <Text style={styles.orderItemName}>{prod.name}</Text>
+                          {!!prod.note && <Text style={{ fontSize: 12, color: '#0F766E', fontWeight: '600', marginTop: 3, lineHeight: 16 }}>📝 {prod.note}</Text>}
                           <View style={{ flexDirection: 'row', gap: 6, marginTop: 4 }}>
                             {prod.isToGo ? <Text style={styles.badgeToGo}>🛍️ Empacar</Text> : <Text style={styles.badgeMesa}>🍽️ Mesa</Text>}
                             {prod.category === 'SOLO_PASAR' ? <Text style={styles.miniBadgeBarra}>🥤 Servir</Text> : <Text style={styles.miniBadgeCocina}>🔥 Cocina</Text>}
@@ -96,18 +100,24 @@ export const ActiveOrdersView = ({
 
                   <View style={styles.orderActions}>
                     <TouchableOpacity style={styles.actionAddBtn} onPress={() => handleAddMoreToOrder(item)}>
-                      <Text style={styles.actionAddText}>+ Agregar productos</Text>
+                      <Text style={styles.actionAddText}>{t.ordersAddMore || '+ Agregar productos'}</Text>
                     </TouchableOpacity>
 
-                    {isReady && (
-                      <TouchableOpacity style={styles.actionDeliverBtn} onPress={() => openModal('DELIVER', item)}>
-                        <Text style={styles.actionDeliverText}>Entregado</Text>
+                    {!isReady && (
+                      <TouchableOpacity style={styles.actionReadyBtn} onPress={() => handleMarkOrderReady(item)} activeOpacity={0.8}>
+                        <Text style={styles.actionReadyText}>{t.ordersReadyButton || 'Listo'}</Text>
                       </TouchableOpacity>
                     )}
 
                     {!isReady && (
                       <TouchableOpacity style={styles.actionCancelBtn} onPress={() => openModal('CANCEL', item)}>
-                        <Text style={styles.actionCancelText}>Cancelar</Text>
+                        <Text style={styles.actionCancelText}>{t.ordersCancel || 'Cancelar'}</Text>
+                      </TouchableOpacity>
+                    )}
+
+                    {isReady && (
+                      <TouchableOpacity style={styles.actionDeliverBtn} onPress={() => openModal('DELIVER', item)}>
+                        <Text style={styles.actionDeliverText}>{t.ordersDelivered || 'Entregado'}</Text>
                       </TouchableOpacity>
                     )}
                   </View>
@@ -131,17 +141,17 @@ export const ActiveOrdersView = ({
             </View>
             
             <Text style={modalStyles.title}>
-              {modalType === 'CANCEL' ? '¿Cancelar Pedido?' : '¿Confirmar Entrega?'}
+              {modalType === 'CANCEL' ? (t.ordersCancelTitle || '¿Cancelar Pedido?') : (t.ordersDeliverTitle || '¿Confirmar entrega?')}
             </Text>
             <Text style={modalStyles.message}>
               {modalType === 'CANCEL' 
-                ? `Estás a punto de anular el pedido de ${selectedOrder?.tableName}. Esta acción no se puede deshacer.`
-                : `¿Estás seguro de que ya entregaste el pedido de ${selectedOrder?.tableName} al cliente?`}
+                ? (t.ordersCancelMessage || `Estás a punto de anular el pedido de ${selectedOrder?.tableName}. Esta acción no se puede deshacer.`).replace('{tableName}', selectedOrder?.tableName ?? '')
+                : (t.ordersDeliverMessage || `¿Estás seguro de que ya entregaste el pedido de ${selectedOrder?.tableName} al cliente?`).replace('{tableName}', selectedOrder?.tableName ?? '')}
             </Text>
 
             <View style={modalStyles.buttonContainer}>
               <TouchableOpacity style={modalStyles.cancelModalBtn} onPress={() => setIsModalVisible(false)} activeOpacity={0.8}>
-                <Text style={modalStyles.cancelModalBtnText}>No, Volver</Text>
+                <Text style={modalStyles.cancelModalBtnText}>{t.ordersCancelNo || 'No, Volver'}</Text>
               </TouchableOpacity>
               
               <TouchableOpacity 
@@ -150,7 +160,7 @@ export const ActiveOrdersView = ({
                 activeOpacity={0.8}
               >
                 <Text style={modalStyles.confirmModalBtnText}>
-                  {modalType === 'CANCEL' ? 'Sí, Cancelar' : 'Sí, Entregado'}
+                  {modalType === 'CANCEL' ? (t.ordersCancelYes || 'Sí, Cancelar') : (t.ordersDeliverYes || 'Sí, Entregado')}
                 </Text>
               </TouchableOpacity>
             </View>

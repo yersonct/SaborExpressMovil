@@ -2,16 +2,21 @@ import React from 'react';
 import { FlatList, Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { styles } from './style/WaiterDashboardStyles';
+import { useWaiterTheme } from '@/features/waiter/context/WaiterThemeContext';
+import { useWaiterLanguage } from '@/features/waiter/context/WaiterLanguageContext';
 
-export const TablesGridView = ({ tables, handleTablePress }: any) => (
-  <FlatList
+export const TablesGridView = ({ tables, handleTablePress }: any) => {
+  const { colors } = useWaiterTheme();
+  const { t } = useWaiterLanguage();
+
+  return <FlatList
     data={tables}
     keyExtractor={item => item.id}
     numColumns={2}
-    contentContainerStyle={styles.content}
+    contentContainerStyle={[styles.content, { backgroundColor: colors.background }]}
     columnWrapperStyle={{ justifyContent: 'space-between' }}
     showsVerticalScrollIndicator={false}
-    ListHeaderComponent={<Text style={styles.instructionsText}>Toca una mesa libre para tomar el pedido.</Text>}
+    ListHeaderComponent={<Text style={[styles.instructionsText, { color: colors.mutedText }]}>{t.tablesInstruction || 'Toca una mesa libre para tomar el pedido.'}</Text>}
     renderItem={({ item }) => {
       const isOccupied = item.status === 'Ocupada';
       let iconName = 'restaurant-outline';
@@ -21,23 +26,23 @@ export const TablesGridView = ({ tables, handleTablePress }: any) => (
 
       return (
         <TouchableOpacity
-          style={[styles.tableGridCard, isOccupied && styles.tableGridCardOccupied]}
+          style={[styles.tableGridCard, { backgroundColor: colors.card, borderColor: colors.border }, isOccupied && styles.tableGridCardOccupied]}
           onPress={() => handleTablePress(item)}
           activeOpacity={0.8}
         >
-          <View style={[styles.statusDot, isOccupied ? { backgroundColor: '#EF4444' } : { backgroundColor: '#10B981' }]} />
-          <Ionicons name={iconName as any} size={40} color={isOccupied ? '#991B1B' : '#1E293B'} style={{ marginBottom: 10 }} />
-          <Text style={[styles.gridTableName, isOccupied && { color: '#991B1B' }]}>{item.name}</Text>
+          <View style={[styles.statusDot, isOccupied ? { backgroundColor: colors.danger } : { backgroundColor: colors.success }]} />
+          <Ionicons name={iconName as any} size={40} color={isOccupied ? colors.danger : colors.text} style={{ marginBottom: 10 }} />
+          <Text style={[styles.gridTableName, { color: colors.text }, isOccupied && { color: colors.danger }]}>{item.name}</Text>
 
           <View style={styles.capacityBadge}>
-            <Ionicons name="people" size={14} color="#64748B" />
-            <Text style={styles.capacityText}>{item.capacity} personas</Text>
+            <Ionicons name="people" size={14} color={colors.mutedText} />
+            <Text style={[styles.capacityText, { color: colors.mutedText }]}>{item.capacity} personas</Text>
           </View>
-          <Text style={[styles.gridTableStatus, isOccupied ? { color: '#EF4444' } : { color: '#10B981' }]}>
+          <Text style={[styles.gridTableStatus, isOccupied ? { color: colors.danger } : { color: colors.success }]}>
             {item.status}
           </Text>
         </TouchableOpacity>
       )
     }}
-  />
-);
+  />;
+}

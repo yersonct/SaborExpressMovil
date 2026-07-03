@@ -18,7 +18,7 @@ export const LoginForm = () => {
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
     const [selectedLanguage, setSelectedLanguage] = useState<LanguageCode>('es');
-    const [themeMode, setThemeMode] = useState<'light' | 'dark'>('dark');
+    const [themeMode, setThemeMode] = useState<'light' | 'dark'>('light');
     const [showPassword, setShowPassword] = useState(false);
 
     // 1. Agregamos 'registerClient' a las vistas permitidas

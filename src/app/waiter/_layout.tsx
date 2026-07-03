@@ -6,10 +6,14 @@ import { DrawerContentScrollView, DrawerItemList } from '@react-navigation/drawe
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/features/auth/hooks/useAuth'; // Opcional, si ya tienes tu hook de Auth
+import { WaiterThemeProvider } from '@/features/waiter/context/WaiterThemeContext';
+import { WaiterLanguageProvider } from '@/features/waiter/context/WaiterLanguageContext';
+import { useWaiterLanguage } from '@/features/waiter/context/WaiterLanguageContext';
 
 function CustomDrawerContent(props: any) {
   const router = useRouter();
   const { handleLogout } = useAuth(); // Asumiendo que usamos el hook de autenticación
+  const { t } = useWaiterLanguage();
 
   const onLogout = async () => {
     try {
@@ -44,7 +48,7 @@ function CustomDrawerContent(props: any) {
       <View style={styles.drawerFooter}>
         <TouchableOpacity style={styles.logoutButton} onPress={onLogout}>
           <Ionicons name="log-out-outline" size={24} color="#E61C24" />
-          <Text style={styles.logoutText}>Cerrar Sesión</Text>
+          <Text style={styles.logoutText}>{t.drawerLogout || 'Cerrar Sesión'}</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -53,43 +57,47 @@ function CustomDrawerContent(props: any) {
 
 export default function WaiterDrawerLayout() {
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
-      <Drawer
-        drawerContent={(props) => <CustomDrawerContent {...props} />}
-        screenOptions={{
-          headerStyle: { backgroundColor: '#1A1A1A' }, // Cabecera oscura elegante
-          headerTintColor: '#FFFFFF',
-          drawerActiveBackgroundColor: '#FFF0EE', // Fondo rojizo suave al seleccionar
-          drawerActiveTintColor: '#E61C24', // Texto rojo corporativo
-          drawerInactiveTintColor: '#334155',
-          drawerLabelStyle: { fontSize: 16, fontWeight: 'bold', marginLeft: -10 },
-          headerShown: false // Ocultamos el header nativo porque el Dashboard ya tiene el suyo
-        }}
-      >
-        <Drawer.Screen 
-          name="index" 
-          options={{ 
-            title: 'Inicio', 
-            drawerLabel: 'Panel Principal',
-            drawerIcon: ({ color }) => <Ionicons name="restaurant-outline" size={24} color={color} /> 
-          }} 
-        />
-        <Drawer.Screen 
-          name="profile" 
-          options={{ 
-            title: 'Mi Perfil',
-            drawerIcon: ({ color }) => <Ionicons name="person-outline" size={24} color={color} /> 
-          }} 
-        />
-        <Drawer.Screen 
-          name="settings" 
-          options={{ 
-            title: 'Ajustes',
-            drawerIcon: ({ color }) => <Ionicons name="settings-outline" size={24} color={color} /> 
-          }} 
-        />
-      </Drawer>
-    </GestureHandlerRootView>
+    <WaiterThemeProvider>
+      <WaiterLanguageProvider>
+        <GestureHandlerRootView style={{ flex: 1 }}>
+          <Drawer
+          drawerContent={(props) => <CustomDrawerContent {...props} />}
+          screenOptions={{
+            headerStyle: { backgroundColor: '#1A1A1A' }, // Cabecera oscura elegante
+            headerTintColor: '#FFFFFF',
+            drawerActiveBackgroundColor: '#FFF0EE', // Fondo rojizo suave al seleccionar
+            drawerActiveTintColor: '#E61C24', // Texto rojo corporativo
+            drawerInactiveTintColor: '#334155',
+            drawerLabelStyle: { fontSize: 16, fontWeight: 'bold', marginLeft: -10 },
+            headerShown: false // Ocultamos el header nativo porque el Dashboard ya tiene el suyo
+          }}
+        >
+          <Drawer.Screen 
+            name="index" 
+            options={{ 
+              title: 'Inicio', 
+              drawerLabel: 'Panel Principal',
+              drawerIcon: ({ color }) => <Ionicons name="restaurant-outline" size={24} color={color} /> 
+            }} 
+          />
+          <Drawer.Screen 
+            name="profile" 
+            options={{ 
+              title: 'Mi Perfil',
+              drawerIcon: ({ color }) => <Ionicons name="person-outline" size={24} color={color} /> 
+            }} 
+          />
+          <Drawer.Screen 
+            name="settings" 
+            options={{ 
+              title: 'Ajustes',
+              drawerIcon: ({ color }) => <Ionicons name="settings-outline" size={24} color={color} /> 
+            }} 
+          />
+          </Drawer>
+        </GestureHandlerRootView>
+      </WaiterLanguageProvider>
+    </WaiterThemeProvider>
   );
 }
 

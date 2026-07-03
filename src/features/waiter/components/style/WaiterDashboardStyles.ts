@@ -119,6 +119,8 @@ export const styles = StyleSheet.create({
   orderActions: { flexDirection: 'row', marginTop: 16, gap: 10 },
   actionAddBtn: { flex: 1, backgroundColor: '#F1F5F9', padding: 12, borderRadius: 8, alignItems: 'center', borderWidth: 1, borderColor: '#CBD5E1' },
   actionAddText: { color: '#475569', fontWeight: 'bold' },
+  actionReadyBtn: { flex: 1, backgroundColor: '#D1FAE5', padding: 12, borderRadius: 8, alignItems: 'center', borderWidth: 1, borderColor: '#A7F3D0' },
+  actionReadyText: { color: '#047857', fontWeight: 'bold' },
   actionDeliverBtn: { flex: 1, backgroundColor: '#10B981', padding: 12, borderRadius: 8, alignItems: 'center' },
   actionDeliverText: { color: '#FFF', fontWeight: 'bold' },
   
@@ -133,10 +135,11 @@ export const styles = StyleSheet.create({
   orderHeaderTable: { color: '#FFFFFF', fontSize: 20, fontWeight: 'bold' },
 
   menuList: { padding: 16 },
-  menuCard: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#FFFFFF', padding: 16, borderRadius: 12, marginBottom: 12, borderWidth: 1, borderColor: '#E2E8F0' },
+  menuCard: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#FFFFFF', padding: 16, borderRadius: 16, marginBottom: 12, borderWidth: 1, borderColor: '#E2E8F0', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 5, elevation: 2 },
   menuItemName: { fontSize: 16, fontWeight: 'bold', color: '#1E293B', marginBottom: 4 },
   menuItemDesc: { fontSize: 13, color: '#64748B', marginBottom: 8 },
   menuItemPrice: { fontSize: 16, fontWeight: '900', color: '#10B981' },
+  menuCardActions: { alignItems: 'flex-end', marginLeft: 12 },
   addButton: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#FEF2F2', justifyContent: 'center', alignItems: 'center' },
   addButtonText: { fontSize: 24, color: '#E61C24', fontWeight: 'bold', marginTop: -2 },
 
@@ -149,8 +152,33 @@ export const styles = StyleSheet.create({
   
   cartItemRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
   cartItemInfo: { flex: 1 },
+
+
+
+
+
+
+  cartItemTitleRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 15 ,  },
+
+
+
+
+
+
   cartItemText: { fontSize: 15, color: '#334155', marginBottom: 6 },
   
+  
+  
+  cartNoteButton: { width: 30, height: 30, borderRadius: 15, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#00000094', justifyContent: 'center', alignItems: 'center', marginTop: 32 , marginRight: 5 , position: 'absolute', right: 0, top: -20 },
+  
+  
+  
+  
+  
+  
+  cartNoteButtonActive: { backgroundColor: '#FEF2F2', borderColor: '#FECACA' , position: 'absolute', right: 0, top: -10},
+  cartItemNote: { fontSize: 12, color: '#0F766E', fontWeight: '600', marginBottom: 6, lineHeight: 16 },
+  buttonred:{  position: 'absolute', right: 0, top: -20 },
   toGoToggleBtn: { alignSelf: 'flex-start', backgroundColor: '#F1F5F9', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, borderWidth: 1, borderColor: '#CBD5E1' },
   toGoToggleBtnActive: { backgroundColor: '#FEF2F2', borderColor: '#FECACA' },
   toGoToggleText: { fontSize: 12, color: '#475569', fontWeight: '600' },
@@ -181,5 +209,17 @@ export const styles = StyleSheet.create({
   cartTotalAmount: { fontSize: 24, fontWeight: '900', color: '#E61C24' },
   submitButton: { backgroundColor: '#E61C24', paddingHorizontal: 24, paddingVertical: 14, borderRadius: 12 },
   submitButtonDisabled: { backgroundColor: '#FDA4AF' },
-  submitButtonText: { color: '#FFFFFF', fontSize: 16, fontWeight: 'bold' }
+  submitButtonText: { color: '#FFFFFF', fontSize: 16, fontWeight: 'bold' },
+
+  noteModalOverlay: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.55)', justifyContent: 'center', alignItems: 'center', padding: 20 },
+  noteModalCard: { width: '100%', backgroundColor: '#FFFFFF', borderRadius: 20, padding: 20, borderWidth: 1, borderColor: '#E2E8F0' },
+  noteModalIconWrap: { width: 54, height: 54, borderRadius: 27, backgroundColor: '#FEF2F2', justifyContent: 'center', alignItems: 'center', marginBottom: 12, alignSelf: 'center' },
+  noteModalTitle: { fontSize: 20, fontWeight: '900', color: '#1E293B', textAlign: 'center' },
+  noteModalSubtitle: { fontSize: 13, color: '#64748B', textAlign: 'center', marginTop: 8, marginBottom: 14, lineHeight: 18 },
+  noteModalInput: { minHeight: 110, borderWidth: 1, borderColor: '#CBD5E1', borderRadius: 14, padding: 14, fontSize: 15, color: '#1E293B', textAlignVertical: 'top', backgroundColor: '#F8FAFC' },
+  noteModalActions: { flexDirection: 'row', gap: 10, marginTop: 16 },
+  noteModalCancelBtn: { flex: 1, backgroundColor: '#F1F5F9', paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
+  noteModalCancelText: { color: '#475569', fontWeight: '700' },
+  noteModalConfirmBtn: { flex: 1, backgroundColor: '#E61C24', paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
+  noteModalConfirmText: { color: '#FFFFFF', fontWeight: '700' }
 });
