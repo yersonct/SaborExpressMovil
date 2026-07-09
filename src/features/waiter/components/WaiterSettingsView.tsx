@@ -1,41 +1,44 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, ScrollView, Switch, TouchableOpacity, Platform } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, SafeAreaView, ScrollView, Switch, TouchableOpacity, Platform, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation, useRouter } from 'expo-router';
-import { DrawerActions } from '@react-navigation/native';
-import { useAuth } from '@/features/auth/hooks/useAuth'; // Opcional, si usas el hook
+import { useRouter } from 'expo-router';
+import { useAuth } from '@/features/auth/hooks/useAuth';
 import { LanguageDropdown } from '@/components/LanguageDropdown';
 import { useWaiterTheme } from '@/features/waiter/context/WaiterThemeContext';
 import { useWaiterLanguage } from '@/features/waiter/context/WaiterLanguageContext';
 
 export const WaiterSettingsView = () => {
-  const navigation = useNavigation();
   const router = useRouter();
-  const { handleLogout } = useAuth(); // Opcional
+  const { handleLogout } = useAuth();
   const { isDark, colors, setMode } = useWaiterTheme();
   const { language, setLanguage, t, languageOptions } = useWaiterLanguage();
+  
   const [kitchenSound, setKitchenSound] = useState(true);
   const [kitchenVibration, setKitchenVibration] = useState(true);
 
+  // 🔥 Lógica Segura para Cerrar Sesión
   const onLogoutPress = async () => {
-    try {
-      if (handleLogout) await handleLogout();
-    } catch (error) {
-      console.log(error);
-    } finally {
-      router.replace('/');
-    }
+    Alert.alert("Cerrar Sesión", "¿Estás seguro que deseas salir de tu turno?", [
+      { text: "Cancelar", style: "cancel" },
+      { 
+        text: "Salir", 
+        style: "destructive",
+        onPress: async () => {
+          try {
+            if (handleLogout) await handleLogout();
+          } catch (error) {
+            console.log(error);
+          } finally {
+            router.replace('/');
+          }
+        }
+      }
+    ]);
   };
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
       <View style={[styles.topHeader, { backgroundColor: colors.header, borderColor: colors.border }]}>
-        <TouchableOpacity 
-          style={styles.menuButton} 
-          onPress={() => navigation.dispatch(DrawerActions.openDrawer())}
-        >
-          <Ionicons name="menu" size={28} color={colors.text} />
-        </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.text }]}>{t.settingsTitle || 'Configuración'}</Text>
       </View>
 
@@ -126,7 +129,13 @@ export const WaiterSettingsView = () => {
           </View>
         </View>
 
-   
+        {/* 🔥 SECCIÓN DE PELIGRO: CERRAR SESIÓN */}
+        <View style={[styles.section, { marginTop: 20 }]}>
+          <TouchableOpacity style={styles.logoutButton} onPress={onLogoutPress}>
+            <Ionicons name="log-out-outline" size={24} color="#FFFFFF" />
+            <Text style={styles.logoutButtonText}>{t.drawerLogout || 'Cerrar Sesión'}</Text>
+          </TouchableOpacity>
+        </View>
 
       </ScrollView>
     </SafeAreaView>
@@ -136,7 +145,6 @@ export const WaiterSettingsView = () => {
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#F8FAFC' },
   topHeader: { flexDirection: 'row', alignItems: 'center', padding: 20, paddingTop: Platform.OS === 'android' ? 40 : 20, backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderColor: '#E2E8F0' },
-  menuButton: { marginRight: 15 },
   headerTitle: { fontSize: 20, fontWeight: 'bold', color: '#1E293B' },
   
   container: { padding: 20, paddingBottom: 40 },
@@ -152,5 +160,24 @@ const styles = StyleSheet.create({
   settingDesc: { fontSize: 13, color: '#94A3B8' },
   divider: { height: 1, backgroundColor: '#F1F5F9' },
   
-  
+  // 🔥 ESTILOS DEL BOTÓN DE CERRAR SESIÓN
+  logoutButton: {
+    backgroundColor: '#EF4444', // Rojo peligro
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    borderRadius: 16,
+    shadowColor: '#EF4444',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 4,
+  },
+  logoutButtonText: {
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+    fontSize: 18,
+    marginLeft: 10,
+  }
 });

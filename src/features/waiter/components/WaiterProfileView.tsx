@@ -1,26 +1,21 @@
 import React, { useState } from 'react';
 import { SafeAreaView, View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Image, Platform, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation } from 'expo-router';
-import { DrawerActions } from '@react-navigation/native';
 import { useWaiterTheme } from '@/features/waiter/context/WaiterThemeContext';
 import { useWaiterLanguage } from '@/features/waiter/context/WaiterLanguageContext';
 
 export const WaiterProfileView = () => {
-  const navigation = useNavigation();
   const { colors } = useWaiterTheme();
   const { t } = useWaiterLanguage();
   const [isEditing, setIsEditing] = useState(false);
   
-  // Estado principal de los datos
   const [waiterData, setWaiterData] = useState({
     name: 'Juan Pérez',
     phone: '+57 300 111 2233',
     email: 'juan.perez@saborexpress.com',
-    pin: '1234' // Es mejor manejarlo como números reales en lugar de '****' para validarlo
+    pin: '1234' 
   });
 
-  // 🔥 NUEVO: Estado para manejar los mensajes de error
   const [errors, setErrors] = useState({
     name: '',
     pin: ''
@@ -30,7 +25,6 @@ export const WaiterProfileView = () => {
     let isValid = true;
     let newErrors = { name: '', pin: '' };
 
-    // 1. Validar Nombre
     if (!waiterData.name.trim()) {
       newErrors.name = t.profileNameErrorRequired || 'El nombre es obligatorio.';
       isValid = false;
@@ -39,8 +33,7 @@ export const WaiterProfileView = () => {
       isValid = false;
     }
 
-    // 2. Validar PIN
-    const pinRegex = /^\d{4}$/; // Expresión regular que exige exactamente 4 números
+    const pinRegex = /^\d{4}$/; 
     if (!waiterData.pin.trim()) {
       newErrors.pin = t.profilePinErrorRequired || 'El PIN es obligatorio.';
       isValid = false;
@@ -49,21 +42,16 @@ export const WaiterProfileView = () => {
       isValid = false;
     }
 
-    // Actualizamos el estado de los errores en la pantalla
     setErrors(newErrors);
 
-    // Si todo es válido, guardamos
     if (isValid) {
       setIsEditing(false);
       Alert.alert(t.profileUpdatedTitle || '¡Perfil Actualizado!', t.profileUpdatedMessage || 'Tus datos han sido guardados correctamente.');
-      // Lógica para guardar en BD...
     }
   };
 
-  // Función auxiliar para limpiar el error al escribir
   const handleChangeText = (field: string, value: string) => {
     setWaiterData({ ...waiterData, [field]: value });
-    // Si había un error en este campo, lo borramos en cuanto el usuario empieza a escribir
     if (errors[field as keyof typeof errors]) {
       setErrors({ ...errors, [field]: '' });
     }
@@ -72,15 +60,11 @@ export const WaiterProfileView = () => {
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
       <View style={[styles.header, { backgroundColor: colors.header, borderColor: colors.border }]}>
-        <TouchableOpacity style={styles.menuButton} onPress={() => navigation.dispatch(DrawerActions.openDrawer())}>
-          <Ionicons name="menu" size={28} color={colors.text} />
-        </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.text }]}>{t.profileTitle || 'Mi Perfil'}</Text>
       </View>
 
       <ScrollView contentContainerStyle={[styles.container, { backgroundColor: colors.background }]} showsVerticalScrollIndicator={false}>
         
-        {/* DESEMPEÑO DEL TURNO */}
         <View style={styles.statsSection}>
           <Text style={[styles.sectionTitle, { color: colors.text }]}>{t.profilePerformanceTitle || 'Desempeño del Turno'}</Text>
           <View style={[styles.statsCard, { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border }]}>
@@ -98,7 +82,6 @@ export const WaiterProfileView = () => {
           </View>
         </View>
 
-        {/* DATOS PERSONALES */}
         <View style={styles.profileSection}>
           <View style={styles.profileHeaderRow}>
             <Text style={[styles.sectionTitle, { color: colors.text }]}>{t.profileDataTitle || 'Mis Datos'}</Text>
@@ -112,7 +95,6 @@ export const WaiterProfileView = () => {
               <Image source={{ uri: 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png' }} style={styles.avatar} />
             </View>
 
-            {/* INPUT NOMBRE */}
             <View style={styles.inputGroup}>
               <Text style={[styles.inputLabel, { color: colors.mutedText }]}>{t.profileNameLabel || 'Nombre completo'}</Text>
               <TextInput
@@ -120,17 +102,15 @@ export const WaiterProfileView = () => {
                   styles.input,
                   { backgroundColor: colors.surface, color: colors.text, borderColor: colors.border },
                   !isEditing && styles.inputDisabled,
-                  errors.name ? styles.inputError : null // 🔥 Borde rojo si hay error
+                  errors.name ? styles.inputError : null
                 ]}
                 value={waiterData.name}
                 onChangeText={(text) => handleChangeText('name', text)}
                 editable={isEditing}
               />
-              {/* 🔥 Mensaje de error */}
               {errors.name ? <Text style={styles.errorText}>{errors.name}</Text> : null}
             </View>
 
-            {/* INPUT CORREO */}
             <View style={styles.inputGroup}>
               <Text style={[styles.inputLabel, { color: colors.mutedText }]}>{t.profileEmailLabel || 'Correo Electrónico'}</Text>
               <TextInput
@@ -140,7 +120,6 @@ export const WaiterProfileView = () => {
               />
             </View>
 
-            {/* INPUT PIN */}
             <View style={styles.inputGroup}>
               <Text style={[styles.inputLabel, { color: colors.mutedText }]}>{t.profilePinLabel || 'PIN de Autorización'}</Text>
               <TextInput
@@ -148,16 +127,15 @@ export const WaiterProfileView = () => {
                   styles.input,
                   { backgroundColor: colors.surface, color: colors.text, borderColor: colors.border },
                   !isEditing && styles.inputDisabled,
-                  errors.pin ? styles.inputError : null // 🔥 Borde rojo si hay error
+                  errors.pin ? styles.inputError : null 
                 ]}
-                value={isEditing ? waiterData.pin : '****'} // Ocultamos el PIN si no está editando
+                value={isEditing ? waiterData.pin : '****'} 
                 onChangeText={(text) => handleChangeText('pin', text)}
                 secureTextEntry={isEditing} 
                 keyboardType="numeric"
-                maxLength={4} // Bloquea el teclado para no escribir más de 4
+                maxLength={4} 
                 editable={isEditing}
               />
-              {/* 🔥 Mensaje de error */}
               {errors.pin ? <Text style={styles.errorText}>{errors.pin}</Text> : null}
             </View>
           </View>
@@ -171,7 +149,6 @@ export const WaiterProfileView = () => {
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#F8FAFC' },
   header: { flexDirection: 'row', alignItems: 'center', padding: 20, paddingTop: Platform.OS === 'android' ? 40 : 20, backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderColor: '#E2E8F0' },
-  menuButton: { marginRight: 15 },
   headerTitle: { fontSize: 20, fontWeight: 'bold', color: '#1E293B' },
   container: { padding: 20, paddingBottom: 40 },
   sectionTitle: { fontSize: 18, fontWeight: '900', color: '#1E293B', marginBottom: 15 },
@@ -196,7 +173,6 @@ const styles = StyleSheet.create({
   input: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#CBD5E1', borderRadius: 10, paddingHorizontal: 15, paddingVertical: 12, fontSize: 16, color: '#1E293B' },
   inputDisabled: { backgroundColor: '#F8FAFC', borderColor: '#E2E8F0', color: '#64748B' },
   
-  // 🔥 ESTILOS NUEVOS PARA LOS ERRORES
   inputError: { borderColor: '#EF4444', borderWidth: 1.5 },
   errorText: { color: '#EF4444', fontSize: 12, marginTop: 5, marginLeft: 4, fontWeight: '500' },
 });

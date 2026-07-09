@@ -9,33 +9,25 @@ export const ActiveOrdersView = ({
   expandedOrderId, 
   setExpandedOrderId, 
   handleAddMoreToOrder, 
-  handleCancelOrder,
   handleMarkOrderReady,
-  handleDeliverOrder 
+  handleCancelOrder 
 }: any) => {
   const { t } = useWaiterLanguage();
 
-  // 🔥 1. ESTADOS PARA NUESTRO MODAL PERSONALIZADO
-  const [isModalVisible, setIsModalVisible] = useState(false);
-  const [modalType, setModalType] = useState<'CANCEL' | 'DELIVER' | null>(null);
-  const [selectedOrder, setSelectedOrder] = useState<any>(null);
+  const [isCancelModalVisible, setIsCancelModalVisible] = useState(false);
+  const [selectedOrderToCancel, setSelectedOrderToCancel] = useState<any>(null);
 
-  // Función para abrir el modal con el tipo específico
-  const openModal = (type: 'CANCEL' | 'DELIVER', order: any) => {
-    setModalType(type);
-    setSelectedOrder(order);
-    setIsModalVisible(true);
+  const openCancelModal = (order: any) => {
+    setSelectedOrderToCancel(order);
+    setIsCancelModalVisible(true);
   };
 
-  // Función para confirmar la acción
-  const confirmAction = () => {
-    if (modalType === 'CANCEL') {
-      handleCancelOrder(selectedOrder);
-    } else if (modalType === 'DELIVER') {
-      handleDeliverOrder(selectedOrder);
+  const confirmCancelAction = () => {
+    if (selectedOrderToCancel) {
+      handleCancelOrder(selectedOrderToCancel);
     }
-    setIsModalVisible(false);
-    setSelectedOrder(null);
+    setIsCancelModalVisible(false);
+    setSelectedOrderToCancel(null);
   };
 
   return (
@@ -53,7 +45,11 @@ export const ActiveOrdersView = ({
         }
         renderItem={({ item }) => {
           const isExpanded = expandedOrderId === item.id;
-          const isReady = item.status === 'LISTO';
+          
+          // 🔥 LÓGICA CLAVE: La orden está completamente lista SOLO si TODO lo que hay adentro ya se entregó
+          // (Asumimos que si no tiene la propiedad isDelivered, es nuevo y aún no sale)
+          const isFullyReady = item.items.length > 0 && item.items.every((prod: any) => prod.isDelivered === true);
+          
           return (
             <View style={styles.activeOrderCard}>
               <TouchableOpacity
@@ -70,9 +66,9 @@ export const ActiveOrdersView = ({
                   <Text style={styles.orderTimeText}>⌚ {item.time}</Text>
                 </View>
                 <View style={{ alignItems: 'flex-end' }}>
-                  <View style={[styles.badgeStatus, isReady ? styles.badgeReady : styles.badgePrep]}>
-                    <Text style={[styles.badgeStatusText, isReady ? styles.badgeReadyText : styles.badgePrepText]}>
-                      {isReady ? `✅ ${t.ordersReady || 'Listo'}` : `👨‍🍳 ${t.ordersPreparing || 'Preparando'}`}
+                  <View style={[styles.badgeStatus, isFullyReady ? styles.badgeReady : styles.badgePrep]}>
+                    <Text style={[styles.badgeStatusText, isFullyReady ? styles.badgeReadyText : styles.badgePrepText]}>
+                      {isFullyReady ? `✅ ${t.ordersReady || 'Todo Entregado'}` : `👨‍🍳 ${t.ordersPreparing || 'Preparando'}`}
                     </Text>
                   </View>
                   <Text style={styles.expandText}>{isExpanded ? (t.ordersHide || 'Ocultar') : (t.ordersShowProducts || 'Ver productos')}</Text>
@@ -83,11 +79,22 @@ export const ActiveOrdersView = ({
                 <View style={styles.activeOrderDetails}>
                   <View style={styles.divider} />
                   {item.items.map((prod: any, idx: number) => (
-                    <View key={idx} style={styles.orderItemRow}>
+                    <View key={idx} style={[styles.orderItemRow, prod.isDelivered && { opacity: 0.6 }]}>
                       <View style={styles.orderItemMain}>
-                        <Text style={styles.orderItemQty}>{prod.quantity}x</Text>
-                        <View>
-                          <Text style={styles.orderItemName}>{prod.name}</Text>
+                        
+                        {/* 🔥 CHECKMARK VERDE SI YA FUE ENTREGADO, SINO MUESTRA LA CANTIDAD NORMAL */}
+                        <View style={{ width: 35, alignItems: 'center' }}>
+                          {prod.isDelivered ? (
+                            <Ionicons name="checkmark-circle" size={24} color="#10B981" />
+                          ) : (
+                            <Text style={[styles.orderItemQty, { color: '#E61C24' }]}>{prod.quantity}x</Text>
+                          )}
+                        </View>
+
+                        <View style={{ flex: 1, marginLeft: 5 }}>
+                          <Text style={[styles.orderItemName, prod.isDelivered && { textDecorationLine: 'line-through', color: '#94A3B8' }]}>
+                            {prod.name}
+                          </Text>
                           {!!prod.note && <Text style={{ fontSize: 12, color: '#0F766E', fontWeight: '600', marginTop: 3, lineHeight: 16 }}>📝 {prod.note}</Text>}
                           <View style={{ flexDirection: 'row', gap: 6, marginTop: 4 }}>
                             {prod.isToGo ? <Text style={styles.badgeToGo}>🛍️ Empacar</Text> : <Text style={styles.badgeMesa}>🍽️ Mesa</Text>}
@@ -98,29 +105,50 @@ export const ActiveOrdersView = ({
                     </View>
                   ))}
 
-                  <View style={styles.orderActions}>
-                    <TouchableOpacity style={styles.actionAddBtn} onPress={() => handleAddMoreToOrder(item)}>
-                      <Text style={styles.actionAddText}>{t.ordersAddMore || '+ Agregar productos'}</Text>
+                  <View style={localStyles.actionsContainer}>
+                    <TouchableOpacity 
+                      style={localStyles.addMoreBtn} 
+                      onPress={() => handleAddMoreToOrder(item)}
+                      activeOpacity={0.8}
+                    >
+                      <Ionicons name="add-circle-outline" size={20} color="#475569" style={{ marginRight: 8 }} />
+                      <Text style={localStyles.addMoreBtnText}>{t.ordersAddMore || 'Agregar productos a la mesa'}</Text>
                     </TouchableOpacity>
 
-                    {!isReady && (
-                      <TouchableOpacity style={styles.actionReadyBtn} onPress={() => handleMarkOrderReady(item)} activeOpacity={0.8}>
-                        <Text style={styles.actionReadyText}>{t.ordersReadyButton || 'Listo'}</Text>
-                      </TouchableOpacity>
-                    )}
+                    {/* 🔥 SOLO MOSTRAR SI FALTAN PRODUCTOS POR ENTREGAR */}
+                    {!isFullyReady && (
+                      <View style={localStyles.decisionRow}>
+                        
+                        <TouchableOpacity 
+                          style={localStyles.cancelBtn} 
+                          onPress={() => openCancelModal(item)} 
+                          activeOpacity={0.8}
+                        >
+                          <Ionicons name="close-circle-outline" size={22} color="#EF4444" style={{ marginRight: 6 }} />
+                          <Text style={localStyles.cancelBtnText}>{t.ordersCancel || 'Cancelar'}</Text>
+                        </TouchableOpacity>
 
-                    {!isReady && (
-                      <TouchableOpacity style={styles.actionCancelBtn} onPress={() => openModal('CANCEL', item)}>
-                        <Text style={styles.actionCancelText}>{t.ordersCancel || 'Cancelar'}</Text>
-                      </TouchableOpacity>
-                    )}
+                        <TouchableOpacity 
+                          style={localStyles.confirmBtn} 
+                          // Pasamos la orden completa para que tu función marque los items como entregados
+                          onPress={() => {
+                            // Simulamos marcar los productos como listos antes de llamar al padre
+                            const updatedOrder = {
+                              ...item,
+                              items: item.items.map((i: any) => ({ ...i, isDelivered: true }))
+                            };
+                            handleMarkOrderReady(updatedOrder); 
+                          }} 
+                          activeOpacity={0.8}
+                        >
+                          <Ionicons name="checkmark-done-circle-outline" size={22} color="#FFFFFF" style={{ marginRight: 6 }} />
+                          <Text style={localStyles.confirmBtnText}>Confirmar Salida</Text>
+                        </TouchableOpacity>
 
-                    {isReady && (
-                      <TouchableOpacity style={styles.actionDeliverBtn} onPress={() => openModal('DELIVER', item)}>
-                        <Text style={styles.actionDeliverText}>{t.ordersDelivered || 'Entregado'}</Text>
-                      </TouchableOpacity>
+                      </View>
                     )}
                   </View>
+
                 </View>
               )}
             </View>
@@ -128,40 +156,27 @@ export const ActiveOrdersView = ({
         }}
       />
 
-      {/* 🔥 2. AQUÍ ESTÁ EL MODAL PERSONALIZADO */}
-      <Modal transparent visible={isModalVisible} animationType="fade">
+      <Modal transparent visible={isCancelModalVisible} animationType="fade">
         <View style={modalStyles.overlay}>
           <View style={modalStyles.modalBox}>
-            <View style={[modalStyles.iconCircle, modalType === 'CANCEL' ? { backgroundColor: '#FEE2E2' } : { backgroundColor: '#D1FAE5' }]}>
-              <Ionicons 
-                name={modalType === 'CANCEL' ? 'warning-outline' : 'checkmark-done-outline'} 
-                size={32} 
-                color={modalType === 'CANCEL' ? '#EF4444' : '#10B981'} 
-              />
+            <View style={modalStyles.iconCircle}>
+              <Ionicons name="warning-outline" size={32} color="#EF4444" />
             </View>
             
             <Text style={modalStyles.title}>
-              {modalType === 'CANCEL' ? (t.ordersCancelTitle || '¿Cancelar Pedido?') : (t.ordersDeliverTitle || '¿Confirmar entrega?')}
+              {t.ordersCancelTitle || '¿Cancelar Pedido?'}
             </Text>
             <Text style={modalStyles.message}>
-              {modalType === 'CANCEL' 
-                ? (t.ordersCancelMessage || `Estás a punto de anular el pedido de ${selectedOrder?.tableName}. Esta acción no se puede deshacer.`).replace('{tableName}', selectedOrder?.tableName ?? '')
-                : (t.ordersDeliverMessage || `¿Estás seguro de que ya entregaste el pedido de ${selectedOrder?.tableName} al cliente?`).replace('{tableName}', selectedOrder?.tableName ?? '')}
+              {t.ordersCancelMessage || `Estás a punto de anular el pedido de ${selectedOrderToCancel?.tableName}. La mesa quedará libre. Esta acción no se puede deshacer.`}
             </Text>
 
             <View style={modalStyles.buttonContainer}>
-              <TouchableOpacity style={modalStyles.cancelModalBtn} onPress={() => setIsModalVisible(false)} activeOpacity={0.8}>
+              <TouchableOpacity style={modalStyles.cancelModalBtn} onPress={() => setIsCancelModalVisible(false)} activeOpacity={0.8}>
                 <Text style={modalStyles.cancelModalBtnText}>{t.ordersCancelNo || 'No, Volver'}</Text>
               </TouchableOpacity>
               
-              <TouchableOpacity 
-                style={[modalStyles.confirmModalBtn, modalType === 'CANCEL' ? { backgroundColor: '#EF4444' } : { backgroundColor: '#10B981' }]} 
-                onPress={confirmAction}
-                activeOpacity={0.8}
-              >
-                <Text style={modalStyles.confirmModalBtnText}>
-                  {modalType === 'CANCEL' ? (t.ordersCancelYes || 'Sí, Cancelar') : (t.ordersDeliverYes || 'Sí, Entregado')}
-                </Text>
+              <TouchableOpacity style={modalStyles.confirmModalBtn} onPress={confirmCancelAction} activeOpacity={0.8}>
+                <Text style={modalStyles.confirmModalBtnText}>{t.ordersCancelYes || 'Sí, Cancelar'}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -171,74 +186,80 @@ export const ActiveOrdersView = ({
   );
 };
 
-// 🔥 3. ESTILOS EXCLUSIVOS PARA EL MODAL (Listos para lucir profesionales)
-const modalStyles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
+const localStyles = StyleSheet.create({
+  actionsContainer: {
+    marginTop: 15,
+    paddingTop: 15,
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9',
   },
-  modalBox: {
-    width: '85%',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    padding: 24,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.25,
-    shadowRadius: 15,
-    elevation: 10,
-  },
-  iconCircle: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#1E293B',
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  message: {
-    fontSize: 15,
-    color: '#64748B',
-    textAlign: 'center',
-    lineHeight: 22,
-    marginBottom: 24,
-  },
-  buttonContainer: {
+  addMoreBtn: {
+    backgroundColor: '#F8FAFC',
     flexDirection: 'row',
-    gap: 12,
-    width: '100%',
-  },
-  cancelModalBtn: {
-    flex: 1,
-    backgroundColor: '#F1F5F9',
+    justifyContent: 'center',
+    alignItems: 'center',
     paddingVertical: 14,
     borderRadius: 12,
-    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    marginBottom: 12,
   },
-  cancelModalBtnText: {
+  addMoreBtnText: {
     color: '#475569',
     fontWeight: 'bold',
-    fontSize: 16,
+    fontSize: 15,
   },
-  confirmModalBtn: {
-    flex: 1,
+  decisionRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  cancelBtn: {
+    flex: 0.8, 
+    backgroundColor: '#FEF2F2',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
     paddingVertical: 14,
     borderRadius: 12,
-    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#FECACA',
   },
-  confirmModalBtnText: {
+  cancelBtnText: {
+    color: '#EF4444',
+    fontWeight: 'bold',
+    fontSize: 15,
+  },
+  confirmBtn: {
+    flex: 1.2, 
+    backgroundColor: '#10B981',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 14,
+    borderRadius: 12,
+    shadowColor: '#10B981',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  confirmBtnText: {
     color: '#FFFFFF',
     fontWeight: 'bold',
     fontSize: 16,
-  },
+  }
+});
+
+const modalStyles = StyleSheet.create({
+  overlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.5)', justifyContent: 'center', alignItems: 'center' },
+  modalBox: { width: '85%', backgroundColor: '#FFFFFF', borderRadius: 20, padding: 24, alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.25, shadowRadius: 15, elevation: 10 },
+  iconCircle: { width: 64, height: 64, borderRadius: 32, justifyContent: 'center', alignItems: 'center', marginBottom: 16, backgroundColor: '#FEE2E2' },
+  title: { fontSize: 20, fontWeight: 'bold', color: '#1E293B', marginBottom: 8, textAlign: 'center' },
+  message: { fontSize: 15, color: '#64748B', textAlign: 'center', lineHeight: 22, marginBottom: 24 },
+  buttonContainer: { flexDirection: 'row', gap: 12, width: '100%' },
+  cancelModalBtn: { flex: 1, backgroundColor: '#F1F5F9', paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
+  cancelModalBtnText: { color: '#475569', fontWeight: 'bold', fontSize: 16 },
+  confirmModalBtn: { flex: 1, paddingVertical: 14, borderRadius: 12, alignItems: 'center', backgroundColor: '#EF4444' },
+  confirmModalBtnText: { color: '#FFFFFF', fontWeight: 'bold', fontSize: 16 },
 });
