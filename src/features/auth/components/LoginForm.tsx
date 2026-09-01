@@ -6,40 +6,40 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../hooks/useAuth';
 import { ForgotPasswordFlow } from './ForgotPasswordFlow';
 import { WorkerRegistrationFlow } from './WorkerRegistrationFlow';
-import { ClientRegistrationFlow } from './ClientRegistrationFlow'; // <-- Importación del nuevo flujo de cliente
+import { ClientRegistrationFlow } from './ClientRegistrationFlow';
 import { LanguageDropdown } from '../../../components/LanguageDropdown';
 import { AuthInput } from './AuthInput';
 import { AnimatedSuccessModal } from './AnimatedSuccessModal';
+import { ROLE_ROUTES, ROLE_LABELS } from '../services/roleMap'; 
+import { styles } from './style/LoginForm.styles';
 
 const translations = require('../../../locales/translations.json') as Record<string, Record<string, string>>;
 type LanguageCode = 'es' | 'en' | 'pt' | 'fr';
 
 export const LoginForm = () => {
-    const [username, setUsername] = useState('');
+    const [identifier, setIdentifier] = useState('');
     const [password, setPassword] = useState('');
     const [selectedLanguage, setSelectedLanguage] = useState<LanguageCode>('es');
     const [themeMode, setThemeMode] = useState<'light' | 'dark'>('light');
     const [showPassword, setShowPassword] = useState(false);
 
-    // 1. Agregamos 'registerClient' a las vistas permitidas
     const [activeView, setActiveView] = useState<'login' | 'forgot' | 'registerWorker' | 'registerClient'>('login');
     const [showSuccessModal, setShowSuccessModal] = useState(false);
     const [showWorkerSuccess, setShowWorkerSuccess] = useState(false);
-    const [showClientSuccess, setShowClientSuccess] = useState(false); // Estado para éxito de cliente
+    const [showClientSuccess, setShowClientSuccess] = useState(false);
     const [isNavigating, setIsNavigating] = useState(false);
 
     const { user, loading, error, handleLogin, handleLogout } = useAuth();
     const router = useRouter();
     const t = translations[selectedLanguage] || translations.es;
 
-    // Animaciones fluidas (rojo dinámico)
     const fadeAnim = useRef(new Animated.Value(0)).current;
     const slideAnim = useRef(new Animated.Value(30)).current;
 
     useEffect(() => {
         Animated.parallel([
-            Animated.timing(fadeAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
-            Animated.timing(slideAnim, { toValue: 0, duration: 600, useNativeDriver: true })
+            Animated.timing(fadeAnim, { toValue: 1, duration: 300, useNativeDriver: true }),
+            Animated.timing(slideAnim, { toValue: 0, duration: 300, useNativeDriver: true })
         ]).start();
     }, [activeView]);
 
@@ -59,18 +59,16 @@ export const LoginForm = () => {
     }, [themeMode]);
 
     useEffect(() => {
-        if (user && user.role) {
+        if (user && user.roleId != null) {
             setShowSuccessModal(true);
             setTimeout(() => {
                 setShowSuccessModal(false);
                 setIsNavigating(true);
-                const role = user.role.toLowerCase();
-                const routes: Record<string, any> = {
-                    cajero: '/cashier', repartidor: '/delivery', mesero: '/waiter', cocinero: '/chef', cliente: '/client'
-                };
-                if (routes[role]) router.replace(routes[role]);
+                // CORRECCIÓN 1: Forzamos el tipado con 'as any' para evitar el error de Record<RoleId, string>
+                const route = ROLE_ROUTES[user.roleId as keyof typeof ROLE_ROUTES];
+                if (route) router.replace(route as any);
                 else setIsNavigating(false);
-            }, 3000);
+            }, 1200);
         } else {
             setIsNavigating(false);
         }
@@ -84,7 +82,7 @@ export const LoginForm = () => {
         mutedText: isDark ? '#A1A1AA' : '#64748B',
         border: isDark ? '#27272A' : '#E2E8F0',
         inputBackground: isDark ? '#09090B' : '#F8FAFC',
-        buttonBackground: '#E61C24', // Color corporativo (Rojo)
+        buttonBackground: '#E61C24',
         buttonText: '#FFFFFF',
         toggleBg: isDark ? '#27272A' : '#E2E8F0',
     };
@@ -102,11 +100,15 @@ export const LoginForm = () => {
         return (
             <View style={[styles.welcomeContainer, { backgroundColor: themeColors.background }]}>
                 <Animated.View style={[styles.profileCard, { backgroundColor: themeColors.surface, opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
-                    <Image source={{ uri: 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png' }} style={styles.profileImage} />
+                    <Image source={require('../../../assets/images/image.png')} style={styles.profileImage} />
                     <Text style={[styles.welcomeTitle, { color: themeColors.mutedText }]}>{t.welcomeBack}</Text>
-                    <Text style={[styles.userName, { color: themeColors.text }]}>{user.name}</Text>
+                    
+                    {/* CORRECCIÓN 2: Cambiamos user.name por user.identifier */}
+                    <Text style={[styles.userName, { color: themeColors.text }]}>{user.identifier}</Text>
+                    
                     <View style={styles.roleBadge}>
-                        <Text style={styles.roleText}>{user?.role?.toUpperCase() || 'USUARIO'}</Text>
+                        {/* CORRECCIÓN 3: Agregamos 'as any' para mapear el rol sin errores de TypeScript */}
+                     <Text style={styles.roleText}>{ROLE_LABELS[user.roleId as keyof typeof ROLE_LABELS] ?? 'USUARIO'}</Text>
                     </View>
                 </Animated.View>
                 <TouchableOpacity style={styles.logoutButton} onPress={handleLogout} activeOpacity={0.7}>
@@ -118,7 +120,6 @@ export const LoginForm = () => {
 
     return (
         <SafeAreaView style={[styles.safeArea, { backgroundColor: themeColors.background }]}>
-            {/* Cabecera Superior: Tema e Idioma */}
             <View style={styles.headerTopBar}>
                 <View style={[styles.themeToggle, { backgroundColor: themeColors.toggleBg }]}>
                     <TouchableOpacity
@@ -169,10 +170,10 @@ export const LoginForm = () => {
                         {activeView === 'login' && (
                             <>
                                 <AuthInput
-                                    label={t.usernameLabel}
-                                    placeholder={t.usernamePlaceholder}
-                                    value={username}
-                                    onChangeText={setUsername}
+                                    label={t.identifierLabel || t.usernameLabel}
+                                    placeholder={t.identifierPlaceholder || t.usernamePlaceholder}
+                                    value={identifier}
+                                    onChangeText={setIdentifier}
                                     error={!!error}
                                     themeColors={themeColors}
                                 />
@@ -197,12 +198,15 @@ export const LoginForm = () => {
                                 {loading ? (
                                     <ActivityIndicator size="large" color="#E61C24" style={styles.loader} />
                                 ) : (
-                                    <TouchableOpacity style={[styles.loginButton, { backgroundColor: themeColors.buttonBackground }]} onPress={() => handleLogin(username, password)} activeOpacity={0.8}>
+                                    <TouchableOpacity
+                                        style={[styles.loginButton, { backgroundColor: themeColors.buttonBackground }]}
+                                        onPress={() => handleLogin(identifier, password)}
+                                        activeOpacity={0.8}
+                                    >
                                         <Text style={[styles.loginButtonText, { color: themeColors.buttonText }]}>{t.signIn}</Text>
                                     </TouchableOpacity>
                                 )}
 
-                                {/* 2. Nuevo enlace de Registro para Clientes */}
                                 <View style={styles.registerClientLinkContainer}>
                                     <Text style={[styles.registerClientText, { color: themeColors.mutedText }]}>{t.noAccount} </Text>
                                     <TouchableOpacity onPress={() => setActiveView('registerClient')}>
@@ -210,7 +214,6 @@ export const LoginForm = () => {
                                     </TouchableOpacity>
                                 </View>
 
-                                {/* Divisor visual */}
                                 <View style={styles.dividerContainer}>
                                     <View style={[styles.line, { backgroundColor: themeColors.border }]} />
                                     <Text style={[styles.dividerText, { color: themeColors.mutedText }]}>O</Text>
@@ -250,7 +253,6 @@ export const LoginForm = () => {
                             />
                         )}
 
-                        {/* 3. Renderizado del nuevo flujo de registro de Clientes */}
                         {activeView === 'registerClient' && (
                             <ClientRegistrationFlow
                                 themeColors={themeColors}
@@ -267,15 +269,12 @@ export const LoginForm = () => {
                 </ScrollView>
             </KeyboardAvoidingView>
 
-            {/* Modales de Éxito con animaciones profesionales */}
             <AnimatedSuccessModal visible={showSuccessModal} title={t.successTitle} text={t.successText} />
-
             <AnimatedSuccessModal
                 visible={showWorkerSuccess}
                 title="¡Solicitud Enviada!"
                 text="Hemos recibido tus datos. Nos pondremos en contacto contigo pronto."
             />
-
             <AnimatedSuccessModal
                 visible={showClientSuccess}
                 title="¡Cuenta Creada!"
@@ -284,81 +283,3 @@ export const LoginForm = () => {
         </SafeAreaView>
     );
 };
-
-const styles = StyleSheet.create({
-    safeArea: { flex: 1 },
-    container: { flex: 1 },
-
-    headerTopBar: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        paddingHorizontal: 24,
-        paddingTop: Platform.OS === 'android' ? 40 : 10,
-        paddingBottom: 10,
-        zIndex: 10,
-    },
-    themeToggle: {
-        flexDirection: 'row',
-        borderRadius: 30,
-        padding: 4,
-        alignItems: 'center',
-    },
-    themeIconButton: {
-        width: 36,
-        height: 36,
-        borderRadius: 18,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    themeIconButtonActive: {
-        backgroundColor: '#FFFFFF',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-        elevation: 2,
-    },
-    languageSelectorContainer: {
-        width: 130,
-    },
-
-    scrollContainer: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: 20, paddingBottom: 80 },
-    logoContainer: { alignItems: 'center', marginBottom: -60 },
-    logo: { width: '100%', height: 320, marginBottom: -20 },
-
-    formContainer: {
-        width: '100%', padding: 32, borderRadius: 24,
-        shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.08, shadowRadius: 20, elevation: 10,
-    },
-    backButton: { flexDirection: 'row', alignItems: 'center', marginBottom: 25 },
-    backButtonText: { fontSize: 15, fontWeight: '600' },
-    forgotPasswordContainer: { alignItems: 'flex-end', marginBottom: 20, marginTop: -5 },
-    forgotText: { color: '#E61C24', fontSize: 13, fontWeight: '700', letterSpacing: 0.3 },
-    errorText: { color: '#E61C24', fontSize: 14, textAlign: 'center', marginBottom: 15, fontWeight: '500', backgroundColor: 'rgba(230, 28, 36, 0.1)', padding: 10, borderRadius: 8 },
-    loader: { marginTop: 10, marginBottom: 10 },
-
-    loginButton: { height: 56, borderRadius: 14, justifyContent: 'center', alignItems: 'center', marginTop: 10, shadowColor: '#E61C24', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.25, shadowRadius: 12, elevation: 6 },
-    loginButtonText: { fontSize: 16, fontWeight: 'bold', letterSpacing: 0.5 },
-
-    // 4. Estilos para el texto interactivo de cliente
-    registerClientLinkContainer: { flexDirection: 'row', justifyContent: 'center', marginTop: 25 },
-    registerClientText: { fontSize: 14, fontWeight: '500' },
-    registerClientAction: { color: '#E61C24', fontSize: 14, fontWeight: 'bold' },
-
-    dividerContainer: { flexDirection: 'row', alignItems: 'center', marginVertical: 25 },
-    line: { flex: 1, height: 1 },
-    dividerText: { marginHorizontal: 15, fontSize: 13, fontWeight: '600' },
-    workWithUsBtn: { flexDirection: 'row', height: 54, borderRadius: 14, borderWidth: 1, justifyContent: 'center', alignItems: 'center' },
-    workWithUsText: { fontSize: 15, fontWeight: '600' },
-
-    welcomeContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 },
-    profileCard: { width: '100%', borderRadius: 24, padding: 40, alignItems: 'center', elevation: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.1, shadowRadius: 20, marginBottom: 40 },
-    profileImage: { width: 120, height: 120, borderRadius: 60, marginBottom: 25, borderWidth: 4, borderColor: '#E61C24' },
-    welcomeTitle: { fontSize: 16, marginBottom: 8, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 1 },
-    userName: { fontSize: 28, fontWeight: '800', marginBottom: 20, textAlign: 'center' },
-    roleBadge: { backgroundColor: 'rgba(230, 28, 36, 0.1)', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 30, borderWidth: 1, borderColor: 'rgba(230, 28, 36, 0.2)' },
-    roleText: { color: '#E61C24', fontWeight: '800', fontSize: 13, letterSpacing: 1.2 },
-    logoutButton: { width: '100%', height: 56, borderWidth: 2, borderColor: '#E61C24', borderRadius: 16, justifyContent: 'center', alignItems: 'center' },
-    logoutButtonText: { color: '#E61C24', fontSize: 16, fontWeight: 'bold', letterSpacing: 0.5 },
-});

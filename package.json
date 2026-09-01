@@ -19,6 +19,7 @@
     "expo-font": "*",
     "expo-glass-effect": "*",
     "expo-image": "*",
+    "expo-image-picker": "~17.0.11",
     "expo-linking": "*",
     "expo-router": "~6.0.24",
     "expo-splash-screen": "*",

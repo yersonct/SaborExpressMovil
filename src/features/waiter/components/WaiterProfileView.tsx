@@ -1,25 +1,29 @@
-import React, { useState } from 'react';
-import { SafeAreaView, View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Image, Platform, Alert } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { SafeAreaView, View, Text, ScrollView, TouchableOpacity, TextInput, Image, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { profileStyles as styles } from './style/ProfileStyles';
 import { useWaiterTheme } from '@/features/waiter/context/WaiterThemeContext';
 import { useWaiterLanguage } from '@/features/waiter/context/WaiterLanguageContext';
+import * as ImagePicker from 'expo-image-picker';
 
 export const WaiterProfileView = () => {
   const { colors } = useWaiterTheme();
   const { t } = useWaiterLanguage();
   const [isEditing, setIsEditing] = useState(false);
-  
+
   const [waiterData, setWaiterData] = useState({
     name: 'Juan Pérez',
     phone: '+57 300 111 2233',
     email: 'juan.perez@saborexpress.com',
-    pin: '1234' 
+    pin: '1234',
+    avatar: 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png'
   });
 
   const [errors, setErrors] = useState({
     name: '',
     pin: ''
   });
+  const [showPin, setShowPin] = useState(false);
 
   const handleSaveProfile = () => {
     let isValid = true;
@@ -33,7 +37,7 @@ export const WaiterProfileView = () => {
       isValid = false;
     }
 
-    const pinRegex = /^\d{4}$/; 
+    const pinRegex = /^\d{4}$/;
     if (!waiterData.pin.trim()) {
       newErrors.pin = t.profilePinErrorRequired || 'El PIN es obligatorio.';
       isValid = false;
@@ -46,6 +50,7 @@ export const WaiterProfileView = () => {
 
     if (isValid) {
       setIsEditing(false);
+      try { globalThis.localStorage?.setItem('saborexpress-waiter-profile', JSON.stringify(waiterData)); } catch (e) { }
       Alert.alert(t.profileUpdatedTitle || '¡Perfil Actualizado!', t.profileUpdatedMessage || 'Tus datos han sido guardados correctamente.');
     }
   };
@@ -57,6 +62,34 @@ export const WaiterProfileView = () => {
     }
   };
 
+  useEffect(() => {
+    try {
+      const stored = globalThis.localStorage?.getItem('saborexpress-waiter-profile');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        setWaiterData((prev) => ({ ...prev, ...parsed }));
+      }
+    } catch (e) { }
+  }, []);
+
+  const pickImage = async () => {
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert(t.profileImagePermissionTitle || 'Permiso requerido', t.profileImagePermissionMessage || 'Necesitamos permiso para acceder a tus imágenes.');
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.7, allowsEditing: true, aspect: [1, 1] });
+      const canceled = (result as any).canceled ?? (result as any).cancelled ?? false;
+      if (!canceled) {
+        const uri = (result as any).assets?.[0]?.uri ?? (result as any).uri;
+        if (uri) setWaiterData({ ...waiterData, avatar: uri });
+      }
+    } catch (e) {
+      Alert.alert('Error', 'No se pudo seleccionar la imagen.');
+    }
+  };
+
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
       <View style={[styles.header, { backgroundColor: colors.header, borderColor: colors.border }]}>
@@ -64,7 +97,7 @@ export const WaiterProfileView = () => {
       </View>
 
       <ScrollView contentContainerStyle={[styles.container, { backgroundColor: colors.background }]} showsVerticalScrollIndicator={false}>
-        
+
         <View style={styles.statsSection}>
           <Text style={[styles.sectionTitle, { color: colors.text }]}>{t.profilePerformanceTitle || 'Desempeño del Turno'}</Text>
           <View style={[styles.statsCard, { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border }]}>
@@ -92,7 +125,14 @@ export const WaiterProfileView = () => {
 
           <View style={[styles.profileCard, { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border }]}>
             <View style={styles.avatarContainer}>
-              <Image source={{ uri: 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png' }} style={styles.avatar} />
+              <TouchableOpacity onPress={isEditing ? pickImage : undefined} accessibilityLabel="Editar avatar">
+                <Image source={{ uri: waiterData.avatar }} style={styles.avatar} />
+                {isEditing && (
+                  <View style={{ position: 'absolute', right: -4, bottom: -4, backgroundColor: '#FFFFFF', borderRadius: 18, padding: 6 }}>
+                    <Ionicons name="camera-outline" size={18} color="#111" />
+                  </View>
+                )}
+              </TouchableOpacity>
             </View>
 
             <View style={styles.inputGroup}>
@@ -120,22 +160,33 @@ export const WaiterProfileView = () => {
               />
             </View>
 
+            {/* 🔥 SECCIÓN DE PIN CORREGIDA 🔥 */}
             <View style={styles.inputGroup}>
               <Text style={[styles.inputLabel, { color: colors.mutedText }]}>{t.profilePinLabel || 'PIN de Autorización'}</Text>
-              <TextInput
-                style={[
-                  styles.input,
-                  { backgroundColor: colors.surface, color: colors.text, borderColor: colors.border },
-                  !isEditing && styles.inputDisabled,
-                  errors.pin ? styles.inputError : null 
-                ]}
-                value={isEditing ? waiterData.pin : '****'} 
-                onChangeText={(text) => handleChangeText('pin', text)}
-                secureTextEntry={isEditing} 
-                keyboardType="numeric"
-                maxLength={4} 
-                editable={isEditing}
-              />
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <TextInput
+                  style={[
+                    styles.input,
+                    { backgroundColor: colors.surface, color: colors.text, borderColor: colors.border, flex: 1 },
+                    !isEditing && styles.inputDisabled,
+                    errors.pin ? styles.inputError : null
+                  ]}
+                  // 1. Si el ojito está activo (showPin), muestra el PIN real, sin importar si estamos editando o no.
+                  // Si no está activo, muestra los asteriscos.
+                  value={showPin ? waiterData.pin : '****'}
+                  onChangeText={(text) => handleChangeText('pin', text)}
+                  // 2. Solo ocultar texto si NO han presionado el botón showPin
+                  secureTextEntry={!showPin}
+                  keyboardType="numeric"
+                  maxLength={4}
+                  editable={false} // 3. Se bloquea para SIEMPRE, el mesero nunca puede editar esto
+                />
+
+                {/* 4. El ojito ahora siempre está visible, no está condicionado a isEditing */}
+                <TouchableOpacity onPress={() => setShowPin(!showPin)} style={{ marginLeft: 8, padding: 8 }} accessibilityLabel="Mostrar PIN">
+                  <Ionicons name={showPin ? 'eye-off' : 'eye'} size={20} color="#64748B" />
+                </TouchableOpacity>
+              </View>
               {errors.pin ? <Text style={styles.errorText}>{errors.pin}</Text> : null}
             </View>
           </View>
@@ -145,34 +196,3 @@ export const WaiterProfileView = () => {
     </SafeAreaView>
   );
 };
-
-const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#F8FAFC' },
-  header: { flexDirection: 'row', alignItems: 'center', padding: 20, paddingTop: Platform.OS === 'android' ? 40 : 20, backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderColor: '#E2E8F0' },
-  headerTitle: { fontSize: 20, fontWeight: 'bold', color: '#1E293B' },
-  container: { padding: 20, paddingBottom: 40 },
-  sectionTitle: { fontSize: 18, fontWeight: '900', color: '#1E293B', marginBottom: 15 },
-  
-  statsSection: { marginBottom: 30 },
-  statsCard: { flexDirection: 'row', backgroundColor: '#FFFFFF', borderRadius: 20, padding: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 10, elevation: 3, justifyContent: 'space-around', alignItems: 'center' },
-  statColumn: { alignItems: 'center', flex: 1 },
-  statValue: { fontSize: 22, fontWeight: 'bold', color: '#1E293B', marginTop: 8 },
-  statLabel: { fontSize: 13, color: '#64748B', marginTop: 2, textAlign: 'center' },
-  dividerVertical: { width: 1, height: 50, backgroundColor: '#E2E8F0' },
-
-  profileSection: { marginBottom: 20 },
-  profileHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
-  editButtonText: { color: '#E61C24', fontWeight: 'bold', fontSize: 16 },
-  
-  profileCard: { backgroundColor: '#FFFFFF', borderRadius: 20, padding: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 10, elevation: 3 },
-  avatarContainer: { alignItems: 'center', marginBottom: 20 },
-  avatar: { width: 80, height: 80, borderRadius: 40, backgroundColor: '#F1F5F9', borderWidth: 2, borderColor: '#E2E8F0' },
-  
-  inputGroup: { marginBottom: 15 },
-  inputLabel: { fontSize: 13, color: '#64748B', marginBottom: 6, fontWeight: '600', textTransform: 'uppercase' },
-  input: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#CBD5E1', borderRadius: 10, paddingHorizontal: 15, paddingVertical: 12, fontSize: 16, color: '#1E293B' },
-  inputDisabled: { backgroundColor: '#F8FAFC', borderColor: '#E2E8F0', color: '#64748B' },
-  
-  inputError: { borderColor: '#EF4444', borderWidth: 1.5 },
-  errorText: { color: '#EF4444', fontSize: 12, marginTop: 5, marginLeft: 4, fontWeight: '500' },
-});

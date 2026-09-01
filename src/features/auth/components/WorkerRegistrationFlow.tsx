@@ -3,36 +3,60 @@ import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'rea
 import { AuthInput } from './AuthInput';
 import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
+import { authService } from '../services/authService'; // <-- Conexión real
+import { styles } from './style/WorkerRegistrationFlow';
 
 interface WorkerRegistrationFlowProps {
     onSuccess: () => void;
     onCancel: () => void;
     themeColors: any;
-    t: any; // <-- Agregamos el objeto de traducciones
+    t: any; 
 }
 
 export const WorkerRegistrationFlow: React.FC<WorkerRegistrationFlowProps> = ({ onSuccess, onCancel, themeColors, t }) => {
-    const [formData, setFormData] = useState({ fullName: '', documentId: '', email: '', phone: '' });
-    const [selectedRole, setSelectedRole] = useState<string | null>(null);
+    // 1. Ajustamos los campos al DTO de C#
+    const [formData, setFormData] = useState({ 
+        name: '', 
+        lastName: '', 
+        document: '', 
+        email: '', 
+        password: '', 
+        confirmPassword: '' 
+    });
+    
+    // 2. selectedRole ahora guardará un número (2, 3, 4 o 5)
+    const [selectedRole, setSelectedRole] = useState<number | null>(null);
     const [cvFile, setCvFile] = useState<{ uri: string; name: string } | null>(null);
+    
+    const [showPassword, setShowPassword] = useState(false);
+    const [showConfirmPassword, setShowConfirmPassword] = useState(false);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
 
-    // Movemos los roles adentro para que puedan usar el idioma actual
+    // Mapeo exacto con tus RoleId de types/role.ts
     const ROLES = [
-        { id: 'cocinero', label: t.roleChef || 'Cocinero', icon: 'restaurant-outline' },
-        { id: 'mesero', label: t.roleWaiter || 'Mesero', icon: 'cafe-outline' },
-        { id: 'cajero', label: t.roleCashier || 'Cajero', icon: 'cash-outline' },
-        { id: 'repartidor', label: t.roleDelivery || 'Repartidor', icon: 'bicycle-outline' },
+        { id: 3, label: t.roleChef || 'Cocinero', icon: 'restaurant-outline' },
+        { id: 4, label: t.roleWaiter || 'Mesero', icon: 'cafe-outline' },
+        { id: 5, label: t.roleCashier || 'Cajero', icon: 'cash-outline' },
+        { id: 2, label: t.roleDelivery || 'Repartidor', icon: 'bicycle-outline' },
     ];
 
     const validateForm = () => {
-        if (!formData.fullName.trim() || formData.fullName.length < 4) return t.errFullName || 'Ingresa un nombre completo válido.';
-        if (!/^\d{7,11}$/.test(formData.documentId)) return t.errId || 'Ingresa un número de cédula válido (solo números).';
-        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) return t.errEmail || 'Ingresa un correo electrónico válido.';
-        if (!/^\d{10}$/.test(formData.phone)) return t.errPhone || 'Ingresa un número de celular válido (10 dígitos).';
+        if (!formData.name.trim()) return 'Ingresa tu nombre.';
+        if (/\d/.test(formData.name)) return 'El nombre no puede contener números.'; 
+        
+        if (!formData.lastName.trim()) return 'Ingresa tu apellido.';
+        if (/\d/.test(formData.lastName)) return 'El apellido no puede contener números.'; 
+        
+        if (!/^\d{7,11}$/.test(formData.document)) return t.errId || 'Ingresa un número de documento válido.';
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) return t.errEmail || 'Ingresa un correo válido.';
+        
+        if (formData.password.length < 6) return 'La contraseña debe tener al menos 6 caracteres.';
+        if (formData.password !== formData.confirmPassword) return 'Las contraseñas no coinciden.';
+        
         if (!selectedRole) return t.errRole || 'Debes seleccionar el rol al que te postulas.';
         if (!cvFile) return t.errCv || 'Debes adjuntar tu hoja de vida (PDF/Word).';
+        
         return '';
     };
 
@@ -48,12 +72,11 @@ export const WorkerRegistrationFlow: React.FC<WorkerRegistrationFlowProps> = ({ 
                 setError('');
             }
         } catch (err) {
-            console.log('Error al seleccionar el archivo', err);
             setError(t.errCvLoad || 'Hubo un error al cargar el archivo.');
         }
     };
 
-    const handleRegister = () => {
+    const handleRegister = async () => {
         const validationError = validateForm();
         if (validationError) {
             setError(validationError);
@@ -63,11 +86,26 @@ export const WorkerRegistrationFlow: React.FC<WorkerRegistrationFlowProps> = ({ 
         setError('');
         setLoading(true);
 
-        // Aquí envías formData, selectedRole y cvFile.uri a tu backend
-        setTimeout(() => {
+        try {
+            // 3. Petición real al backend
+            await authService.registerWorker({
+                name: formData.name,
+                lastName: formData.lastName,
+                document: formData.document,
+                email: formData.email,
+                password: formData.password,
+                roleId: selectedRole
+            });
+
+            // Nota: Aquí a futuro deberás hacer otra petición (multipart/form-data) 
+            // enviando el cvFile.uri a un nuevo endpoint en C# para guardar el archivo.
+
             setLoading(false);
             onSuccess();
-        }, 2000);
+        } catch (err: any) {
+            setLoading(false);
+            setError(err.message || 'Error al enviar la solicitud.');
+        }
     };
 
     return (
@@ -84,18 +122,26 @@ export const WorkerRegistrationFlow: React.FC<WorkerRegistrationFlowProps> = ({ 
             </Text>
 
             <AuthInput
-                label={t.fullNameLabel || "Nombre Completo"}
-                placeholder={t.fullNamePlaceholder || "Ej. Juan Pérez"}
-                value={formData.fullName}
-                onChangeText={(text) => setFormData({ ...formData, fullName: text })}
+                label="Nombre"
+                placeholder="Ej. Juan"
+                value={formData.name}
+                onChangeText={(text) => setFormData({ ...formData, name: text })}
                 themeColors={themeColors}
             />
 
             <AuthInput
-                label={t.idLabel || "Cédula de Ciudadanía"}
+                label="Apellido"
+                placeholder="Ej. Pérez"
+                value={formData.lastName}
+                onChangeText={(text) => setFormData({ ...formData, lastName: text })}
+                themeColors={themeColors}
+            />
+
+            <AuthInput
+                label={t.idLabel || "Documento de Identidad"}
                 placeholder={t.idPlaceholder || "Ej. 1001234567"}
-                value={formData.documentId}
-                onChangeText={(text) => setFormData({ ...formData, documentId: text.replace(/[^0-9]/g, '') })}
+                value={formData.document}
+                onChangeText={(text) => setFormData({ ...formData, document: text.replace(/[^0-9]/g, '') })}
                 themeColors={themeColors}
             />
             
@@ -108,10 +154,24 @@ export const WorkerRegistrationFlow: React.FC<WorkerRegistrationFlowProps> = ({ 
             />
 
             <AuthInput
-                label={t.phoneLabel || "Teléfono Celular"}
-                placeholder={t.phonePlaceholder || "Ej. 3001234567"}
-                value={formData.phone}
-                onChangeText={(text) => setFormData({ ...formData, phone: text.replace(/[^0-9]/g, '') })}
+                label="Contraseña"
+                placeholder="Crea una contraseña segura"
+                value={formData.password}
+                onChangeText={(text) => setFormData({ ...formData, password: text })}
+                secureTextEntry={!showPassword}
+                showPasswordToggle={true}
+                onTogglePassword={() => setShowPassword(!showPassword)}
+                themeColors={themeColors}
+            />
+
+            <AuthInput
+                label="Confirmar Contraseña"
+                placeholder="Repite tu contraseña"
+                value={formData.confirmPassword}
+                onChangeText={(text) => setFormData({ ...formData, confirmPassword: text })}
+                secureTextEntry={!showConfirmPassword}
+                showPasswordToggle={true}
+                onTogglePassword={() => setShowConfirmPassword(!showConfirmPassword)}
                 themeColors={themeColors}
             />
 
@@ -171,26 +231,5 @@ export const WorkerRegistrationFlow: React.FC<WorkerRegistrationFlowProps> = ({ 
     );
 };
 
-const styles = StyleSheet.create({
-    container: { width: '100%' },
-    header: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
-    backButton: { paddingRight: 15 },
-    title: { fontSize: 22, fontWeight: 'bold' },
-    subtitle: { fontSize: 14, marginBottom: 20, lineHeight: 20 },
-    label: { fontSize: 13, fontWeight: '600', marginBottom: 8, marginLeft: 4, marginTop: 10 },
-    rolesContainer: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', gap: 10, marginBottom: 15 },
-    roleCard: {
-        width: '48%', padding: 15, borderRadius: 12, borderWidth: 1, alignItems: 'center', justifyContent: 'center'
-    },
-    roleCardActive: { backgroundColor: '#E61C24', borderColor: '#E61C24' },
-    roleText: { marginTop: 8, fontSize: 14, fontWeight: '600' },
-    
-    cvButton: {
-        flexDirection: 'row', alignItems: 'center', height: 54, borderRadius: 12, borderWidth: 1, borderStyle: 'dashed', paddingHorizontal: 15, marginBottom: 20
-    },
-    cvButtonText: { fontSize: 14, marginLeft: 10, flex: 1, fontWeight: '500' },
-
-    errorText: { color: '#E61C24', fontSize: 14, textAlign: 'center', marginBottom: 15, fontWeight: '600', backgroundColor: 'rgba(230, 28, 36, 0.1)', padding: 10, borderRadius: 8 },
-    submitButton: { height: 56, borderRadius: 14, justifyContent: 'center', alignItems: 'center', marginTop: 5, shadowColor: '#E61C24', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.25, shadowRadius: 12, elevation: 6 },
-    submitButtonText: { fontSize: 16, fontWeight: 'bold', letterSpacing: 0.5 },
-});
+// Los estilos (StyleSheet.create) quedan exactamente igual a los de tu archivo original.
+// Pega tus estilos aquí debajo...

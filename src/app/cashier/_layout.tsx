@@ -1,78 +1,114 @@
 import React from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity } from 'react-native';
-import { Drawer } from 'expo-router/drawer';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { DrawerContentScrollView, DrawerItemList } from '@react-navigation/drawer';
+import { StyleSheet } from 'react-native';
+import { Tabs, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
 
-function CustomCashierDrawerContent(props: any) {
+// 🔥 1. Importamos el Provider y el Contexto del cajero
+import { CashierProvider, useCashierContext } from '../../features/cashier/components/context/CashierContext';
+import { TRANSLATIONS, LanguageCode } from '../../locales/CashierTranslations';
+
+// 🔥 2. Creamos un componente interno exclusivo para las pestañas.
+// Esto es OBLIGATORIO porque para leer el idioma, este componente debe existir
+// "por dentro" de la burbuja del CashierProvider.
+function CashierTabs() {
   const router = useRouter();
+  
+  // Leemos el idioma y el modo oscuro en tiempo real
+  const { language, isDark } = useCashierContext();
+  const t = TRANSLATIONS[language as LanguageCode] || TRANSLATIONS['es'];
+
+  // Colores dinámicos para que la barra inferior también reaccione al modo oscuro
+  const tabBarBg = isDark ? '#1E293B' : '#FFFFFF';
+  const tabBarBorder = isDark ? '#334155' : '#E2E8F0';
+  const inactiveColor = isDark ? '#64748B' : '#94A3B8';
 
   return (
-    <View style={styles.drawerContainer}>
-      <DrawerContentScrollView {...props} contentContainerStyle={{ paddingTop: 0 }}>
-        <View style={styles.drawerHeader}>
-          <Image source={{ uri: 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png' }} style={styles.profilePic} />
-          <Text style={styles.userName}>Andrés Silva</Text>
-          <View style={styles.roleBadge}>
-            <Text style={styles.roleText}>CAJERO PRINCIPAL</Text>
-          </View>
-        </View>
+    <Tabs
+      screenOptions={{
+        headerShown: false, 
+        tabBarStyle: [styles.tabBar, { backgroundColor: tabBarBg, borderTopColor: tabBarBorder }],
+        tabBarActiveTintColor: '#E61C24', // Rojo SaborExpress siempre activo
+        tabBarInactiveTintColor: inactiveColor, 
+        tabBarLabelStyle: styles.tabLabel,
+      }}
+    >
+      {/* PESTAÑA 1: INICIO (CAJA) */}
+      <Tabs.Screen
+        name="index"
+        options={{
+          title: t.tabHome || 'Caja',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="cash-outline" size={size} color={color} />
+          ),
+        }}
+      />
 
-        <View style={styles.drawerItemsContainer}>
-          <DrawerItemList {...props} />
-        </View>
-      </DrawerContentScrollView>
+      {/* PESTAÑA 2: PERFIL */}
+      <Tabs.Screen
+        name="profile"
+        options={{
+          title: t.tabProfile || 'Perfil',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="person-outline" size={size} color={color} />
+          ),
+        }}
+      />
 
-      <View style={styles.drawerFooter}>
-        <TouchableOpacity style={styles.logoutButton} onPress={() => router.replace('/')}>
-          <Ionicons name="log-out-outline" size={24} color="#E61C24" />
-          <Text style={styles.logoutText}>Cerrar Sesión</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
+      {/* 🔥 PESTAÑA 3: CONFIGURACIÓN (La que hicimos hace un rato) */}
+      <Tabs.Screen
+        name="settings"
+        options={{
+          title: t.tabSettings || 'Ajustes',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="settings-outline" size={size} color={color} />
+          ),
+        }}
+      />
+      
+      {/* PESTAÑA 4: SALIR */}
+      <Tabs.Screen
+        name="logout"
+        options={{
+          title: t.tabLogout || 'Salir',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="log-out-outline" size={size} color={color} />
+          ),
+        }}
+        listeners={() => ({
+          tabPress: (e) => {
+            e.preventDefault(); 
+            router.replace('/');
+          },
+        })}
+      />
+    </Tabs>
   );
 }
 
-export default function CashierDrawerLayout() {
+// 🔥 3. Este es el componente Layout que se exporta. 
+// Su única función es crear la "Burbuja" y meter las pestañas adentro.
+export default function CashierTabsLayout() {
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
-      <Drawer
-        drawerContent={(props) => <CustomCashierDrawerContent {...props} />}
-        screenOptions={{
-          headerStyle: { backgroundColor: '#1E293B' },
-          headerTintColor: '#FFFFFF',
-          drawerActiveBackgroundColor: '#FEF2F2',
-          drawerActiveTintColor: '#E61C24',
-          drawerInactiveTintColor: '#334155',
-          drawerLabelStyle: { fontSize: 16, fontWeight: 'bold', marginLeft: -10 },
-          headerShown: false // Ocultamos el header nativo para usar el nuestro
-        }}
-      >
-        <Drawer.Screen 
-          name="index" 
-          options={{ 
-            title: 'Inicio', 
-            drawerLabel: 'Panel de Caja',
-            drawerIcon: ({ color }) => <Ionicons name="cash-outline" size={24} color={color} /> 
-          }} 
-        />
-        {/* Agrega aquí más pantallas si el cajero las tiene (ej. profile, settings) */}
-      </Drawer>
-    </GestureHandlerRootView>
+    <CashierProvider>
+      <CashierTabs />
+    </CashierProvider>
   );
 }
 
 const styles = StyleSheet.create({
-  drawerContainer: { flex: 1, backgroundColor: '#FFFFFF' },
-  drawerHeader: { backgroundColor: '#1E293B', padding: 30, paddingTop: 60, alignItems: 'center', borderBottomLeftRadius: 20, borderBottomRightRadius: 20 },
-  profilePic: { width: 80, height: 80, borderRadius: 40, marginBottom: 10, borderWidth: 2, borderColor: '#E2E8F0', backgroundColor: '#FFF' },
-  userName: { color: '#FFFFFF', fontSize: 20, fontWeight: 'bold', marginBottom: 5 },
-  roleBadge: { backgroundColor: 'rgba(230, 28, 36, 0.2)', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 12, borderWidth: 1, borderColor: '#E61C24' },
-  roleText: { color: '#FFD7D9', fontSize: 12, fontWeight: 'bold' },
-  drawerItemsContainer: { paddingTop: 20 },
-  drawerFooter: { padding: 20, borderTopWidth: 1, borderTopColor: '#F1F5F9', backgroundColor: '#FFFFFF' },
-  logoutButton: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10 },
-  logoutText: { color: '#E61C24', fontSize: 16, fontWeight: 'bold', marginLeft: 10 }
+  tabBar: {
+    borderTopWidth: 1,
+    height: 60,
+    paddingBottom: 8,
+    paddingTop: 8,
+    elevation: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+  },
+  tabLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
 });

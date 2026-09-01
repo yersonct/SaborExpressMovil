@@ -1,7 +1,8 @@
 import React, { useState, useMemo } from 'react';
-import { FlatList, Text, TouchableOpacity, View, LayoutAnimation, SafeAreaView, ScrollView, TextInput, Modal, StyleSheet } from 'react-native';
+import { FlatList, Text, TouchableOpacity, View, LayoutAnimation, SafeAreaView, ScrollView, TextInput, Modal, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { styles as globalStyles } from './style/WaiterDashboardStyles'; // Asumo que tus estilos globales están aquí
+import { localStyles } from './style/OrderTakingStyles';
 import { useWaiterTheme } from '@/features/waiter/context/WaiterThemeContext';
 import { useWaiterLanguage } from '@/features/waiter/context/WaiterLanguageContext';
 
@@ -22,7 +23,8 @@ export const OrderTakingView = ({
 }: any) => {
   const { colors } = useWaiterTheme();
   const { t } = useWaiterLanguage();
-  
+  const baseFontFamily = Platform.select({ web: 'system-ui, -apple-system, sans-serif', default: undefined });
+
   // Estados para notas
   const [isNoteModalVisible, setIsNoteModalVisible] = useState(false);
   const [selectedCartItem, setSelectedCartItem] = useState<any>(null);
@@ -41,8 +43,8 @@ export const OrderTakingView = ({
   // Lógica de Categorías
   const categories = useMemo(() => {
     const uniqueCats = Array.from(new Set(MENU_ITEMS.map(item => item.category)));
-    return ['Todas', ...uniqueCats];
-  }, []);
+    return [t.categoriesAllLabel || 'Todas', ...uniqueCats];
+  }, [t]);
 
   const filteredItems = useMemo(() => {
     if (activeCategory === 'Todas') return MENU_ITEMS;
@@ -105,10 +107,10 @@ export const OrderTakingView = ({
       <View style={{ backgroundColor: colors.header, paddingVertical: 10 }}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 15, gap: 10 }}>
           {categories.map((cat) => (
-            <TouchableOpacity 
+            <TouchableOpacity
               key={cat}
               style={[
-                localStyles.categoryTab, 
+                localStyles.categoryTab,
                 { backgroundColor: activeCategory === cat ? colors.accent : colors.elevatedSurface, borderColor: colors.border }
               ]}
               onPress={() => {
@@ -117,7 +119,7 @@ export const OrderTakingView = ({
               }}
             >
               <Text style={[localStyles.categoryTabText, { color: activeCategory === cat ? '#FFFFFF' : colors.text }]}>
-                {cat === 'Todas' ? '⭐ Todas' : cat}
+                {cat === (t.categoriesAllLabel || 'Todas') ? (t.categoriesAllLabel || '⭐ Todas') : (t['category' + cat] || cat)}
               </Text>
             </TouchableOpacity>
           ))}
@@ -144,9 +146,9 @@ export const OrderTakingView = ({
             </TouchableOpacity>
 
             {/* El botón + agrega directo al carrito */}
-            <TouchableOpacity 
-              style={[localStyles.quickAddButton, { backgroundColor: colors.accent }]} 
-              onPress={() => handleAddItem(item)} 
+            <TouchableOpacity
+              style={[localStyles.quickAddButton, { backgroundColor: colors.accent }]}
+              onPress={() => handleAddItem(item)}
               activeOpacity={0.8}
             >
               <Ionicons name="add" size={24} color="#FFF" />
@@ -174,7 +176,7 @@ export const OrderTakingView = ({
                   <View style={globalStyles.cartItemInfo}>
                     <View style={globalStyles.cartItemTitleRow}>
                       <Text style={[globalStyles.cartItemText, { color: colors.text }]}>
-                        <Text style={{ fontWeight: '900', color: '#E61C24' }}>{item.quantity}x </Text>{item.name}
+                        <Text style={{ fontWeight: '900', color: '#E61C24', fontFamily: baseFontFamily }}>{item.quantity}x </Text>{item.name}
                       </Text>
                       <TouchableOpacity
                         style={[globalStyles.cartNoteButton, item.note && globalStyles.cartNoteButtonActive]}
@@ -192,7 +194,7 @@ export const OrderTakingView = ({
                       onPress={() => toggleItemToGo(item.cartId)}
                     >
                       <Text style={[globalStyles.toGoToggleText, item.isToGo && globalStyles.toGoToggleTextActive]}>
-                        {item.isToGo ? '🛍️ Empacar para llevar' : '🍽️ Consumo en Mesa'}
+                        {item.isToGo ? `🛍️ ${t.dashboardParaLlevar || 'Para Llevar'}` : `🍽️ ${t.dashboardTabTables || 'Mesa'}`}
                       </Text>
                     </TouchableOpacity>
                   </View>
@@ -251,7 +253,7 @@ export const OrderTakingView = ({
             style={[globalStyles.submitButton, orderItems.length === 0 && globalStyles.submitButtonDisabled]}
             disabled={orderItems.length === 0} onPress={handleSubmitOrder}
           >
-            <Text style={globalStyles.submitButtonText}>Enviar a Cocina</Text>
+            <Text style={globalStyles.submitButtonText}>{t.orderTakingSendKitchen || 'Enviar a Cocina'}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -265,26 +267,26 @@ export const OrderTakingView = ({
                 <TouchableOpacity style={localStyles.closeModalBtn} onPress={() => setIsProductModalVisible(false)}>
                   <Ionicons name="close-circle" size={32} color={colors.mutedText} />
                 </TouchableOpacity>
-                
+
                 <View style={[localStyles.modalIconContainer, { backgroundColor: `${colors.accent}15` }]}>
                   <Ionicons name={getCategoryIcon(selectedProduct.category) as any} size={70} color={colors.accent} />
                 </View>
 
                 <Text style={[localStyles.modalTitle, { color: colors.text }]}>{selectedProduct.name}</Text>
                 <Text style={[localStyles.modalCategory, { color: colors.accent }]}>{selectedProduct.category}</Text>
-                
+
                 <View style={localStyles.modalDivider} />
-                
+
                 <Text style={[localStyles.modalDesc, { color: colors.mutedText }]}>{selectedProduct.desc}</Text>
-                
+
                 <View style={localStyles.modalPriceRow}>
-                  <Text style={[localStyles.modalPriceLabel, { color: colors.text }]}>Precio unitario:</Text>
-                  <Text style={[localStyles.modalPriceValue, { color: colors.accent }]}>${selectedProduct.price.toLocaleString()}</Text>
+                  <Text style={[localStyles.modalPriceLabel, { color: colors.text }]}>{t.orderTakingPriceLabel || 'Precio unitario:'}</Text>
+                  <Text style={[localStyles.modalPriceValue, { color: colors.accent }]}>{selectedProduct.price.toLocaleString()}</Text>
                 </View>
 
                 <TouchableOpacity style={[localStyles.modalAddBtn, { backgroundColor: colors.accent }]} onPress={handleAddFromModal}>
                   <Ionicons name="cart" size={20} color="#FFF" style={{ marginRight: 10 }} />
-                  <Text style={localStyles.modalAddBtnText}>Agregar al pedido</Text>
+                  <Text style={localStyles.modalAddBtnText}>{t.orderTakingAddToOrder || 'Agregar al pedido'}</Text>
                 </TouchableOpacity>
               </>
             )}
@@ -300,7 +302,7 @@ export const OrderTakingView = ({
               <Ionicons name="document-text-outline" size={28} color={colors.accent} />
             </View>
             <Text style={[globalStyles.noteModalTitle, { color: colors.text }]}>{t.orderTakingNoteTitle || 'Agregar descripción'}</Text>
-            <Text style={[globalStyles.noteModalSubtitle, { color: colors.mutedText }]}> 
+            <Text style={[globalStyles.noteModalSubtitle, { color: colors.mutedText }]}>
               {t.orderTakingNoteSubtitle || 'Indica cómo lo quiere el cliente o qué no debe llevar.'}
             </Text>
 
@@ -328,162 +330,4 @@ export const OrderTakingView = ({
   );
 };
 
-// 🔥 ESTILOS LOCALES PARA EL CATÁLOGO Y LOS MODALES
-const localStyles = StyleSheet.create({
-  // Categorías
-  categoryTab: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 20,
-    borderWidth: 1,
-    marginRight: 5,
-  },
-  categoryTabText: {
-    fontWeight: 'bold',
-    fontSize: 14,
-  },
-  
-  // Grid / Cuadrícula
-  gridRow: {
-    justifyContent: 'space-between',
-    marginBottom: 15,
-  },
-  gridCard: {
-    width: '48%', // Dos columnas
-    borderRadius: 16,
-    borderWidth: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 5,
-    elevation: 2,
-    position: 'relative',
-    overflow: 'hidden',
-  },
-  gridCardContent: {
-    padding: 15,
-    alignItems: 'center',
-    paddingBottom: 25, // Espacio para el botón +
-  },
-  iconContainer: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  gridItemName: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    textAlign: 'center',
-    marginBottom: 8,
-    minHeight: 38, // Mantiene la altura incluso si es de 1 sola línea
-  },
-  gridItemPrice: {
-    fontSize: 16,
-    fontWeight: '900',
-  },
-  quickAddButton: {
-    position: 'absolute',
-    bottom: 0,
-    right: 0,
-    width: 45,
-    height: 40,
-    borderTopLeftRadius: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-
-  // Modal Detalles de Producto
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    justifyContent: 'flex-end', // Abre desde abajo
-  },
-  modalContent: {
-    borderTopLeftRadius: 30,
-    borderTopRightRadius: 30,
-    padding: 24,
-    paddingBottom: 40,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 10,
-    elevation: 20,
-  },
-  closeModalBtn: {
-    position: 'absolute',
-    top: 15,
-    right: 15,
-    zIndex: 10,
-  },
-  modalIconContainer: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  modalTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    textAlign: 'center',
-    marginBottom: 5,
-  },
-  modalCategory: {
-    fontSize: 13,
-    fontWeight: '900',
-    letterSpacing: 1,
-    marginBottom: 15,
-  },
-  modalDivider: {
-    width: '100%',
-    height: 1,
-    backgroundColor: '#E2E8F0',
-    marginVertical: 15,
-  },
-  modalDesc: {
-    fontSize: 15,
-    textAlign: 'center',
-    lineHeight: 22,
-    marginBottom: 25,
-    paddingHorizontal: 10,
-  },
-  modalPriceRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    width: '100%',
-    alignItems: 'center',
-    marginBottom: 25,
-    paddingHorizontal: 10,
-  },
-  modalPriceLabel: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  modalPriceValue: {
-    fontSize: 24,
-    fontWeight: '900',
-  },
-  modalAddBtn: {
-    width: '100%',
-    flexDirection: 'row',
-    paddingVertical: 16,
-    borderRadius: 14,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#E61C24',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 5,
-  },
-  modalAddBtnText: {
-    color: '#FFF',
-    fontSize: 18,
-    fontWeight: 'bold',
-  }
-});
+// moved to ./style/OrderTakingStyles.ts

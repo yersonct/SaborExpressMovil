@@ -1,32 +1,48 @@
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useState } from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  FlatList,
-  LayoutAnimation,
-  Linking,
-  Platform,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  UIManager,
-  View
-} from 'react-native';
+import { ActivityIndicator, Alert, FlatList, LayoutAnimation, Linking, Platform, Text, TouchableOpacity, UIManager, View } from 'react-native';
 import { CURRENT_DRIVER_NAME, generateMockOrders, Order } from './DeliveryData';
 import { DeliveryModals } from './DeliveryModals';
+import { useDeliveryContext } from './context/DeliveryContext';
+import { TRANSLATIONS, LanguageCode } from '../../../locales/DeliveryTranslations';
+// 🔥 IMPORTAMOS LOS ESTILOS DESDE EL NUEVO ARCHIVO
+import { styles } from './style/DeliveryOrdersListStyles'; 
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
 export const DeliveryOrdersList = () => {
+  const { language, isDark } = useDeliveryContext();
+  const t = TRANSLATIONS[language as LanguageCode] || TRANSLATIONS['es'];
+
+  const colors = isDark ? {
+    background: '#0F172A', card: '#1E293B', text: '#F8FAFC',
+    muted: '#94A3B8', border: '#334155', accent: '#E61C24',
+    tabActive: '#F8FAFC', tabInactive: '#64748B', tabBg: '#1E293B',
+    btnPrimary: '#E61C24', btnPrimaryText: '#FFFFFF',
+    btnDisabledBg: '#334155', btnDisabledText: '#94A3B8',
+    badgeSuccessBg: '#064E3B', badgeSuccessText: '#34D399',
+    badgeWarningBg: '#78350F', badgeWarningText: '#FBBF24',
+    badgeInfoBg: '#1E3A8A', badgeInfoText: '#93C5FD',
+    badgeDangerBg: '#7F1D1D', badgeDangerText: '#FCA5A5'
+  } : {
+    background: '#F8FAFC', card: '#FFFFFF', text: '#1E293B',
+    muted: '#64748B', border: '#E2E8F0', accent: '#E61C24',
+    tabActive: '#E61C24', tabInactive: '#64748B', tabBg: '#FFFFFF',
+    btnPrimary: '#1A1A1A', btnPrimaryText: '#FFFFFF',
+    btnDisabledBg: '#F1F5F9', btnDisabledText: '#94A3B8',
+    badgeSuccessBg: '#ECFDF5', badgeSuccessText: '#10B981',
+    badgeWarningBg: '#FEF3C7', badgeWarningText: '#D97706',
+    badgeInfoBg: '#DBEAFE', badgeInfoText: '#2563EB',
+    badgeDangerBg: '#FEE2E2', badgeDangerText: '#DC2626'
+  };
+
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'disponibles' | 'mis_pedidos'>('disponibles');
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
-  
   const [modalVisible, setModalVisible] = useState(false); 
   const [mapModalVisible, setMapModalVisible] = useState(false); 
   const [isSheetExpanded, setIsSheetExpanded] = useState(true);
@@ -74,19 +90,15 @@ export const DeliveryOrdersList = () => {
 
   const handleMarkPaymentReceived = () => {
     if (!selectedOrder) return;
-
     setOrders(prevOrders => prevOrders.map(order => (
-      order.id === selectedOrder.id
-        ? { ...order, paymentStatus: 'Pagado' }
-        : order
+      order.id === selectedOrder.id ? { ...order, paymentStatus: 'Pagado' } : order
     )));
-
     setSelectedOrder(prev => prev ? { ...prev, paymentStatus: 'Pagado' } : prev);
   };
 
   const handleFinishDelivery = () => {
-    Alert.alert("¡Entrega Exitosa!", "Has completado este pedido.", [
-      { text: "Genial", onPress: () => {
+    Alert.alert(t.successDeliveryTitle || '¡Entrega Exitosa!', t.successDeliveryMsg || 'Has completado este pedido.', [
+      { text: t.greatBtn || 'Genial', onPress: () => {
           setOrders(orders.filter(o => o.id !== selectedOrder?.id));
           setMapModalVisible(false);
           setSelectedOrder(null);
@@ -99,94 +111,98 @@ export const DeliveryOrdersList = () => {
     Linking.openURL(`tel:${phone}`);
   };
 
-  const displayedOrders = orders
-    .filter(order => activeTab === 'disponibles' ? order.assignedDriver !== CURRENT_DRIVER_NAME : order.assignedDriver === CURRENT_DRIVER_NAME)
-    .sort((left, right) => {
-      if (activeTab !== 'mis_pedidos') return 0;
-
-      const leftCashPending = left.paymentMethod === 'Efectivo' && left.paymentStatus === 'Pendiente';
-      const rightCashPending = right.paymentMethod === 'Efectivo' && right.paymentStatus === 'Pendiente';
-
-      if (leftCashPending === rightCashPending) return 0;
-      return leftCashPending ? -1 : 1;
-    });
-
   const renderOrderItem = ({ item }: { item: Order }) => {
     const isMine = item.assignedDriver === CURRENT_DRIVER_NAME;
     const isTakenByOther = item.assignedDriver !== null && !isMine;
     const totalItems = item.items.reduce((sum, current) => sum + current.quantity, 0);
+    
     const isCashPayment = item.paymentMethod === 'Efectivo';
     const isPendingCashPayment = isCashPayment && item.paymentStatus === 'Pendiente';
-    const paymentMethodLabel = item.paymentMethod;
-    const paymentStatusLabel = isPendingCashPayment ? 'Por cobrar' : 'Pagado';
+
+    // 🔥 TRADUCCIÓN
+    const translatedMethod = item.paymentMethod === 'Efectivo' ? (t.payCash || 'Efectivo') : 
+                             item.paymentMethod === 'Datáfono' ? (t.payCard || 'Datáfono') : 
+                             (t.payTransfer || 'Transferencia');
+
+    const badgeStatusBg = isMine ? colors.badgeSuccessBg : isTakenByOther ? colors.btnDisabledBg : colors.badgeDangerBg;
+    const badgeStatusText = isMine ? colors.badgeSuccessText : isTakenByOther ? colors.muted : colors.accent;
+    const badgePayMethodBg = isCashPayment ? colors.badgeWarningBg : item.paymentMethod === 'Datáfono' ? colors.badgeInfoBg : colors.badgeSuccessBg;
+    const badgePayMethodText = isCashPayment ? colors.badgeWarningText : item.paymentMethod === 'Datáfono' ? colors.badgeInfoText : colors.badgeSuccessText;
+    const badgePayStatusBg = isPendingCashPayment ? colors.badgeDangerBg : colors.badgeSuccessBg;
+    const badgePayStatusText = isPendingCashPayment ? colors.badgeDangerText : colors.badgeSuccessText;
 
     return (
-      <View style={styles.orderCard}>
+      <View style={[styles.orderCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
         <View style={styles.orderHeader}>
-          <Text style={styles.orderId}>{item.id}</Text>
-          <Text style={[styles.orderStatus, isTakenByOther && styles.orderStatusTaken, isMine && styles.orderStatusMine]}>
-            {isMine ? 'Mi Viaje' : isTakenByOther ? 'No Disponible' : 'Nuevo Pedido'}
-          </Text>
+          <Text style={[styles.orderId, { color: colors.text }]}>{item.id}</Text>
+          <View style={[styles.orderStatus, { backgroundColor: badgeStatusBg }]}>
+            <Text style={{ fontSize: 12, fontWeight: 'bold', color: badgeStatusText }}>
+              {isMine ? (t.myTrip || 'Mi Viaje') : isTakenByOther ? (t.notAvailable || 'No Disponible') : (t.newOrder || 'Nuevo Pedido')}
+            </Text>
+          </View>
         </View>
-        <Text style={styles.customerName}>🧑 {item.customerName}</Text>
-        <Text style={styles.addressText}>📍 {item.address}</Text>
-        <Text style={styles.itemsSummaryText}>🍔 {totalItems} artículos a entregar</Text>
+
+        <Text style={[styles.customerName, { color: colors.text }]}>🧑 {item.customerName}</Text>
+        <Text style={[styles.addressText, { color: colors.muted }]}>📍 {item.address}</Text>
+        <Text style={[styles.itemsSummaryText, { color: colors.accent }]}>🍔 {totalItems} {t.itemsToDeliver || 'artículos'}</Text>
+        
         <View style={styles.paymentSummaryRow}>
-          <View style={[styles.paymentBadge, isCashPayment ? styles.paymentBadgeCash : item.paymentMethod === 'Datáfono' ? styles.paymentBadgeCard : styles.paymentBadgeTransfer]}>
-            <Text style={styles.paymentBadgeText}>{paymentMethodLabel}</Text>
+          <View style={[styles.paymentBadge, { backgroundColor: badgePayMethodBg }]}>
+            <Text style={[styles.paymentBadgeText, { color: badgePayMethodText }]}>{translatedMethod}</Text>
           </View>
-          <View style={[styles.paymentStatusBadge, isPendingCashPayment ? styles.paymentStatusBadgePending : styles.paymentStatusBadgePaid]}>
-            <Text style={styles.paymentStatusBadgeText}>{paymentStatusLabel}</Text>
+          <View style={[styles.paymentBadge, { backgroundColor: badgePayStatusBg }]}>
+            <Text style={[styles.paymentBadgeText, { color: badgePayStatusText }]}>
+              {isPendingCashPayment ? (t.toCollect || 'Por cobrar') : (t.paid || 'Pagado')}
+            </Text>
           </View>
         </View>
+
         {isMine && isPendingCashPayment && (
-          <Text style={styles.cashCollectionNote}>💵 El repartidor cobra este pedido en efectivo al entregar.</Text>
+          <Text style={{ color: colors.badgeWarningText, marginBottom: 12, fontWeight: '600' }}>{t.cashNote || 'Cobro en efectivo'}</Text>
         )}
         
-        {isTakenByOther ? (
-          <View style={[styles.acceptButton, styles.takenButton]}>
-            <Text style={styles.takenButtonText}>🚫 Tomado por {item.assignedDriver}</Text>
-          </View>
-        ) : (
-          <TouchableOpacity style={[styles.acceptButton, isMine && styles.routeButton]} onPress={() => isMine ? handleOpenMap(item) : handleOpenModal(item)}>
-            <Text style={styles.acceptButtonText}>{isMine ? '🗺️ Ver Ruta al Cliente' : '🛵 Ir por el pedido'}</Text>
-          </TouchableOpacity>
-        )}
+        <TouchableOpacity 
+          style={[styles.acceptButton, isTakenByOther ? { backgroundColor: colors.btnDisabledBg } : isMine ? { backgroundColor: '#3B82F6' } : { backgroundColor: colors.btnPrimary }]} 
+          onPress={() => isMine ? handleOpenMap(item) : handleOpenModal(item)}
+          disabled={isTakenByOther}
+        >
+          <Text style={[styles.acceptButtonText, isTakenByOther ? { color: colors.btnDisabledText } : { color: '#FFFFFF' }]}>
+            {isTakenByOther ? `${t.takenBy || 'Tomado por'} ${item.assignedDriver}` : isMine ? (t.viewRoute || 'Ver Ruta') : (t.goForOrder || 'Ir por el pedido')}
+          </Text>
+        </TouchableOpacity>
       </View>
     );
   };
 
-  if (initialLoading) return <View style={styles.centered}><ActivityIndicator size="large" color="#E61C24" /></View>;
+  if (initialLoading) return <View style={styles.centered}><ActivityIndicator size="large" color={colors.accent} /></View>;
 
   return (
-    <View style={styles.container}>
-      <View style={styles.tabContainer}>
-        <TouchableOpacity style={[styles.tabButton, activeTab === 'disponibles' && styles.tabButtonActive]} onPress={() => setActiveTab('disponibles')}>
-          <Text style={[styles.tabText, activeTab === 'disponibles' && styles.tabTextActive]}>Disponibles</Text>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <View style={[styles.tabContainer, { backgroundColor: colors.tabBg, borderBottomColor: colors.border }]}>
+        <TouchableOpacity style={[styles.tabButton, activeTab === 'disponibles' && { backgroundColor: isDark ? '#334155' : '#FFF0EE' }]} onPress={() => setActiveTab('disponibles')}>
+          <Text style={[styles.tabText, activeTab === 'disponibles' ? { color: colors.tabActive } : { color: colors.tabInactive }]}>{t.tabAvailable || 'Disponibles'}</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={[styles.tabButton, activeTab === 'mis_pedidos' && styles.tabButtonActive]} onPress={() => setActiveTab('mis_pedidos')}>
-          <Text style={[styles.tabText, activeTab === 'mis_pedidos' && styles.tabTextActive]}>Mis Viajes</Text>
+        <TouchableOpacity style={[styles.tabButton, activeTab === 'mis_pedidos' && { backgroundColor: isDark ? '#334155' : '#FFF0EE' }]} onPress={() => setActiveTab('mis_pedidos')}>
+          <Text style={[styles.tabText, activeTab === 'mis_pedidos' ? { color: colors.tabActive } : { color: colors.tabInactive }]}>{t.tabMyTrips || 'Mis Viajes'}</Text>
         </TouchableOpacity>
       </View>
 
       {activeTab === 'mis_pedidos' && (
-        <View style={styles.cashTripsBanner}>
-          <Ionicons name="cash-outline" size={18} color="#B45309" />
-          <Text style={styles.cashTripsBannerText}>
-            Los viajes en efectivo aparecen aquí para que el repartidor vea la ruta y cobre al entregar.
-          </Text>
+        <View style={[styles.cashTripsBanner, { backgroundColor: colors.badgeWarningBg, borderColor: colors.border }]}>
+          <Ionicons name="cash-outline" size={18} color={colors.badgeWarningText} />
+          <Text style={[styles.cashTripsBannerText, { color: colors.badgeWarningText }]}>{t.cashBanner || 'Viajes en efectivo aquí'}</Text>
         </View>
       )}
 
       <FlatList
-        data={displayedOrders}
+        data={orders.filter(order => activeTab === 'disponibles' ? order.assignedDriver !== CURRENT_DRIVER_NAME : order.assignedDriver === CURRENT_DRIVER_NAME)}
         renderItem={renderOrderItem}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContainer}
-        onEndReached={() => activeTab === 'disponibles' && loadMoreOrders()}
-        onEndReachedThreshold={0.5} 
-        ListFooterComponent={() => (!loading || activeTab === 'mis_pedidos') ? null : <View style={styles.footerLoader}><ActivityIndicator size="large" color="#E61C24" /><Text style={styles.loadingText}>Buscando más pedidos...</Text></View>}
-        ListEmptyComponent={<View style={styles.emptyContainer}><Ionicons name="bicycle-outline" size={60} color="#CBD5E1" /><Text style={styles.emptyText}>{activeTab === 'disponibles' ? 'No hay pedidos nuevos en este momento.' : 'Aún no has aceptado ningún viaje.'}</Text></View>}
+        ListEmptyComponent={<View style={styles.emptyContainer}>
+            <Ionicons name="bicycle-outline" size={60} color={colors.muted} />
+            <Text style={[styles.emptyText, { color: colors.muted }]}>{activeTab === 'disponibles' ? (t.noNewOrders || 'No hay pedidos') : (t.noAcceptedTrips || 'No tienes viajes')}</Text>
+        </View>}
       />
 
       <DeliveryModals 
@@ -201,103 +217,3 @@ export const DeliveryOrdersList = () => {
     </View>
   );
 };
-
-// ... (Aquí van exactamente los mismos StyleSheet.create que tenías al final de tu código original, no los borres).
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F8FAFC' },
-  centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  tabContainer: { flexDirection: 'row', backgroundColor: '#FFFFFF', padding: 10, borderBottomWidth: 1, borderBottomColor: '#E2E8F0' },
-  tabButton: { flex: 1, paddingVertical: 12, alignItems: 'center', borderRadius: 8 },
-  tabButtonActive: { backgroundColor: '#FFF0EE' },
-  tabText: { fontSize: 15, fontWeight: 'bold', color: '#64748B' },
-  tabTextActive: { color: '#E61C24' },
-  cashTripsBanner: { flexDirection: 'row', alignItems: 'center', gap: 8, marginHorizontal: 16, marginTop: 12, padding: 12, backgroundColor: '#FFFBEB', borderWidth: 1, borderColor: '#FDE68A', borderRadius: 12 },
-  cashTripsBannerText: { flex: 1, fontSize: 13, color: '#92400E', fontWeight: '600', lineHeight: 18 },
-  listContainer: { padding: 16 },
-  emptyContainer: { alignItems: 'center', marginTop: 50 },
-  emptyText: { color: '#94A3B8', fontSize: 16, marginTop: 10, textAlign: 'center' },
-  orderCard: { backgroundColor: '#FFFFFF', borderRadius: 12, padding: 16, marginBottom: 16, elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4 },
-  orderHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  orderId: { fontSize: 16, fontWeight: '900', color: '#1E293B' },
-  orderStatus: { fontSize: 12, fontWeight: 'bold', color: '#E61C24', backgroundColor: '#FFF0EE', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12 },
-  orderStatusTaken: { color: '#64748B', backgroundColor: '#F1F5F9' },
-  orderStatusMine: { color: '#10B981', backgroundColor: '#ECFDF5' },
-  customerName: { fontSize: 16, color: '#334155', marginBottom: 4, fontWeight: '600' },
-  addressText: { fontSize: 14, color: '#64748B', marginBottom: 8 },
-  itemsSummaryText: { fontSize: 13, color: '#F59E0B', fontWeight: 'bold', marginBottom: 16 },
-  paymentSummaryRow: { flexDirection: 'row', gap: 8, marginBottom: 16, flexWrap: 'wrap' },
-  paymentBadge: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999 },
-  paymentBadgeCash: { backgroundColor: '#FEF3C7' },
-  paymentBadgeCard: { backgroundColor: '#DBEAFE' },
-  paymentBadgeTransfer: { backgroundColor: '#E0E7FF' },
-  paymentBadgeText: { fontSize: 12, fontWeight: 'bold', color: '#1E293B' },
-  paymentStatusBadge: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999 },
-  paymentStatusBadgePaid: { backgroundColor: '#DCFCE7' },
-  paymentStatusBadgePending: { backgroundColor: '#FEE2E2' },
-  paymentStatusBadgeText: { fontSize: 12, fontWeight: 'bold', color: '#1E293B' },
-  cashCollectionNote: { marginBottom: 12, fontSize: 13, color: '#B45309', fontWeight: '600' },
-  acceptButton: { backgroundColor: '#1A1A1A', paddingVertical: 12, borderRadius: 8, alignItems: 'center' },
-  routeButton: { backgroundColor: '#3B82F6' },
-  takenButton: { backgroundColor: '#F1F5F9' },
-  acceptButtonText: { color: '#FFFFFF', fontWeight: 'bold', fontSize: 14 },
-  takenButtonText: { color: '#94A3B8', fontWeight: 'bold', fontSize: 14 },
-  footerLoader: { paddingVertical: 20, alignItems: 'center' },
-  loadingText: { marginTop: 10, color: '#64748B', fontSize: 14 },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.6)', justifyContent: 'flex-end' },
-  modalContent: { backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: 40, maxHeight: '80%' },
-  modalTitle: { fontSize: 20, fontWeight: 'bold', color: '#1E293B', marginBottom: 16, textAlign: 'center' },
-  statusBox: { flexDirection: 'row', justifyContent: 'space-between', backgroundColor: '#F8FAFC', padding: 16, borderRadius: 12, marginBottom: 16 },
-  statusLabel: { fontSize: 16, color: '#64748B', fontWeight: '500' },
-  statusValue: { fontSize: 16, fontWeight: 'bold' },
-  productsBox: { backgroundColor: '#FFFBEB', borderColor: '#FDE68A', borderWidth: 1, borderRadius: 12, padding: 16, marginBottom: 16 },
-  productsTitle: { fontSize: 14, fontWeight: 'bold', color: '#92400E', marginBottom: 8, textTransform: 'uppercase' },
-  productRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
-  productQuantity: { fontSize: 15, fontWeight: 'bold', color: '#D97706', width: 30 },
-  productName: { fontSize: 15, color: '#1E293B', flex: 1 },
-  receiptBox: { borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 12, padding: 16, marginBottom: 24 },
-  receiptRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
-  receiptText: { fontSize: 15, color: '#475569' },
-  receiptBold: { fontSize: 15, color: '#1E293B', fontWeight: 'bold' },
-  divider: { height: 1, backgroundColor: '#E2E8F0', marginVertical: 12 },
-  receiptTotal: { fontSize: 18, fontWeight: 'bold', color: '#E61C24' },
-  paymentMethodBox: { marginTop: 12, backgroundColor: '#EFF6FF', padding: 12, borderRadius: 8, flexDirection: 'row', justifyContent: 'space-between' },
-  paymentLabel: { fontSize: 14, color: '#1E3A8A' },
-  paymentValue: { fontSize: 14, fontWeight: 'bold', color: '#1E3A8A' },
-  paymentStateBox: { marginTop: 12, padding: 12, borderRadius: 8, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  paymentStatePaid: { backgroundColor: '#ECFDF5' },
-  paymentStatePending: { backgroundColor: '#FEF2F2' },
-  paymentStateLabel: { fontSize: 14, fontWeight: '600', color: '#334155' },
-  paymentStateValue: { fontSize: 14, fontWeight: 'bold', color: '#1E293B' },
-  paymentHintBox: { marginTop: 10, backgroundColor: '#F8FAFC', padding: 12, borderRadius: 8 },
-  paymentHintText: { fontSize: 13, color: '#475569', lineHeight: 18 },
-  modalActions: { flexDirection: 'row', gap: 12, marginTop: 10 },
-  cancelButton: { flex: 1, paddingVertical: 14, borderRadius: 10, backgroundColor: '#F1F5F9', alignItems: 'center' },
-  cancelButtonText: { color: '#475569', fontWeight: 'bold', fontSize: 16 },
-  confirmButton: { flex: 1, paddingVertical: 14, borderRadius: 10, backgroundColor: '#E61C24', alignItems: 'center' },
-  confirmButtonText: { color: '#FFFFFF', fontWeight: 'bold', fontSize: 16 },
-  mapContainer: { flex: 1, backgroundColor: '#E5E7EB' },
-  mapHeader: { position: 'absolute', top: 50, left: 20, right: 20, flexDirection: 'row', alignItems: 'center', zIndex: 10 },
-  backButton: { backgroundColor: '#FFFFFF', width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: {width: 0, height: 2}, shadowOpacity: 0.2, shadowRadius: 4, elevation: 4 },
-  mapHeaderTitle: { flex: 1, textAlign: 'center', fontSize: 18, fontWeight: 'bold', color: '#1A1A1A', marginRight: 44, textShadowColor: '#FFF', textShadowOffset: {width: 1, height: 1}, textShadowRadius: 2 },
-  fakeMapImage: { flex: 1, width: '100%', height: '100%' },
-  bottomSheet: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: '#FFFFFF', borderTopLeftRadius: 30, borderTopRightRadius: 30, paddingHorizontal: 24, paddingBottom: 30, shadowColor: '#000', shadowOffset: {width: 0, height: -4}, shadowOpacity: 0.1, shadowRadius: 10, elevation: 10, maxHeight: '75%' },
-  dragHandleArea: { alignItems: 'center', paddingTop: 15, paddingBottom: 10 },
-  bottomSheetHandle: { width: 40, height: 5, backgroundColor: '#E2E8F0', borderRadius: 3, marginBottom: 5 },
-  dragText: { fontSize: 10, color: '#94A3B8', fontWeight: 'bold', textTransform: 'uppercase', marginTop: 2 },
-  deliverToText: { fontSize: 12, color: '#64748B', fontWeight: 'bold', textTransform: 'uppercase', marginBottom: 4 },
-  customerInfoRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
-  customerTextContainer: { flex: 1, paddingRight: 15 },
-  customerNameLarge: { fontSize: 22, fontWeight: 'bold', color: '#1A1A1A', marginBottom: 2 },
-  customerAddressLarge: { fontSize: 15, color: '#475569' },
-  callCircleButton: { width: 46, height: 46, borderRadius: 23, backgroundColor: '#10B981', justifyContent: 'center', alignItems: 'center', shadowColor: '#10B981', shadowOffset: {width: 0, height: 4}, shadowOpacity: 0.3, shadowRadius: 5, elevation: 5 },
-  expandedContent: { marginTop: 10, overflow: 'hidden' },
-  phoneBox: { backgroundColor: '#F8FAFC', padding: 12, borderRadius: 8, marginBottom: 16, borderWidth: 1, borderColor: '#E2E8F0' },
-  phoneText: { fontSize: 16, color: '#334155', fontWeight: '500', textAlign: 'center' },
-  mapProductsBox: { marginBottom: 24, paddingHorizontal: 5 },
-  mapProductsTitle: { fontSize: 14, fontWeight: 'bold', color: '#64748B', marginBottom: 8 },
-  mapProductText: { fontSize: 15, color: '#1E293B', marginBottom: 4 },
-  paymentReceivedButton: { backgroundColor: '#10B981', paddingVertical: 14, borderRadius: 12, alignItems: 'center', marginBottom: 14 },
-  paymentReceivedText: { color: '#FFFFFF', fontSize: 16, fontWeight: 'bold' },
-  finishDeliveryButton: { backgroundColor: '#E61C24', paddingVertical: 16, borderRadius: 12, alignItems: 'center' },
-  finishDeliveryText: { color: '#FFFFFF', fontSize: 18, fontWeight: 'bold' }
-});

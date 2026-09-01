@@ -1,7 +1,10 @@
-    export const CURRENT_DRIVER_NAME = "Carlos Gómez";
+export const CURRENT_DRIVER_NAME = "Carlos Gómez";
 
-    export type PaymentMethod = 'Efectivo' | 'Datáfono' | 'Transferencia';
-    export type PaymentStatus = 'Pendiente' | 'Pagado';
+// 🔥 Definimos estrictamente los tipos permitidos (Actúan como ENUMs de Base de Datos)
+export type PaymentMethod = 'Efectivo' | 'Datáfono' | 'Transferencia';
+export type PaymentStatus = 'Pendiente' | 'Pagado';
+export type OrderStatus = 'Pendiente' | 'Aceptado';
+export type RestaurantStatus = 'Preparando' | 'Listo para recoger';
 
 export interface OrderItem {
   name: string;
@@ -13,8 +16,8 @@ export interface Order {
   customerName: string;
   customerPhone: string;
   address: string;
-  status: 'Pendiente' | 'Aceptado';
-  restaurantStatus: 'Preparando' | 'Listo para recoger';
+  status: OrderStatus;
+  restaurantStatus: RestaurantStatus;
   subtotal: number;
   deliveryFee: number;
   paymentMethod: PaymentMethod;
@@ -23,15 +26,25 @@ export interface Order {
   items: OrderItem[]; 
 }
 
-const SAMPLE_PRODUCTS = ["Hamburguesa Sabor", "Pizza Express", "Papas Francesas", "Gaseosa 500ml", "Empanada de Carne", "Jugo Natural"];
+const SAMPLE_PRODUCTS = [
+  "Hamburguesa Sabor", 
+  "Pizza Express", 
+  "Papas Francesas", 
+  "Gaseosa 500ml", 
+  "Empanada de Carne", 
+  "Jugo Natural"
+];
 
+// 🔥 Simulador de Backend (Generador de Pedidos)
 export const generateMockOrders = (startIndex: number, count: number): Order[] => {
   const newOrders: Order[] = [];
   const paymentMethods: PaymentMethod[] = ['Efectivo', 'Datáfono', 'Transferencia'];
+  
   for (let i = startIndex; i < startIndex + count; i++) {
     const isTakenByOther = Math.random() > 0.8; 
     const paymentMethod = paymentMethods[Math.floor(Math.random() * paymentMethods.length)];
     
+    // Generador de items aleatorios para el pedido
     const numItems = Math.floor(Math.random() * 4) + 1;
     const orderItems: OrderItem[] = [];
     for (let j = 0; j < numItems; j++) {
@@ -56,5 +69,6 @@ export const generateMockOrders = (startIndex: number, count: number): Order[] =
       items: orderItems,
     });
   }
+  
   return newOrders;
 };

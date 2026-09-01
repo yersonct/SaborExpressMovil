@@ -1,7 +1,10 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { AuthInput } from './AuthInput';
 import { Ionicons } from '@expo/vector-icons';
+import { authService } from '../services/authService';
+import { RoleId } from '../types';
+import { styles } from './style/ClientRegistrationFlow.styles';
 
 interface ClientRegistrationFlowProps {
     onSuccess: () => void;
@@ -11,22 +14,36 @@ interface ClientRegistrationFlowProps {
 }
 
 export const ClientRegistrationFlow: React.FC<ClientRegistrationFlowProps> = ({ onSuccess, onCancel, themeColors, t }) => {
-    const [formData, setFormData] = useState({ fullName: '', email: '', phone: '', password: '', confirmPassword: '' });
+    const [formData, setFormData] = useState({
+        name: '',
+        lastName: '',
+        document: '',
+        email: '',
+        password: '',
+        confirmPassword: ''
+    });
+
     const [showPassword, setShowPassword] = useState(false);
     const [showConfirmPassword, setShowConfirmPassword] = useState(false);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
 
     const validateForm = () => {
-        if (!formData.fullName.trim() || formData.fullName.length < 3) return t?.clientErrFullName || 'Ingresa tu nombre completo.';
+        if (!formData.name.trim()) return 'Ingresa tu nombre.';
+        if (/\d/.test(formData.name)) return 'El nombre no puede contener números.';
+
+        if (!formData.lastName.trim()) return 'Ingresa tu apellido.';
+        if (/\d/.test(formData.lastName)) return 'El apellido no puede contener números.';
+
+        if (!formData.document.trim()) return 'Ingresa tu documento de identidad.';
+
         if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) return t?.errEmail || 'Ingresa un correo electrónico válido.';
-        if (!/^\d{10}$/.test(formData.phone)) return t?.errPhone || 'Ingresa un número de celular válido (10 dígitos).';
         if (formData.password.length < 6) return t?.clientErrPassword || 'La contraseña debe tener al menos 6 caracteres.';
         if (formData.password !== formData.confirmPassword) return t?.clientErrPasswordMatch || 'Las contraseñas no coinciden.';
         return '';
     };
 
-    const handleRegister = () => {
+    const handleRegister = async () => {
         const validationError = validateForm();
         if (validationError) {
             setError(validationError);
@@ -36,11 +53,25 @@ export const ClientRegistrationFlow: React.FC<ClientRegistrationFlowProps> = ({ 
         setError('');
         setLoading(true);
 
-        // Aquí va la lógica de conexión a tu base de datos para crear el cliente
-        setTimeout(() => {
+        try {
+            await authService.registerClient({
+                name: formData.name,
+                lastName: formData.lastName,
+                document: formData.document,
+                email: formData.email,
+                password: formData.password,
+                roleId: RoleId.Cliente, 
+            });
+
             setLoading(false);
             onSuccess();
-        }, 1500);
+        } catch (err: any) {
+            setLoading(false);
+            if (__DEV__) {
+                console.log("ERROR REAL DE FETCH:", err);
+            }
+            setError(err.message || 'Error al conectar con el servidor.');
+        }
     };
 
     return (
@@ -57,26 +88,34 @@ export const ClientRegistrationFlow: React.FC<ClientRegistrationFlowProps> = ({ 
             </Text>
 
             <AuthInput
-                label={t?.fullNameLabel || 'Nombre Completo'}
-                placeholder={t?.clientFullNamePlaceholder || 'Ej. María Gómez'}
-                value={formData.fullName}
-                onChangeText={(text) => setFormData({ ...formData, fullName: text })}
+                label="Nombre"
+                placeholder="Ej. Yerson"
+                value={formData.name}
+                onChangeText={(text) => setFormData({ ...formData, name: text })}
+                themeColors={themeColors}
+            />
+
+            <AuthInput
+                label="Apellido"
+                placeholder="Ej. Rubiano"
+                value={formData.lastName}
+                onChangeText={(text) => setFormData({ ...formData, lastName: text })}
+                themeColors={themeColors}
+            />
+
+            <AuthInput
+                label="Documento de Identidad"
+                placeholder="Ej. 1075225115"
+                value={formData.document}
+                onChangeText={(text) => setFormData({ ...formData, document: text.replace(/[^0-9]/g, '') })}
                 themeColors={themeColors}
             />
 
             <AuthInput
                 label={t?.emailLabel || 'Correo Electrónico'}
-                placeholder={t?.clientEmailPlaceholder || 'maria@ejemplo.com'}
+                placeholder={t?.clientEmailPlaceholder || 'correo@ejemplo.com'}
                 value={formData.email}
                 onChangeText={(text) => setFormData({ ...formData, email: text })}
-                themeColors={themeColors}
-            />
-
-            <AuthInput
-                label={t?.phoneLabel || 'Teléfono Celular'}
-                placeholder={t?.clientPhonePlaceholder || 'Ej. 3001234567'}
-                value={formData.phone}
-                onChangeText={(text) => setFormData({ ...formData, phone: text.replace(/[^0-9]/g, '') })}
                 themeColors={themeColors}
             />
 
@@ -120,14 +159,3 @@ export const ClientRegistrationFlow: React.FC<ClientRegistrationFlowProps> = ({ 
         </View>
     );
 };
-
-const styles = StyleSheet.create({
-    container: { width: '100%' },
-    header: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
-    backButton: { paddingRight: 15 },
-    title: { fontSize: 22, fontWeight: 'bold' },
-    subtitle: { fontSize: 14, marginBottom: 25, lineHeight: 20 },
-    errorText: { color: '#E61C24', fontSize: 14, textAlign: 'center', marginBottom: 15, fontWeight: '600', backgroundColor: 'rgba(230, 28, 36, 0.1)', padding: 10, borderRadius: 8 },
-    submitButton: { height: 56, borderRadius: 14, justifyContent: 'center', alignItems: 'center', marginTop: 10, shadowColor: '#E61C24', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.25, shadowRadius: 12, elevation: 6 },
-    submitButtonText: { fontSize: 16, fontWeight: 'bold', letterSpacing: 0.5 },
-});

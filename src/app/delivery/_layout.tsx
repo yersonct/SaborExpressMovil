@@ -1,127 +1,108 @@
 import React from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity } from 'react-native';
-import { Drawer } from 'expo-router/drawer';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { DrawerContentScrollView, DrawerItemList } from '@react-navigation/drawer';
+import { StyleSheet, Platform } from 'react-native';
+import { Tabs, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
 
-// --- 1. COMPONENTE DEL MENÚ PERSONALIZADO ---
-function CustomDeliveryDrawerContent(props: any) {
+// 🔥 IMPORTAMOS LA BURBUJA Y EL CONTEXTO
+import { DeliveryProvider, useDeliveryContext } from '../../features/delivery/components/context/DeliveryContext';
+import { TRANSLATIONS, LanguageCode } from '../../locales/DeliveryTranslations';
+
+// 🔥 1. COMPONENTE INTERNO QUE ESCUCHA EL IDIOMA Y MODO OSCURO
+function DeliveryTabs() {
   const router = useRouter();
+  const { language, isDark } = useDeliveryContext();
+
+  const t = TRANSLATIONS[language as LanguageCode] || TRANSLATIONS['es'];
+
+  // 🔥 COLORES DINÁMICOS PARA LA BARRA INFERIOR
+  const tabBarBg = isDark ? '#1E293B' : '#FFFFFF';
+  const tabBarBorder = isDark ? '#334155' : '#E2E8F0';
+  const inactiveColor = isDark ? '#64748B' : '#94A3B8';
 
   return (
-    <View style={styles.drawerContainer}>
-      <DrawerContentScrollView {...props} contentContainerStyle={{ paddingTop: 0 }}>
-        {/* Cabecera del Menú con Foto e Información */}
-        <View style={styles.drawerHeader}>
-          {/* Usamos un ícono de repartidor genérico por ahora */}
-          <Image source={{ uri: 'https://cdn-icons-png.flaticon.com/512/2830/2830305.png' }} style={styles.profilePic} />
-          <Text style={styles.userName}>Carlos Gómez</Text>
-          <View style={styles.roleBadge}>
-            <Text style={styles.roleText}>REPARTIDOR ACTIVO</Text>
-          </View>
-        </View>
-
-        {/* Lista de Rutas (Index, Profile, Settings) */}
-        <View style={styles.drawerItemsContainer}>
-          <DrawerItemList {...props} />
-        </View>
-      </DrawerContentScrollView>
-
-      {/* Pie del Menú con Botón de Cerrar Sesión fijo */}
-      <View style={styles.drawerFooter}>
-        <TouchableOpacity style={styles.logoutButton} onPress={() => router.replace('/')}>
-          <Ionicons name="log-out-outline" size={24} color="#E61C24" />
-          <Text style={styles.logoutText}>Cerrar Sesión</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
-}
-
-// --- 2. CONFIGURACIÓN DEL ROUTER ---
-export default function DeliveryLayout() {
-  return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
-      <Drawer
-        drawerContent={(props) => <CustomDeliveryDrawerContent {...props} />}
-        screenOptions={{
-          headerStyle: { backgroundColor: '#1A1A1A' }, // Cabecera oscura elegante
-          headerTintColor: '#FFFFFF',
-          drawerActiveBackgroundColor: '#FFF0EE', // Fondo rojizo suave cuando está seleccionado
-          drawerActiveTintColor: '#E61C24', // Letra roja corporativa
-          drawerInactiveTintColor: '#334155',
-          drawerLabelStyle: { fontSize: 16, fontWeight: 'bold', marginLeft: -10 },
-          headerTitleAlign: 'center',
+    <Tabs
+      screenOptions={{
+        headerShown: false,
+        tabBarStyle: [styles.tabBar, { backgroundColor: tabBarBg, borderTopColor: tabBarBorder }],
+        tabBarActiveTintColor: '#E61C24',
+        tabBarInactiveTintColor: inactiveColor,
+        tabBarLabelStyle: styles.tabLabel,
+        tabBarItemStyle: { paddingVertical: Platform.OS === 'ios' ? 0 : 5 },
+      }}
+    >
+      <Tabs.Screen
+        name="index"
+        options={{
+          // (Si no agregaste tabHome al diccionario, puedes omitir la 't.' y dejar el string por ahora)
+          title: t.tabHome || 'Envíos',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="bicycle-outline" size={size} color={color} />
+          ),
         }}
-      >
-        <Drawer.Screen 
-          name="index" 
-          options={{ 
-            title: 'Pedidos Disponibles', 
-            drawerLabel: 'Envíos',
-            drawerIcon: ({ color }) => <Ionicons name="bicycle-outline" size={24} color={color} /> 
-          }} 
-        />
-        <Drawer.Screen 
-          name="profile" 
-          options={{ 
-            title: 'Mi Perfil', 
-            drawerLabel: 'Perfil',
-            drawerIcon: ({ color }) => <Ionicons name="person-outline" size={24} color={color} /> 
-          }} 
-        />
-        <Drawer.Screen 
-          name="settings" 
-          options={{ 
-            title: 'Configuración', 
-            drawerLabel: 'Ajustes',
-            drawerIcon: ({ color }) => <Ionicons name="settings-outline" size={24} color={color} /> 
-          }} 
-        />
-      </Drawer>
-    </GestureHandlerRootView>
+      />
+
+      <Tabs.Screen
+        name="profile"
+        options={{
+          title: t.tabProfile || 'Perfil',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="person-outline" size={size} color={color} />
+          ),
+        }}
+      />
+
+      <Tabs.Screen
+        name="settings"
+        options={{
+          title: t.tabSettings || 'Ajustes',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="settings-outline" size={size} color={color} />
+          ),
+        }}
+      />
+      
+      <Tabs.Screen
+        name="logout" 
+        options={{
+          title: t.tabLogout || 'Salir',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="log-out-outline" size={size} color={color} />
+          ),
+        }}
+        listeners={() => ({
+          tabPress: (e) => {
+            e.preventDefault(); 
+            router.replace('/');
+          },
+        })}
+      />
+    </Tabs>
   );
 }
 
-// --- 3. ESTILOS ---
+// 🔥 2. EL LAYOUT PRINCIPAL ENVUELVE LAS PESTAÑAS EN LA BURBUJA (PROVIDER)
+export default function DeliveryTabsLayout() {
+  return (
+    <DeliveryProvider>
+      <DeliveryTabs />
+    </DeliveryProvider>
+  );
+}
+
 const styles = StyleSheet.create({
-  drawerContainer: { flex: 1, backgroundColor: '#FFFFFF' },
-  drawerHeader: { 
-    backgroundColor: '#1A1A1A', 
-    padding: 30, 
-    paddingTop: 60, 
-    alignItems: 'center', 
-    borderBottomLeftRadius: 20, 
-    borderBottomRightRadius: 20 
+  tabBar: {
+    borderTopWidth: 1,
+    height: Platform.OS === 'ios' ? 85 : 65, 
+    paddingBottom: Platform.OS === 'ios' ? 25 : 8,
+    paddingTop: 8,
+    elevation: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
   },
-  profilePic: { 
-    width: 80, 
-    height: 80, 
-    borderRadius: 40, 
-    marginBottom: 10, 
-    borderWidth: 2, 
-    borderColor: '#333333', 
-    backgroundColor: '#FFF' 
+  tabLabel: {
+    fontSize: 12,
+    fontWeight: '600',
   },
-  userName: { color: '#FFFFFF', fontSize: 20, fontWeight: 'bold', marginBottom: 5 },
-  roleBadge: { 
-    backgroundColor: 'rgba(16, 185, 129, 0.2)', 
-    paddingHorizontal: 12, 
-    paddingVertical: 4, 
-    borderRadius: 12, 
-    borderWidth: 1, 
-    borderColor: '#10B981' 
-  },
-  roleText: { color: '#D1FAE5', fontSize: 12, fontWeight: 'bold' },
-  drawerItemsContainer: { paddingTop: 20 },
-  drawerFooter: { 
-    padding: 20, 
-    borderTopWidth: 1, 
-    borderTopColor: '#F1F5F9', 
-    backgroundColor: '#FFFFFF' 
-  },
-  logoutButton: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10 },
-  logoutText: { color: '#E61C24', fontSize: 16, fontWeight: 'bold', marginLeft: 10 }
 });

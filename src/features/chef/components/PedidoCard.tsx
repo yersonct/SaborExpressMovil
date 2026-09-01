@@ -1,49 +1,53 @@
-// PedidoCard.tsx
 import React from 'react';
 import { Pedido, getClaseEstado, IconoReloj } from './TableroUtils';
+import { translations, LanguageCode, getTranslatedStatus } from './../../../locales/TableroTranslations';
 
 interface PedidoCardProps {
   pedido: Pedido;
   rolActual: string;
   onAvanzarEstado: (id: string) => void;
+  lang: LanguageCode;
 }
 
-export default function PedidoCard({ pedido, rolActual, onAvanzarEstado }: PedidoCardProps) {
+export default function PedidoCard({ pedido, rolActual, onAvanzarEstado, lang }: PedidoCardProps) {
+  const t = translations[lang];
+
   return (
     <div className="tarjeta-pedido">
       <div className="pedido-header">
         <div className="pedido-header-top">
-          <span className="mesa-badge">{pedido.mesa.toUpperCase()}</span>
+          <span className="mesa-badge">
+            {pedido.mesa.includes('Mesa') ? pedido.mesa.replace('Mesa', t.type_Mesa) : pedido.mesa.toUpperCase()}
+          </span>
           <div className="estado-container">
-            <span className="info-label">ESTADO:</span>
+            <span className="info-label">{t.state}</span>
             <span className={`estado-badge ${getClaseEstado(pedido.estado)}`}>
-              {pedido.estado.toUpperCase()}
+              {getTranslatedStatus(pedido.estado, lang).toUpperCase()}
             </span>
           </div>
         </div>
 
         <div className="pedido-info-meta">
           <div className="info-item">
-            <span className="info-label">MESERO:</span>
+            <span className="info-label">{t.waiter}</span>
             <span className="info-valor">{pedido.nombreMesero}</span>
           </div>
           <div className="info-item">
-            <span className="info-label">PEDIDO ID:</span>
+            <span className="info-label">{t.orderId}</span>
             <span className="info-valor">{pedido.id}</span>
           </div>
           <div className="info-item full-width">
-            <span className="info-label">HORA INGRESO:</span>
+            <span className="info-label">{t.entryTime}</span>
             <span className="info-valor hora-valor">
               <IconoReloj /> {pedido.horaIngreso}
             </span>
           </div>
         </div>
 
-        {/* Solo dejamos el tiempo estimado si es mayor a cero, sin repetir el tipo de pedido */}
         {pedido.tiempoEstimado !== undefined && pedido.tiempoEstimado > 0 && (
           <div className="pedido-tags">
             <div className="tag-tiempo">
-              <IconoReloj /> PREP. EN: {pedido.tiempoEstimado} MIN
+              <IconoReloj /> {t.prepIn} {pedido.tiempoEstimado} {t.min}
             </div>
           </div>
         )}
@@ -57,13 +61,13 @@ export default function PedidoCard({ pedido, rolActual, onAvanzarEstado }: Pedid
                 <span className="cantidad">{item.cantidad}x</span>
                 <span className="platillo-nombre">{item.platillo}</span>
               </div>
-              {item.notas && <span className="nota">NOTA: {item.notas}</span>}
+              {item.notas && <span className="nota">{t.note}: {item.notas}</span>}
             </li>
           ))}
         </ul>
 
         <div className="pedido-totales">
-          <span className="totales-label">TOTAL PLATOS:</span>
+          <span className="totales-label">{t.totalDishes}</span>
           <span className="totales-valor">
             {pedido.menu.reduce((total, item) => total + item.cantidad, 0)}
           </span>
@@ -73,7 +77,7 @@ export default function PedidoCard({ pedido, rolActual, onAvanzarEstado }: Pedid
       {rolActual !== 'cocinero' && (
         <div className="pedido-footer">
           <button className="btn-accion" onClick={() => onAvanzarEstado(pedido.id)}>
-            {pedido.estado === 'Pendiente' ? 'INICIAR PREPARACIÓN' : 'MARCAR COMO LISTO'}
+            {pedido.estado === 'Pendiente' ? t.startPrep : t.markReady}
           </button>
         </div>
       )}

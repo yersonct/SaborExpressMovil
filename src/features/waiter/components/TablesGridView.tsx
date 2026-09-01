@@ -36,10 +36,10 @@ export const TablesGridView = ({ tables, handleTablePress }: any) => {
 
           <View style={styles.capacityBadge}>
             <Ionicons name="people" size={14} color={colors.mutedText} />
-            <Text style={[styles.capacityText, { color: colors.mutedText }]}>{item.capacity} personas</Text>
+            <Text style={[styles.capacityText, { color: colors.mutedText }]}>{item.capacity} {t.tablesCapacitySuffix || 'personas'}</Text>
           </View>
           <Text style={[styles.gridTableStatus, isOccupied ? { color: colors.danger } : { color: colors.success }]}>
-            {item.status}
+            {isOccupied ? (t.tableStatusOccupied || 'Ocupada') : (t.tableStatusFree || 'Libre')}
           </Text>
         </TouchableOpacity>
       )
