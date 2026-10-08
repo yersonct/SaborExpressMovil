@@ -5,7 +5,7 @@
         "themeLabel": "Tema",
         "themeLight": "Blanco",
         "themeDark": "Negro",
-        "usernameLabel": "Ingrese número de documento o correo electrónico",
+        "usernameLabel": "Ingrese tu correo electrónico",
         "passwordLabel": "Contraseña",
         "usernamePlaceholder": "cajero123",
         "passwordPlaceholder": "******",

@@ -1,11 +1,15 @@
-import type { ApiError } from '../types';
+import type { ApiError } from "../types";
 
 export async function handleResponse<T>(res: Response): Promise<T> {
   if (!res.ok) {
-    const errorData: ApiError = await res.json().catch(() => ({
-      message: 'Error de red o del servidor',
+    const body = await res.json().catch(() => null);
+
+    const errorData: ApiError = {
+      message: body?.error ?? body?.message ?? "Error de red o del servidor",
       statusCode: res.status,
-    }));
+      code: body?.code,
+    };
+
     throw errorData;
   }
   return res.json();

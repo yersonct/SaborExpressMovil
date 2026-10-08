@@ -4,12 +4,12 @@ export type LanguageCode = 'es' | 'en' | 'pt' | 'fr';
 export const TRANSLATIONS = {
     es: {
         // Dashboard General (NUEVO)
-        cashierTitle: 'Caja SaborExpress',
         shiftManagement: 'Gestión de Turno',
         simulateBtn: 'Simular',
         closeShiftBtn: 'Cierre',
         tabTables: 'En Mesa',
         tabTakeaway: 'Para Llevar',
+        tabDelivery: 'Delivery',
         toastDeliveryReceived: '📲 ¡Domicilio recibido! Validar comprobante por ${total}',
         toastTableReady: '🔔 ¡Nueva cuenta de Mesa {table} lista para cobrar!',
         toastShiftClosed: '🔒 Caja cerrada. Reporte guardado con éxito.',
@@ -57,8 +57,8 @@ export const TRANSLATIONS = {
         operations: 'Operaciones',
         autoPrint: 'Impresión Automática',
         autoPrintDesc: 'Imprimir ticket al confirmar pago',
-        transferSound: 'Sonido de Transferencia',
-        transferSoundDesc: 'Notificar cuando un domicilio pague',
+        transferSound: 'Sonido de Alertas',
+        transferSoundDesc: 'Avisar cuando un pedido esté listo o llegue un domicilio',
         appearance: 'Apariencia',
         darkMode: 'Modo Oscuro',
         darkModeDesc: 'Cambia la interfaz a tonos oscuros',
@@ -67,6 +67,7 @@ export const TRANSLATIONS = {
         languageSection: 'Idioma',
         languageTitle: 'Idioma del Sistema',
         languageDesc: 'Selecciona tu idioma preferido',
+        logoutBtn: 'Cerrar Sesión',
 
         // Órdenes (Ya lo tenías)
         toastTransferValidated: '✅ Transferencia validada',
@@ -116,6 +117,11 @@ export const TRANSLATIONS = {
         catalogSearchPlaceholder: 'Buscar producto...',
         catalogBtnAdd: 'Añadir',
         catalogEmptySearch: 'No se encontraron productos con "{query}"',
+        confirmAddTitle: '¿Agregar a la cuenta?',
+        confirmAddQuantity: 'Cantidad',
+        confirmAddBtn: 'Confirmar',
+        confirmAddAdding: 'Agregando...',
+        enableSoundBanner: 'Toca aquí para activar el sonido de alertas',
     },
     en: {
         tripDetails: 'Trip Details',
@@ -155,6 +161,7 @@ export const TRANSLATIONS = {
         tabSettings: 'Settings',
         tabLogout: 'Logout',
         tabTakeaway: 'Takeaway',
+        tabDelivery: 'Delivery',
         toastDeliveryReceived: '📲 Delivery received! Validate proof for ${total}',
         toastTableReady: '🔔 New bill for Table {table} ready to charge!',
         toastShiftClosed: '🔒 Register closed. Report saved successfully.',
@@ -181,6 +188,7 @@ export const TRANSLATIONS = {
         languageSection: 'Language',
         languageTitle: 'System Language',
         languageDesc: 'Select your preferred language',
+        logoutBtn: 'Log Out',
 
         toastTransferValidated: '✅ Transfer validated',
         toastPrinting: '🖨️ Printing receipt...',
@@ -229,6 +237,11 @@ export const TRANSLATIONS = {
         catalogSearchPlaceholder: 'Search product...',
         catalogBtnAdd: 'Add',
         catalogEmptySearch: 'No products found for "{query}"',
+        confirmAddTitle: 'Add to the bill?',
+        confirmAddQuantity: 'Quantity',
+        confirmAddBtn: 'Confirm',
+        confirmAddAdding: 'Adding...',
+        enableSoundBanner: 'Tap here to enable alert sounds',
     },
     pt: {
         tripDetails: 'Detalhes da entrega',
@@ -268,6 +281,7 @@ export const TRANSLATIONS = {
         tabSettings: 'Ajustes',
         tabLogout: 'Sair',
         tabTakeaway: 'Para Viagem',
+        tabDelivery: 'Entrega',
         toastDeliveryReceived: '📲 Entrega recebida! Validar compr. de ${total}',
         toastTableReady: '🔔 Nova conta da Mesa {table} pronta para cobrar!',
         toastShiftClosed: '🔒 Caixa fechado. Relatório salvo com sucesso.',
@@ -294,6 +308,7 @@ export const TRANSLATIONS = {
         languageSection: 'Idioma',
         languageTitle: 'Idioma do Sistema',
         languageDesc: 'Selecione seu idioma preferido',
+        logoutBtn: 'Sair da Conta',
 
         toastTransferValidated: '✅ Transferência validada',
         toastPrinting: '🖨️ Imprimindo recibo...',
@@ -342,6 +357,11 @@ export const TRANSLATIONS = {
         catalogSearchPlaceholder: 'Buscar produto...',
         catalogBtnAdd: 'Adicionar',
         catalogEmptySearch: 'Nenhum produto encontrado para "{query}"',
+        confirmAddTitle: 'Adicionar à conta?',
+        confirmAddQuantity: 'Quantidade',
+        confirmAddBtn: 'Confirmar',
+        confirmAddAdding: 'Adicionando...',
+        enableSoundBanner: 'Toque aqui para ativar o som dos alertas',
     },
     fr: {
         cashierTitle: 'Caisse SaborExpress',
@@ -350,6 +370,7 @@ export const TRANSLATIONS = {
         closeShiftBtn: 'Fermer',
         tabTables: 'Sur Place',
         tabTakeaway: 'À Emporter',
+        tabDelivery: 'Livraison',
         tabHome: 'Caisse',
         tabProfile: 'Profil',
         tabSettings: 'Paramètres',
@@ -406,6 +427,7 @@ export const TRANSLATIONS = {
         languageSection: 'Langue',
         languageTitle: 'Langue du Système',
         languageDesc: 'Sélectionnez votre langue préférée',
+        logoutBtn: 'Se Déconnecter',
 
         toastTransferValidated: '✅ Transfert validé',
         toastPrinting: '🖨️ Impression du reçu...',
@@ -454,5 +476,10 @@ export const TRANSLATIONS = {
         catalogSearchPlaceholder: 'Rechercher un produit...',
         catalogBtnAdd: 'Ajouter',
         catalogEmptySearch: 'Aucun produit trouvé pour "{query}"',
+        confirmAddTitle: 'Ajouter à l\'addition ?',
+        confirmAddQuantity: 'Quantité',
+        confirmAddBtn: 'Confirmer',
+        confirmAddAdding: 'Ajout...',
+        enableSoundBanner: 'Touchez ici pour activer le son des alertes',
     }
 };

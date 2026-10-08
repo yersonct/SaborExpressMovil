@@ -43,7 +43,7 @@ export const TRANSLATIONS: Record<LanguageCode, any> = {
     onShift: 'EN TURNO',
     trips: 'Viajes',
     earnings: 'Ganancias',
-    rating: 'Rating',
+    rating: 'Calificación',
     myVehicleData: 'Mis Datos y Vehículo',
     edit: 'Editar',
     save: 'Guardar',

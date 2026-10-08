@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { 
-  SafeAreaView, 
   View, 
   Text, 
   StyleSheet, 
@@ -9,14 +8,13 @@ import {
   TouchableOpacity,
   Platform 
 } from 'react-native';
+import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation, useRouter } from 'expo-router';
-import { DrawerActions } from '@react-navigation/native';
+import { useRouter } from 'expo-router';
 import { useAuth } from '../../features/auth/hooks/useAuth'; 
 
 export default function ClientSettings() {
-  const navigation = useNavigation();
-  const router = useRouter();
+const router = useRouter();
   const { handleLogout } = useAuth();
 
   // Estados para los switches
@@ -42,29 +40,34 @@ export default function ClientSettings() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.header}>
-        <TouchableOpacity style={styles.menuButton} onPress={() => navigation.dispatch(DrawerActions.openDrawer())}>
-          <Ionicons name="menu" size={28} color="#1E293B" />
-        </TouchableOpacity>
         <Text style={styles.headerTitle}>Configuración</Text>
       </View>
 
-      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
-        
+      <ScrollView
+        contentContainerStyle={styles.container}
+        showsVerticalScrollIndicator={false}
+      >
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Notificaciones</Text>
           <View style={styles.card}>
             <View style={styles.settingRow}>
               <View style={styles.settingInfo}>
-                <Ionicons name="notifications-outline" size={24} color="#1E293B" />
+                <Ionicons
+                  name="notifications-outline"
+                  size={24}
+                  color="#1E293B"
+                />
                 <View style={styles.textGroup}>
                   <Text style={styles.settingTitle}>Estado del Pedido</Text>
-                  <Text style={styles.settingDesc}>Alertas cuando tu comida esté en camino</Text>
+                  <Text style={styles.settingDesc}>
+                    Alertas cuando tu comida esté en camino
+                  </Text>
                 </View>
               </View>
-              <Switch 
-                value={pushNotifications} 
-                onValueChange={setPushNotifications} 
-                trackColor={{ false: '#E2E8F0', true: '#10B981' }}
+              <Switch
+                value={pushNotifications}
+                onValueChange={setPushNotifications}
+                trackColor={{ false: "#E2E8F0", true: "#10B981" }}
                 thumbColor="#FFFFFF"
               />
             </View>
@@ -74,13 +77,15 @@ export default function ClientSettings() {
                 <Ionicons name="gift-outline" size={24} color="#1E293B" />
                 <View style={styles.textGroup}>
                   <Text style={styles.settingTitle}>Promociones</Text>
-                  <Text style={styles.settingDesc}>Ofertas y descuentos exclusivos</Text>
+                  <Text style={styles.settingDesc}>
+                    Ofertas y descuentos exclusivos
+                  </Text>
                 </View>
               </View>
-              <Switch 
-                value={promoNotifications} 
-                onValueChange={setPromoNotifications} 
-                trackColor={{ false: '#E2E8F0', true: '#10B981' }}
+              <Switch
+                value={promoNotifications}
+                onValueChange={setPromoNotifications}
+                trackColor={{ false: "#E2E8F0", true: "#10B981" }}
                 thumbColor="#FFFFFF"
               />
             </View>
@@ -97,10 +102,10 @@ export default function ClientSettings() {
                   <Text style={styles.settingTitle}>Modo Oscuro</Text>
                 </View>
               </View>
-              <Switch 
-                value={darkMode} 
-                onValueChange={setDarkMode} 
-                trackColor={{ false: '#E2E8F0', true: '#1E293B' }}
+              <Switch
+                value={darkMode}
+                onValueChange={setDarkMode}
+                trackColor={{ false: "#E2E8F0", true: "#1E293B" }}
                 thumbColor="#FFFFFF"
               />
             </View>
@@ -112,17 +117,19 @@ export default function ClientSettings() {
                   <Text style={styles.settingTitle}>Métodos de Pago</Text>
                 </View>
               </View>
-              <Ionicons name="chevron-forward-outline" size={20} color="#94A3B8" />
+              <Ionicons
+                name="chevron-forward-outline"
+                size={20}
+                color="#94A3B8"
+              />
             </TouchableOpacity>
           </View>
         </View>
 
-        {/* Botón de Cerrar Sesión */}
         <TouchableOpacity style={styles.logoutButton} onPress={onLogoutPress}>
           <Ionicons name="log-out-outline" size={22} color="#FFFFFF" />
           <Text style={styles.logoutButtonText}>Cerrar Sesión</Text>
         </TouchableOpacity>
-
       </ScrollView>
     </SafeAreaView>
   );

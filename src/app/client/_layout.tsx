@@ -1,77 +1,83 @@
-import React from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity } from 'react-native';
-import { Drawer } from 'expo-router/drawer';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { DrawerContentScrollView, DrawerItemList } from '@react-navigation/drawer';
-import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import React from "react";
+import { View, ActivityIndicator } from "react-native";
+import { Tabs, Redirect } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
+import { useAuth } from "../../features/auth/context/AuthContext";
+import { resolveEffectiveRole } from "../../features/auth/services/roleMap";
+import { ROLE_NAMES } from "../../features/auth/types/role";
+import { UserNotificationsProvider } from "../../features/notifications/context/UserNotificationsContext";
 
-function CustomClientDrawerContent(props: any) {
-  const router = useRouter();
+export default function ClientTabsLayout() {
+  const { user, initializing } = useAuth();
 
-  return (
-    <View style={styles.drawerContainer}>
-      <DrawerContentScrollView {...props} contentContainerStyle={{ paddingTop: 0 }}>
-        <View style={styles.drawerHeader}>
-          <Image source={{ uri: 'https://cdn-icons-png.flaticon.com/512/4140/4140048.png' }} style={styles.profilePic} />
-          <Text style={styles.userName}>Cliente Frecuente</Text>
-          <View style={styles.roleBadge}>
-            <Text style={styles.roleText}>MIEMBRO VIP</Text>
-          </View>
-        </View>
-
-        <View style={styles.drawerItemsContainer}>
-          <DrawerItemList {...props} />
-        </View>
-      </DrawerContentScrollView>
-
-      <View style={styles.drawerFooter}>
-        <TouchableOpacity style={styles.logoutButton} onPress={() => router.replace('/')}>
-          <Ionicons name="log-out-outline" size={24} color="#E61C24" />
-          <Text style={styles.logoutText}>Cerrar Sesión</Text>
-        </TouchableOpacity>
+  if (initializing) {
+    return (
+      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+        <ActivityIndicator size="large" color="#E61C24" />
       </View>
-    </View>
-  );
-}
+    );
+  }
 
-export default function ClientDrawerLayout() {
+  if (
+    !user ||
+    resolveEffectiveRole(
+      user.roles,
+      user.hasActiveShift,
+      user.activeShiftRoleName,
+    ) !== ROLE_NAMES.Cliente
+  ) {
+    return <Redirect href="/" />;
+  }
+
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
-      <Drawer
-        drawerContent={(props) => <CustomClientDrawerContent {...props} />}
-        screenOptions={{
-          headerStyle: { backgroundColor: '#1E293B' },
-          headerTintColor: '#FFFFFF',
-          drawerActiveBackgroundColor: '#FEF2F2',
-          drawerActiveTintColor: '#E61C24',
-          drawerInactiveTintColor: '#334155',
-          drawerLabelStyle: { fontSize: 16, fontWeight: 'bold', marginLeft: -10 },
-          headerShown: false // Ocultamos el header para hacer uno personalizado
+    <UserNotificationsProvider>
+    <Tabs
+      screenOptions={{
+        headerShown: false,
+        tabBarShowLabel: true,
+        tabBarStyle: {
+          backgroundColor: "#1A1A1A",
+          borderTopWidth: 1,
+          borderTopColor: "#333333",
+          height: 65,
+          paddingBottom: 10,
+          paddingTop: 5,
+        },
+        tabBarActiveTintColor: "#E61C24",
+        tabBarInactiveTintColor: "#94A3B8",
+        tabBarLabelStyle: { fontSize: 12, fontWeight: "bold" },
+      }}
+    >
+      <Tabs.Screen
+        name="index"
+        options={{
+          title: "Menú",
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="fast-food-outline" size={size} color={color} />
+          ),
         }}
-      >
-        <Drawer.Screen 
-          name="index" 
-          options={{ 
-            title: 'Hacer Pedido', 
-            drawerLabel: 'Menú Principal',
-            drawerIcon: ({ color }) => <Ionicons name="fast-food-outline" size={24} color={color} /> 
-          }} 
-        />
-      </Drawer>
-    </GestureHandlerRootView>
+      />
+      <Tabs.Screen
+        name="profile"
+        options={{
+          title: "Perfil",
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="person-outline" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="settings"
+        options={{
+          title: "Ajustes",
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="settings-outline" size={size} color={color} />
+          ),
+        }}
+      />
+      {/* Ruta que existe pero NO debe salir como pestaña */}
+      <Tabs.Screen name="addresses" options={{ href: null }} />
+    </Tabs>
+    </UserNotificationsProvider>
   );
 }
-
-const styles = StyleSheet.create({
-  drawerContainer: { flex: 1, backgroundColor: '#FFFFFF' },
-  drawerHeader: { backgroundColor: '#1E293B', padding: 30, paddingTop: 60, alignItems: 'center', borderBottomLeftRadius: 20, borderBottomRightRadius: 20 },
-  profilePic: { width: 80, height: 80, borderRadius: 40, marginBottom: 10, borderWidth: 2, borderColor: '#E2E8F0', backgroundColor: '#FFF' },
-  userName: { color: '#FFFFFF', fontSize: 20, fontWeight: 'bold', marginBottom: 5 },
-  roleBadge: { backgroundColor: 'rgba(16, 185, 129, 0.2)', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 12, borderWidth: 1, borderColor: '#10B981' },
-  roleText: { color: '#D1FAE5', fontSize: 12, fontWeight: 'bold' },
-  drawerItemsContainer: { paddingTop: 20 },
-  drawerFooter: { padding: 20, borderTopWidth: 1, borderTopColor: '#F1F5F9', backgroundColor: '#FFFFFF' },
-  logoutButton: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10 },
-  logoutText: { color: '#E61C24', fontSize: 16, fontWeight: 'bold', marginLeft: 10 }
-});

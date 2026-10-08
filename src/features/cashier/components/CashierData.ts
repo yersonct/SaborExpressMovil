@@ -11,6 +11,10 @@ export interface Order {
   deliveryPerson?: string;
   time: string;
   transferProofUrl?: string;
+  // Nombre del cliente para pedidos "Para Llevar" (guestName en el backend).
+  customerName?: string;
+  // Quién tomó el pedido (mesero/cajero).
+  employeeName?: string;
 }
 
 export interface Employee {

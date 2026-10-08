@@ -1,32 +1,40 @@
-import type { LoginCredentials, AuthResponse } from '../types';
-import { handleResponse } from './handleResponse';
-import { AUTH_ENDPOINTS } from './authEndpoints';
+import type { LoginCredentials, AuthResponse } from "../types";
+import { handleResponse } from "./handleResponse";
+import { AUTH_ENDPOINTS } from "./authEndpoints";
 
-export async function login(credentials: LoginCredentials): Promise<AuthResponse> {
+export async function login(
+  credentials: LoginCredentials,
+): Promise<AuthResponse> {
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 6000); // 8s
+  const timeoutId = setTimeout(() => controller.abort(), 6000);
 
   try {
     const res = await fetch(AUTH_ENDPOINTS.login, {
-      method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-        'Accept': '*/*',
-        'X-DevTunnels-Skip-Browser-Warning': 'true'
-      },
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "*/*" },
       body: JSON.stringify(credentials),
       signal: controller.signal,
     });
     clearTimeout(timeoutId);
     const raw = await handleResponse<any>(res);
-    return {
-      token: raw.token,
-      user: { identifier: raw.identifier, roleId: raw.roleId }
-    };
+
+    // 🔎 TEMPORAL: descomenta, haz un login y revisa la consola de Metro
+    // console.log("RAW LOGIN RESPONSE:", JSON.stringify(raw, null, 2));
+return {
+  token: raw.token,
+  refreshToken: raw.refreshToken,
+  identifier: raw.identifier,
+  roles: raw.roles ?? [],
+  hasActiveShift: raw.hasActiveShift ?? true,
+  activeShiftRoleName: raw.activeShiftRoleName ?? null,
+};
   } catch (err) {
     clearTimeout(timeoutId);
-    if (err instanceof Error && err.name === 'AbortError') {
-      throw { message: 'La solicitud tardó demasiado. Revisa tu conexión.', statusCode: 408 };
+    if (err instanceof Error && err.name === "AbortError") {
+      throw {
+        message: "La solicitud tardó demasiado. Revisa tu conexión.",
+        statusCode: 408,
+      };
     }
     throw err;
   }

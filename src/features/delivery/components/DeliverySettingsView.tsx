@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from "react";
 import { 
   SafeAreaView, 
   View, 
@@ -11,6 +11,11 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRouter } from 'expo-router';
+import { useAuth } from '@/features/auth/context/AuthContext';
+
+import { Alert } from "react-native"; // agrégalo al import existente de react-native
+import { useMyProfile } from "@/features/employees/hooks/useMyProfile";
+import { employeeService } from "@/features/employees/services/employeeService";
 
 // 🔥 IMPORTAMOS EL COMPONENTE DROPDOWN
 import { LanguageDropdown } from '@/components/LanguageDropdown';
@@ -25,9 +30,29 @@ export const DeliverySettingsView = () => {
   // 🔥 Leemos el contexto global del Repartidor
   const { language, setLanguage, isDark, setIsDark } = useDeliveryContext();
   const t = TRANSLATIONS[language] || TRANSLATIONS['es'];
-
+  const { profile } = useMyProfile();
   const [isOnline, setIsOnline] = useState(true);
-  const [autoAccept, setAutoAccept] = useState(false);
+  const [savingAvailability, setSavingAvailability] = useState(false);
+
+  useEffect(() => {
+    if (profile) setIsOnline(profile.isAvailable);
+  }, [profile]);
+
+  const handleToggleOnline = async (value: boolean) => {
+    setIsOnline(value); // optimista
+    setSavingAvailability(true);
+    try {
+      await employeeService.setAvailability(value);
+    } catch (err: any) {
+      setIsOnline(!value); // revierte si falla
+      Alert.alert(
+        "Error",
+        err?.message ?? "No se pudo actualizar tu disponibilidad.",
+      );
+    } finally {
+      setSavingAvailability(false);
+    }
+  };
 
   // Opciones para el Dropdown
   const languageOptions = [
@@ -46,68 +71,92 @@ export const DeliverySettingsView = () => {
     mutedText: '#64748B', border: '#E2E8F0', accent: '#EA1D2C', icon: '#1E293B'
   };
 
-  const onLogoutPress = () => {
-    router.replace('/'); 
+  const { handleLogout } = useAuth();
+
+  const onLogoutPress = async () => {
+    try {
+      await handleLogout(); // revoca el token en backend + borra la sesión local
+    } finally {
+      router.replace('/');
+    }
   };
 
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
-      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
-        
+    <SafeAreaView
+      style={[styles.safeArea, { backgroundColor: colors.background }]}
+    >
+      <ScrollView
+        contentContainerStyle={styles.container}
+        showsVerticalScrollIndicator={false}
+      >
         {/* SECCIÓN: ESTADO DE TRABAJO */}
         <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: colors.mutedText }]}>{t.workStatus}</Text>
-          <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            
+          <Text style={[styles.sectionTitle, { color: colors.mutedText }]}>
+            {t.workStatus}
+          </Text>
+          <View
+            style={[
+              styles.card,
+              { backgroundColor: colors.card, borderColor: colors.border },
+            ]}
+          >
             <View style={styles.settingRow}>
               <View style={styles.settingInfo}>
-                <Ionicons name={isOnline ? "radio" : "radio-outline"} size={24} color={isOnline ? "#10B981" : colors.mutedText} />
+                <Ionicons
+                  name={isOnline ? "radio" : "radio-outline"}
+                  size={24}
+                  color={isOnline ? "#10B981" : colors.mutedText}
+                />
                 <View style={styles.textGroup}>
-                  <Text style={[styles.settingTitle, { color: colors.text }]}>{t.receiveOrders}</Text>
-                  <Text style={[styles.settingDesc, { color: colors.mutedText }]}>{isOnline ? t.onlineDesc : t.offlineDesc}</Text>
+                  <Text style={[styles.settingTitle, { color: colors.text }]}>
+                    {t.receiveOrders}
+                  </Text>
+                  <Text
+                    style={[styles.settingDesc, { color: colors.mutedText }]}
+                  >
+                    {isOnline ? t.onlineDesc : t.offlineDesc}
+                  </Text>
                 </View>
               </View>
-              <Switch 
-                value={isOnline} 
-                onValueChange={setIsOnline} 
-                trackColor={{ false: colors.border, true: '#EA1D2C' }}
+              <Switch
+                value={isOnline}
+                onValueChange={handleToggleOnline}
+                disabled={savingAvailability}
+                trackColor={{ false: colors.border, true: "#EA1D2C" }}
                 thumbColor="#FFFFFF"
               />
             </View>
-            
-            <View style={[styles.divider, { backgroundColor: colors.border }]} />
-            
-            <View style={styles.settingRow}>
-              <View style={styles.settingInfo}>
-                <Ionicons name="flash-outline" size={24} color={colors.text} />
-                <View style={styles.textGroup}>
-                  <Text style={[styles.settingTitle, { color: colors.text }]}>{t.autoAccept}</Text>
-                  <Text style={[styles.settingDesc, { color: colors.mutedText }]}>{t.autoAcceptDesc}</Text>
-                </View>
-              </View>
-              <Switch 
-                value={autoAccept} 
-                onValueChange={setAutoAccept} 
-                trackColor={{ false: colors.border, true: '#EA1D2C' }}
-                thumbColor="#FFFFFF"
-              />
-            </View>
-            
           </View>
         </View>
 
         {/* SECCIÓN: NAVEGACIÓN Y APP */}
         <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: colors.mutedText }]}>{t.navigationApp}</Text>
-          <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            
+          <Text style={[styles.sectionTitle, { color: colors.mutedText }]}>
+            {t.navigationApp}
+          </Text>
+          <View
+            style={[
+              styles.card,
+              { backgroundColor: colors.card, borderColor: colors.border },
+            ]}
+          >
             {/* 🔥 SELECCIÓN DE IDIOMA */}
             <View style={styles.settingRow}>
               <View style={styles.settingInfo}>
-                <Ionicons name="language-outline" size={24} color={colors.text} />
+                <Ionicons
+                  name="language-outline"
+                  size={24}
+                  color={colors.text}
+                />
                 <View style={styles.textGroup}>
-                  <Text style={[styles.settingTitle, { color: colors.text }]}>{t.languageTitle}</Text>
-                  <Text style={[styles.settingDesc, { color: colors.mutedText }]}>{t.languageDesc}</Text>
+                  <Text style={[styles.settingTitle, { color: colors.text }]}>
+                    {t.languageTitle}
+                  </Text>
+                  <Text
+                    style={[styles.settingDesc, { color: colors.mutedText }]}
+                  >
+                    {t.languageDesc}
+                  </Text>
                 </View>
               </View>
               <View style={{ minWidth: 130 }}>
@@ -120,25 +169,28 @@ export const DeliverySettingsView = () => {
                 />
               </View>
             </View>
-            
-            <View style={[styles.divider, { backgroundColor: colors.border }]} />
-            
+
+            <View
+              style={[styles.divider, { backgroundColor: colors.border }]}
+            />
+
             {/* 🔥 MODO OSCURO */}
             <View style={styles.settingRow}>
               <View style={styles.settingInfo}>
                 <Ionicons name="moon-outline" size={24} color={colors.text} />
                 <View style={styles.textGroup}>
-                  <Text style={[styles.settingTitle, { color: colors.text }]}>{t.darkMode}</Text>
+                  <Text style={[styles.settingTitle, { color: colors.text }]}>
+                    {t.darkMode}
+                  </Text>
                 </View>
               </View>
-              <Switch 
-                value={isDark} 
-                onValueChange={setIsDark} 
+              <Switch
+                value={isDark}
+                onValueChange={setIsDark}
                 trackColor={{ false: colors.border, true: colors.accent }}
                 thumbColor="#FFFFFF"
               />
             </View>
-
           </View>
         </View>
 
@@ -146,7 +198,6 @@ export const DeliverySettingsView = () => {
           <Ionicons name="log-out-outline" size={22} color="#FFFFFF" />
           <Text style={styles.logoutButtonText}>{t.logoutBtn}</Text>
         </TouchableOpacity>
-
       </ScrollView>
     </SafeAreaView>
   );

@@ -148,9 +148,9 @@ export const styles = StyleSheet.create({
 
   // CARRITO FLOTANTE Y SELECTORES
   floatingCart: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: '#FFFFFF', borderTopLeftRadius: 24, borderTopRightRadius: 24, elevation: 15, shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.1, shadowRadius: 8 },
-  cartHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },
+  cartHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 14, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },
   cartHeaderText: { fontSize: 16, fontWeight: 'bold', color: '#1E293B', fontFamily: baseFontFamily },
-  cartExpandedArea: { padding: 20, backgroundColor: '#F8FAFC', maxHeight: 400 },
+  cartExpandedArea: { padding: 16, backgroundColor: '#F8FAFC' },
   emptyCartText: { textAlign: 'center', color: '#94A3B8', fontStyle: 'italic' },
 
   cartItemRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },

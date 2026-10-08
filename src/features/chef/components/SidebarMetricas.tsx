@@ -1,38 +1,64 @@
-import React from 'react';
-import { Pedido } from './TableroUtils';
-import { translations, LanguageCode } from './../../../locales/TableroTranslations';
+import React from "react";
+import { View, Text } from "react-native";
+import { OrderSummary, OrderStatus } from "@/features/orders/types/order.types";
+import { chefStyles } from "./style/ChefStyles";
+import { useChefTheme } from "../context/ChefThemeContext";
 
-interface SidebarProps {
-  pedidos: Pedido[];
-  lang: LanguageCode;
-}
+export default function SidebarMetricas({
+  orders,
+}: {
+  orders: OrderSummary[];
+}) {
+  const { colors } = useChefTheme();
+  const pendientes = orders.filter(
+    (o) => o.status === OrderStatus.Confirmed,
+  ).length;
+  const enPreparacion = orders.filter(
+    (o) => o.status === OrderStatus.InPreparation,
+  ).length;
+  const listos = orders.filter((o) => o.status === OrderStatus.Ready).length;
 
-export default function SidebarMetricas({ pedidos, lang }: SidebarProps) {
-  const t = translations[lang];
-  const pedidosPendientes = pedidos.filter(p => p.estado === 'Pendiente').length;
-  
   return (
-    <aside className="sidebar-metricas">
-      <h3 className="sidebar-titulo">{t.summary}</h3>
-
-      <div className="metricas-grid">
-        <div className="metric-box">
-          <h4>{t.completed}</h4>
-          <p className="numero numero-verde">42</p>
-        </div>
-
-        <div className="metric-box">
-          <h4>{t.waiting}</h4>
-          <p className="numero numero-naranja">{pedidosPendientes}</p>
-        </div>
-
-        <div className="metric-box">
-          <h4>{t.avgTime}</h4>
-          <p className="numero numero-azul">
-            14<span className="unidad-tiempo"> {t.min}</span>
-          </p>
-        </div>
-      </div>
-    </aside>
+    <View style={chefStyles.sidebar}>
+      <View
+        style={[
+          chefStyles.metricBox,
+          { backgroundColor: colors.card, borderColor: colors.border },
+        ]}
+      >
+        <Text style={[chefStyles.metricLabel, { color: colors.mutedText }]}>
+          Por preparar
+        </Text>
+        <Text style={[chefStyles.metricValue, { color: "#f97316" }]}>
+          {pendientes}
+        </Text>
+      </View>
+      <View
+        style={[
+          chefStyles.metricBox,
+          { backgroundColor: colors.card, borderColor: colors.border },
+        ]}
+      >
+        <Text style={[chefStyles.metricLabel, { color: colors.mutedText }]}>
+          En preparación
+        </Text>
+        <Text style={[chefStyles.metricValue, { color: "#3b82f6" }]}>
+          {enPreparacion}
+        </Text>
+      </View>
+      <View
+        style={[
+          chefStyles.metricBox,
+          { backgroundColor: colors.card, borderColor: colors.border },
+        ]}
+      >
+        <Text style={[chefStyles.metricLabel, { color: colors.mutedText }]}>
+          Listos
+        </Text>
+        <Text style={[chefStyles.metricValue, { color: "#22c55e" }]}>
+          {listos}
+        </Text>
+      </View>
+    </View>
   );
 }

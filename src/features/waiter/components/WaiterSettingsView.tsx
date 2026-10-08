@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { View, Text, SafeAreaView, ScrollView, Switch, TouchableOpacity, Alert, Platform } from 'react-native';
+import { View, Text, ScrollView, Switch, TouchableOpacity, Alert, Platform } from 'react-native';
+import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useAuth } from '@/features/auth/hooks/useAuth';
+import { useAuth } from "@/features/auth/context/AuthContext";
 import { LanguageDropdown } from '@/components/LanguageDropdown';
 import { settingsStyles as styles } from './style/SettingsStyles';
 import { useWaiterTheme } from '@/features/waiter/context/WaiterThemeContext';
