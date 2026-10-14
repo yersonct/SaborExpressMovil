@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "430480245275",
+    "project_id": "saborexpress-1a7c0",
+    "storage_bucket": "saborexpress-1a7c0.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:430480245275:android:f8c70fa40b9c9779c2eebe",
+        "android_client_info": {
+          "package_name": "com.yersonct.saborexpress"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA9J_974HhtS3X6owA8yeqijft55bpJyNQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

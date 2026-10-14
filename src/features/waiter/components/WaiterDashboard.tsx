@@ -1,357 +1,1102 @@
-import React, { useState } from 'react';
-import { Alert, LayoutAnimation, Platform, SafeAreaView, Text, TouchableOpacity, UIManager, View, Modal, Image } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { useNavigation } from 'expo-router';
+import React, { useState, useEffect, useMemo, useCallback } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import {
+  LayoutAnimation,
+  Platform,
+  Text,
+  TouchableOpacity,
+  View,
+  Modal,
+  useWindowDimensions,
+} from "react-native";
+import { useBranchSettings } from "@/features/branches/hooks/useBranchSettings";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { Ionicons } from "@expo/vector-icons";
+import { useNavigation } from "expo-router";
 
-// 🔥 Importaciones de tus componentes separados
-import { TablesGridView } from './TablesGridView';
-import { ActiveOrdersView } from './ActiveOrdersView';
-import { OrderTakingView } from './OrderTakingView';
-import { useWaiterTheme } from '@/features/waiter/context/WaiterThemeContext';
-import { useWaiterLanguage } from '@/features/waiter/context/WaiterLanguageContext';
+import {
+  orderService,
+  OrderType,
+  OrderStatus,
+  OrderDetailStatus,
+  type OccupiedTableWaiter,
+} from "@/features/orders";
+import { showAppAlert } from "@/features/shared/services/alertEvents";
+import {
+  NotificationToastContainer,
+  ToastNotification,
+} from "@/features/shared/components/NotificationToast";
+import { NotificationCenter } from "@/features/shared/components/NotificationCenter";
 
-import { styles } from './style/WaiterDashboardStyles';
+import { useAuth } from "@/features/auth/context/AuthContext";
+import {
+  getEmployeeIdFromToken,
+  getUserIdFromToken,
+} from "@/features/auth/services/decodeToken";
+import { notificationService } from "@/features/notifications";
+import { normalizeNotificationType } from "@/features/notifications/utils/notificationType";
+import { TablesGridView } from "./TablesGridView";
+import { ActiveOrdersView } from "./ActiveOrdersView";
+import { OrderTakingView } from "./OrderTakingView";
+import { useWaiterTheme } from "@/features/waiter/context/WaiterThemeContext";
+import { useWaiterLanguage } from "@/features/waiter/context/WaiterLanguageContext";
+import { useWaiterNotificationPreferences } from "@/features/waiter/context/WaiterNotificationPreferencesContext";
+import { useMyBranch } from "@/features/employees/hooks/useMyBranch";
+import { useMyProfile } from "@/features/employees/hooks/useMyProfile";
+import { useTables } from "@/features/tables/hooks/useTables";
+import { TableStatus } from "@/features/tables/types/table.types";
+import { useActiveOrders } from "@/features/orders/hooks/useActiveOrders";
+import { useKitchenNotifications } from "@/features/shared/hooks/useKitchenNotifications";
+import { useRealtimeEvents } from "@/features/shared/hooks/useRealtimeEvents";
+import { getColombiaDayKey } from "@/features/shared/utils/colombia-date";
+import { styles } from "./style/WaiterDashboardStyles";
 
-const baseFontFamily = Platform.select({ web: 'system-ui, -apple-system, sans-serif', default: undefined });
+const baseFontFamily = Platform.select({
+  web: "system-ui, -apple-system, sans-serif",
+  default: undefined,
+});
 
-if (Platform.OS === 'android') {
-  if (UIManager.setLayoutAnimationEnabledExperimental) {
-    UIManager.setLayoutAnimationEnabledExperimental(true);
-  }
+const WAITER_LAST_NOTIFICATIONS_VIEWED_KEY =
+  "saborexpress-waiter-notifications-seen-through";
+
+function getTodayInColombiaKey(date: Date): string {
+  return getColombiaDayKey(date) ?? "";
 }
 
-// Datos Simulados
-const INITIAL_TABLES = [
-  { id: 't1', name: 'Mesa 1',  status: 'Libre', type: 'normal' },
-  { id: 't2', name: 'Mesa 2',  status: 'Ocupada', type: 'normal' },
-  { id: 't3', name: 'Mesa 3',  status: 'Libre', type: 'normal' },
-  { id: 't4', name: 'Mesa VIP',  status: 'Ocupada', type: 'vip' },
-  { id: 't5', name: 'Terraza 1',  status: 'Libre', type: 'outdoor' },
-  { id: 't6', name: 'Barra',  status: 'Libre', type: 'bar' },
-];
-
-const INITIAL_ORDERS = [
-  {
-    id: 'ORD-001',
-    tableId: 't2',
-    tableName: 'Mesa 2',
-    time: '12:30 PM',
-    status: 'PREPARANDO',
-    total: 20000,
-    items: [
-      { id: 'm1', name: 'Hamburguesa Sabor', quantity: 1, price: 15000, category: 'COCINA', cartId: 'c1', isToGo: false, isDelivered: false },
-      { id: 'm3', name: 'Papas Francesas', quantity: 1, price: 5000, category: 'COCINA', cartId: 'c2', isToGo: true, isDelivered: false }
-    ]
-  },
-  {
-    id: 'ORD-002',
-    tableId: 't4',
-    tableName: 'Mesa VIP',
-    time: '12:45 PM',
-    status: 'LISTO',
-    total: 18000,
-    items: [
-      { id: 'm2', name: 'Pizza Express', quantity: 1, price: 18000, category: 'COCINA', cartId: 'c3', isToGo: false, isDelivered: true }
-    ]
-  }
-];
+function isFromColombiaDay(
+  createdAt: string | undefined,
+  dayKey: string,
+): boolean {
+  if (!createdAt) return false;
+  return getColombiaDayKey(createdAt) === dayKey;
+}
 
 export const WaiterDashboard = () => {
   const navigation = useNavigation();
+  const { width: windowWidth } = useWindowDimensions();
   const { colors } = useWaiterTheme();
+  const { soundNotifications } = useWaiterNotificationPreferences();
   const { t } = useWaiterLanguage();
+  const { user } = useAuth();
+  const { profile: employeeProfile } = useMyProfile();
+  const employeeDisplayName = [employeeProfile?.name, employeeProfile?.lastName]
+    .filter(Boolean)
+    .join(" ")
+    .trim();
+  const myEmployeeId = user?.token ? getEmployeeIdFromToken(user.token) : null;
+  const myUserId = user?.token ? getUserIdFromToken(user.token) : null;
+  const { branchId } = useMyBranch();
+  const { settings: branchSettings } = useBranchSettings(branchId);
+  const {
+    tables: realTables,
+    setTableStatus,
+    refetch: refetchTables,
+  } = useTables(branchId);
 
-  const [activeTab, setActiveTab] = useState<'MESAS' | 'ORDENES'>('MESAS');
-  const [tables, setTables] = useState<any[]>(INITIAL_TABLES);
-  const [activeOrders, setActiveOrders] = useState<any[]>(INITIAL_ORDERS);
+  const tables = realTables
+    .filter((table) => table.status !== TableStatus.Inactive)
+    .map((table) => ({
+      id: String(table.id),
+      name: `Mesa ${table.number}`,
+      status: table.status === TableStatus.Available ? "Libre" : "Ocupada",
+      type: "normal",
+    }));
+
+  const [activeTab, setActiveTab] = useState<"MESAS" | "ORDENES">("MESAS");
+  const { orders: activeOrders, refetch: refetchOrders } =
+    useActiveOrders(branchId);
+  const [occupiedTableWaiters, setOccupiedTableWaiters] = useState<
+    OccupiedTableWaiter[]
+  >([]);
+  const refetchOccupiedTableWaiters = useCallback(async () => {
+    if (!branchId) {
+      setOccupiedTableWaiters([]);
+      return null;
+    }
+    try {
+      const assignments = await orderService.getOccupiedTableWaiters(branchId);
+      setOccupiedTableWaiters(assignments);
+      return assignments;
+    } catch (error) {
+      console.log("No se pudo actualizar quién atiende cada mesa:", error);
+      return null;
+    }
+  }, [branchId]);
+
+  useEffect(() => {
+    void refetchOccupiedTableWaiters();
+  }, [refetchOccupiedTableWaiters]);
   const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
+  const [toasts, setToasts] = useState<ToastNotification[]>([]);
+  const [notificationHistory, setNotificationHistory] = useState<
+    ToastNotification[]
+  >([]);
+  const [todayKey, setTodayKey] = useState(() =>
+    getTodayInColombiaKey(new Date()),
+  );
+  const [lastSeenNotificationId, setLastSeenNotificationId] = useState<
+    number | null
+  >(null);
+
+  useEffect(() => {
+    const timer = setInterval(
+      () => setTodayKey(getTodayInColombiaKey(new Date())),
+      60_000,
+    );
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    if (!myUserId) {
+      setLastSeenNotificationId(0);
+      return () => {
+        active = false;
+      };
+    }
+
+    AsyncStorage.getItem(`${WAITER_LAST_NOTIFICATIONS_VIEWED_KEY}:${myUserId}`)
+      .then((stored) => {
+        if (!active) return;
+        const parsed = stored ? Number(stored) : 0;
+        setLastSeenNotificationId(
+          Number.isFinite(parsed) && parsed > 0 ? parsed : 0,
+        );
+      })
+      .catch(() => {
+        if (active) setLastSeenNotificationId(0);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [myUserId]);
+
+  const todaysNotifications = useMemo(
+    () =>
+      notificationHistory.filter((item) =>
+        isFromColombiaDay(item.createdAt, todayKey),
+      ),
+    [notificationHistory, todayKey],
+  );
+  const unreadCount = useMemo(() => {
+    if (lastSeenNotificationId === null) return 0;
+    return todaysNotifications.filter(
+      (item) => item.isRead !== true && item.id > lastSeenNotificationId,
+    ).length;
+  }, [todaysNotifications, lastSeenNotificationId]);
+
+  useEffect(() => {
+    setNotificationHistory((prev) =>
+      prev.filter((item) => isFromColombiaDay(item.createdAt, todayKey)),
+    );
+    setToasts((prev) =>
+      prev.filter((item) => isFromColombiaDay(item.createdAt, todayKey)),
+    );
+  }, [todayKey]);
+
+  // Carga historial al entrar y al recibir cambios o recuperar la conexión.
+  const loadNotificationHistory = useCallback(async () => {
+    if (!myUserId) return;
+    try {
+      const list = await notificationService.getByUser(myUserId);
+      const mapped: ToastNotification[] = list
+        .filter((n) => isFromColombiaDay(n.createdAt, todayKey))
+        .map((n) => ({
+          id: n.id,
+          title: n.title,
+          message: n.message,
+          type: normalizeNotificationType(n.type),
+          relatedEntityType: n.relatedEntityType,
+          relatedEntityId: n.relatedEntityId,
+          createdAt: n.createdAt,
+          isRead: n.isRead,
+        }))
+        .filter((n) => n.type === "OrderReady" || n.type === "TableAvailable");
+      setNotificationHistory((previous) => {
+        const merged = new Map<number, ToastNotification>();
+        mapped.forEach((item) => merged.set(item.id, item));
+        previous
+          .filter((item) => isFromColombiaDay(item.createdAt, todayKey))
+          .forEach((item) => merged.set(item.id, item));
+        return Array.from(merged.values());
+      });
+    } catch (err) {
+      console.log("No se pudo cargar el histórico de notificaciones:", err);
+    }
+  }, [myUserId, todayKey]);
+
+  useEffect(() => {
+    void loadNotificationHistory();
+  }, [loadNotificationHistory]);
+
+  useRealtimeEvents(
+    ["NotificationsChanged", "RealtimeConnected"],
+    () => void loadNotificationHistory(),
+  );
+
+  // Sonido y aviso inmediato cuando cocina cambia el estado de un pedido.
+  const { soundEnabled, enableSound } = useKitchenNotifications(
+    (notification) => {
+      const normalizedType = normalizeNotificationType(notification.type);
+
+      // Igual que con el histórico: en la pantalla de Mesero solo nos interesa
+      // "pedido listo". Si este usuario también es Gerente/Administrador, las
+      // notificaciones de "Pedido nuevo" no deben aparecer ni sonar aquí.
+      if (
+        normalizedType !== "OrderReady" &&
+        normalizedType !== "TableAvailable"
+      )
+        return;
+
+      const createdAt = notification.createdAt ?? new Date().toISOString();
+      if (!isFromColombiaDay(createdAt, todayKey)) return;
+
+      const toast: ToastNotification = {
+        id: notification.id ?? -Date.now(),
+        title: notification.title,
+        message: notification.message,
+        type: normalizedType,
+        relatedEntityType: notification.relatedEntityType,
+        relatedEntityId: notification.relatedEntityId,
+        createdAt,
+        isRead: false,
+      };
+      setToasts((prev) => [...prev, toast]);
+      setNotificationHistory((prev) =>
+        prev.some((item) => item.id === toast.id) ? prev : [...prev, toast],
+      );
+    },
+    () => {
+      void refetchOccupiedTableWaiters();
+    },
+  );
+
+  const dismissToast = (id: number) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  };
+  const handleNotificationSelect = (notification: ToastNotification) => {
+    if (
+      notification.relatedEntityType === "Order" &&
+      notification.relatedEntityId
+    ) {
+      setActiveTab("ORDENES");
+      setExpandedOrderId(String(notification.relatedEntityId));
+    }
+  };
+
+  // Recordamos qué notificaciones ya vio para que no reaparezcan en el contador.
+  const handleOpenNotifications = () => {
+    const seenThroughId = todaysNotifications.reduce(
+      (maxId, item) => Math.max(maxId, item.id),
+      lastSeenNotificationId ?? 0,
+    );
+    setLastSeenNotificationId(seenThroughId);
+    setNotificationHistory((prev) =>
+      prev.map((item) => ({ ...item, isRead: true })),
+    );
+    if (myUserId) {
+      AsyncStorage.setItem(
+        `${WAITER_LAST_NOTIFICATIONS_VIEWED_KEY}:${myUserId}`,
+        String(seenThroughId),
+      ).catch(() => {});
+      notificationService.markAllAsRead(myUserId).catch(() => {});
+    }
+  };
+
+  // "Limpiar" ahora sí las borra en el backend, para que no reaparezcan
+  // al salir y volver a entrar a la pantalla.
+  const handleClearNotifications = () => {
+    const idsToDelete = notificationHistory.map((n) => n.id);
+    setNotificationHistory([]);
+    idsToDelete.forEach((id) => {
+      notificationService.delete(id).catch(() => {});
+    });
+  };
 
   const [isQrMenuVisible, setIsQrMenuVisible] = useState(false);
   const [activeTableForOrder, setActiveTableForOrder] = useState<any>(null);
+  const [activeOrderId, setActiveOrderId] = useState<number | null>(null);
   const [orderItems, setOrderItems] = useState<any[]>([]);
   const [isCartExpanded, setIsCartExpanded] = useState(false);
-  const [destType, setDestType] = useState<'particular' | 'mesa'>('particular');
+  const [destType, setDestType] = useState<"particular" | "mesa">("particular");
   const [linkedTableId, setLinkedTableId] = useState<string | null>(null);
-  const [toGoCustomerName, setToGoCustomerName] = useState('');
+  const [toGoCustomerName, setToGoCustomerName] = useState("");
 
-  const handleTablePress = (table: any) => {
-    if (table.status === 'Ocupada') {
-      Alert.alert(
-        t.tableOccupiedTitle || 'Mesa Ocupada',
-        t.tableOccupiedMessage || 'Ve a la pestaña de órdenes activas para ver o agregar productos.',
-        [
-          { text: t.tableOccupiedViewOrders || 'Ver Órdenes', onPress: () => setActiveTab('ORDENES') },
-          { text: t.tableOccupiedCancel || 'Cancelar', style: 'cancel' }
-        ]
+  const handleTablePress = async (table: any) => {
+    if (table.status === "Ocupada") {
+      const orderForTable = activeOrders.find((o) => o.tableId === table.id);
+      let assignment = occupiedTableWaiters.find(
+        (item) => String(item.tableId) === String(table.id),
       );
+      if (!assignment) {
+        const refreshedAssignments = await refetchOccupiedTableWaiters();
+        if (!refreshedAssignments) {
+          showAppAlert(
+            t.errorTitle || "Error",
+            t.tableWaiterLoadError ||
+              "No se pudo consultar quién atiende esta mesa. Revisa la conexión e inténtalo de nuevo.",
+            [{ text: t.tableOccupiedCancel || "Entendido", style: "cancel" }],
+          );
+          return;
+        }
+        assignment = refreshedAssignments?.find(
+          (item) => String(item.tableId) === String(table.id),
+        );
+      }
+      const assignedEmployeeId =
+        assignment?.employeeId ?? orderForTable?.employeeId ?? null;
+      const assignedEmployeeName =
+        assignment?.employeeName ?? orderForTable?.employeeName ?? null;
+      const isMyOrder =
+        assignedEmployeeId !== null && assignedEmployeeId === myEmployeeId;
+
+      if (isMyOrder) {
+        showAppAlert(
+          t.tableOccupiedTitle || "Mesa Ocupada",
+          t.tableOccupiedMessage ||
+            "Ve a la pestaña de órdenes activas para ver o agregar productos.",
+          [
+            {
+              text: t.tableOccupiedViewOrders || "Ver Órdenes",
+              onPress: () => setActiveTab("ORDENES"),
+            },
+            { text: t.tableOccupiedCancel || "Cancelar", style: "cancel" },
+          ],
+        );
+      } else {
+        const waiterName = assignedEmployeeName || t.otherWaiter;
+        showAppAlert(
+          t.tableUnavailableTitle,
+          t.tableUnavailableMessage.replace("{waiter}", waiterName),
+          [{ text: t.tableOccupiedCancel || "Entendido", style: "cancel" }],
+        );
+      }
       return;
     }
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setActiveTableForOrder({ ...table, isGlobalToGo: false });
+    setActiveOrderId(null); // 👈 nuevo
     setOrderItems([]);
   };
 
   const handleStartToGoOrder = () => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setActiveTableForOrder({ id: `temp_togo`, name: t.dashboardParaLlevar || `Pedido Para Llevar`, isGlobalToGo: true });
-    setDestType('particular');
+    setActiveTableForOrder({
+      id: `temp_togo`,
+      name: t.dashboardParaLlevar || `Pedido Para Llevar`,
+      isGlobalToGo: true,
+    });
+    setActiveOrderId(null);
+    setDestType("particular");
     setLinkedTableId(null);
-    setToGoCustomerName('');
+    setToGoCustomerName("");
     setOrderItems([]);
   };
 
   const handleAddMoreToOrder = (existingOrder: any) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    let table = tables.find(t => t.id === existingOrder.tableId) || { id: existingOrder.tableId, name: existingOrder.tableName, status: 'Ocupada', isGlobalToGo: false };
+    let table = tables.find((t) => t.id === existingOrder.tableId) || {
+      id: existingOrder.tableId,
+      name: existingOrder.tableName,
+      status: "Ocupada",
+      isGlobalToGo: false,
+    };
     setActiveTableForOrder(table);
-    setOrderItems([...existingOrder.items]);
+    setActiveOrderId(Number(existingOrder.id));
+    setOrderItems(
+      existingOrder.items.map((item: any) => ({
+        ...item,
+        alreadySubmitted: true,
+      })),
+    );
     setIsCartExpanded(false);
   };
 
-  const handleCancelOrder = (orderToCancel: any) => {
+  const handleCancelOrder = async (orderToCancel: any) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    try {
+      // Se consulta el pedido REAL justo ahora: la lista de la pantalla puede
+      // estar vieja (cocina pudo marcar algo "Listo" sin que el mesero lo vea).
+      const fresh = await orderService.getById(Number(orderToCancel.id));
+      const live = fresh.orderDetails.filter(
+        (d) =>
+          d.status !== OrderDetailStatus.Voided &&
+          d.status !== OrderDetailStatus.Cancelled,
+      );
+      const pending = live.filter(
+        (d) => d.status === OrderDetailStatus.Pending,
+      );
+      // Si TODO está en espera se cancela el pedido completo (libera la mesa).
+      // Si cocina ya tocó algo, solo se anulan los productos que siguen en espera.
+      const onlyPending = live.length > 0 && pending.length === live.length;
 
-    const deliveredItems = orderToCancel.items.filter((item: any) => item.isDelivered === true);
-
-    if (deliveredItems.length > 0) {
-      const newTotal = deliveredItems.reduce((sum: number, item: any) => sum + (item.price * item.quantity), 0);
-
-      setActiveOrders(activeOrders.map(order =>
-        order.id === orderToCancel.id
-          ? { ...order, status: 'LISTO', items: deliveredItems, total: newTotal }
-          : order
-      ));
-
-      Alert.alert(t.orderAdjustedTitle || 'Orden Ajustada', t.orderAdjustedMessage || 'Se cancelaron los nuevos productos solicitados. La mesa mantiene los platos que ya le habías entregado.');
-    } else {
-      setActiveOrders(activeOrders.filter(o => o.id !== orderToCancel.id));
-
-      if (!orderToCancel.tableId.includes('particular')) {
-        setTables(tables.map(t => t.id === orderToCancel.tableId ? { ...t, status: 'Libre' } : t));
+      if (onlyPending) {
+        await orderService.cancel(
+          Number(orderToCancel.id),
+          "Cancelado por el mesero",
+        );
+      } else {
+        await Promise.all(
+          pending.map((d) =>
+            orderService.voidDetail(d.id, "Quitado por el mesero"),
+          ),
+        );
       }
+      await refetchOrders();
+      await refetchTables();
+    } catch (err: any) {
+      showAppAlert(
+        t.errorTitle || "Error",
+        err?.message ?? "No se pudo cancelar el pedido.",
+      );
     }
   };
 
-  const handleDeliverOrder = (orderToDeliver: any) => {
+  const handleDeliverOrder = async (orderToDeliver: any) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setActiveOrders(activeOrders.filter(o => o.id !== orderToDeliver.id));
+    await refetchOrders();
   };
 
-  const handleMarkOrderReady = (orderToMarkReady: any) => {
+  const handleMarkOrderReady = async (orderToMarkReady: any) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setActiveOrders(activeOrders.map(order =>
-      order.id === orderToMarkReady.id
-        ? { ...order, status: 'LISTO', items: orderToMarkReady.items }
-        : order
-    ));
+    const realOrder = activeOrders.find((o) => o.id === orderToMarkReady.id);
+    const pendingItems = (realOrder?.items ?? []).filter(
+      (i: any) => !i.isDelivered,
+    );
+
+    if (pendingItems.length === 0) {
+      return;
+    }
+
+    const allReady = pendingItems.every((i: any) => i.status === "Ready");
+    if (!allReady) {
+      showAppAlert(
+        t.warningTitle || "Aviso",
+        "Todavía hay platos que no están listos en cocina.",
+      );
+      return;
+    }
+
+    try {
+      // Confirma cada plato antes de mandar el siguiente para que la última
+      // confirmación pueda liberar la mesa al ver el pedido completo.
+      for (const item of pendingItems) {
+        await orderService.markDelivered(Number(item.cartId));
+      }
+      await refetchOrders();
+    } catch (err: any) {
+      showAppAlert(
+        t.errorTitle || "Error",
+        err?.message ?? "No se pudo marcar el pedido como entregado.",
+      );
+    }
   };
 
-  const handleAddItem = (product: any, note: string = '') => {
+  const handleAddItem = (product: any, note: string = "") => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     const defaultToGo = activeTableForOrder?.isGlobalToGo ? true : false;
 
-    const existingIndex = orderItems.findIndex(item =>
-      item.id === product.id &&
-      item.isToGo === defaultToGo &&
-      (item.note || '') === note &&
-      item.isDelivered !== true
+    // Solo se agrupa con líneas NUEVAS (aún no enviadas a cocina). Si el plato
+    // ya fue enviado, se crea una línea aparte: así llega a cocina como un
+    // lote nuevo y no altera lo que ya estaba en preparación o listo.
+    const existingIndex = orderItems.findIndex(
+      (item) =>
+        item.id === product.id &&
+        item.isToGo === defaultToGo &&
+        (item.note || "") === note &&
+        item.isDelivered !== true &&
+        !item.alreadySubmitted,
     );
 
     if (existingIndex >= 0) {
-      const newItems = [...orderItems];
-      newItems[existingIndex].quantity += 1;
-      setOrderItems(newItems);
+      setOrderItems((prev) =>
+        prev.map((item, i) =>
+          i === existingIndex ? { ...item, quantity: item.quantity + 1 } : item,
+        ),
+      );
     } else {
-      setOrderItems([...orderItems, {
-        ...product,
-        quantity: 1,
-        isToGo: defaultToGo,
-        note,
-        cartId: Math.random().toString(),
-        isDelivered: false
-      }]);
+      setOrderItems([
+        ...orderItems,
+        {
+          ...product,
+          quantity: 1,
+          isToGo: defaultToGo,
+          note,
+          cartId: Math.random().toString(),
+          isDelivered: false,
+        },
+      ]);
     }
     if (orderItems.length === 0) setIsCartExpanded(true);
   };
 
-  const handleUpdateItemNote = (cartId: string, note: string) => {
+  const handleUpdateItemNote = async (cartId: string, note: string) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setOrderItems(items => items.map(item => item.cartId === cartId ? { ...item, note } : item));
+    const itemToUpdate = orderItems.find((i) => i.cartId === cartId);
+    if (!itemToUpdate) return false;
+
+    const lockMessage = getKitchenLockMessage(itemToUpdate);
+    if (lockMessage) {
+      showAppAlert(
+        t.actionNotAllowedTitle || "Acción no permitida",
+        lockMessage,
+      );
+      return false;
+    }
+
+    if (itemToUpdate.alreadySubmitted) {
+      if (!activeOrderId) {
+        showAppAlert(
+          t.errorTitle || "Error",
+          t.orderItemMissingOrder || "No se pudo identificar el pedido.",
+        );
+        return false;
+      }
+      try {
+        const orderId = Number(activeOrderId);
+        const freshOrder = await orderService.getById(orderId);
+        const freshDetail = freshOrder.orderDetails.find(
+          (detail) => detail.id === Number(cartId),
+        );
+        if (!freshDetail || freshDetail.status !== OrderDetailStatus.Pending) {
+          await refetchOrders();
+          showAppAlert(
+            t.actionNotAllowedTitle || "Acción no permitida",
+            t.orderItemNotPendingEdit ||
+              "Este producto ya no está pendiente y no se puede modificar.",
+          );
+          return false;
+        }
+
+        await orderService.updateDetail(freshDetail.id, {
+          quantity: freshDetail.quantity,
+          notes: note || null,
+        });
+        await refetchOrders();
+      } catch (err: any) {
+        showAppAlert(
+          t.errorTitle || "Error",
+          err?.message ||
+            t.orderItemSaveNoteError ||
+            "No se pudo guardar la nota del producto.",
+        );
+        return false;
+      }
+    }
+
+    setOrderItems((items) =>
+      items.map((item) => (item.cartId === cartId ? { ...item, note } : item)),
+    );
+    return true;
+  };
+  // Bloquea las notas y anulaciones si cocina ya tomó el plato.
+  // Devuelve el mensaje de alerta con el estado real, o null si se puede editar.
+  const getKitchenLockMessage = (item: any): string | null => {
+    if (item?.isDelivered || item?.status === "Delivered") {
+      return (
+        t.orderItemDeliveredLock ||
+        "Este producto ya fue entregado y no se puede modificar."
+      );
+    }
+    if (item?.status === "InPreparation") {
+      return "Este plato ya está en preparación en cocina, no se puede modificar.";
+    }
+    if (item?.status === "Ready") {
+      return "Este plato ya está listo en cocina, no se puede modificar.";
+    }
+    return null;
   };
 
-  const handleRemoveItem = (cartId: string) => {
+  const handleRemoveItem = async (cartId: string) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    const itemToRemove = orderItems.find(i => i.cartId === cartId);
-    if (itemToRemove?.isDelivered) {
-      Alert.alert(t.actionNotAllowedTitle || 'Acción no permitida', t.actionNotAllowedRemoveMessage || 'No puedes eliminar un plato que ya fue entregado al cliente.');
+    const itemToRemove = orderItems.find((i) => i.cartId === cartId);
+    if (!itemToRemove) return;
+
+    if (itemToRemove.isDelivered || itemToRemove.status === "Delivered") {
+      showAppAlert(
+        t.actionNotAllowedTitle || "Acción no permitida",
+        t.actionNotAllowedRemoveMessage ||
+          "No puedes eliminar un plato que ya fue entregado al cliente.",
+      );
       return;
     }
-    const updated = orderItems.filter(item => item.cartId !== cartId);
+
+    const lockMessage = getKitchenLockMessage(itemToRemove);
+    if (lockMessage) {
+      showAppAlert(
+        t.actionNotAllowedTitle || "Acción no permitida",
+        lockMessage,
+      );
+      return;
+    }
+
+    if (itemToRemove?.alreadySubmitted) {
+      if (!activeOrderId) {
+        showAppAlert(
+          t.errorTitle || "Error",
+          t.orderItemMissingOrder || "No se pudo identificar el pedido.",
+        );
+        return;
+      }
+      try {
+        const orderId = Number(activeOrderId);
+        const freshOrder = await orderService.getById(orderId);
+        const freshDetail = freshOrder.orderDetails.find(
+          (detail) => detail.id === Number(cartId),
+        );
+        if (!freshDetail || freshDetail.status !== OrderDetailStatus.Pending) {
+          await refetchOrders();
+          showAppAlert(
+            t.actionNotAllowedTitle || "Acción no permitida",
+            t.orderItemNotPendingCancel ||
+              "Este producto ya no está pendiente y no se puede cancelar.",
+          );
+          return;
+        }
+
+        await orderService.voidDetail(
+          freshDetail.id,
+          t.orderItemVoidReason || "Quitado por el mesero",
+        );
+        await refetchOrders();
+      } catch (err: any) {
+        showAppAlert(
+          t.errorTitle || "Error",
+          err?.message ||
+            t.orderItemCancelError ||
+            "No se pudo cancelar el producto.",
+        );
+        return;
+      }
+    }
+
+    const updated = orderItems.filter((item) => item.cartId !== cartId);
     setOrderItems(updated);
     if (updated.length === 0) setIsCartExpanded(false);
   };
 
-  const toggleItemToGo = (cartId: string) => {
+  const toggleItemToGo = async (cartId: string) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    const itemToToggle = orderItems.find(i => i.cartId === cartId);
-    if (itemToToggle?.isDelivered) {
-      Alert.alert(t.actionNotAllowedTitle || 'Acción no permitida', t.actionNotAllowedToGoMessage || 'El plato ya se sirvió, no se puede cambiar a "para llevar".');
+    const itemToToggle = orderItems.find((i) => i.cartId === cartId);
+    if (!itemToToggle) return;
+
+    const isToGo = !itemToToggle.isToGo;
+
+    if (itemToToggle.alreadySubmitted) {
+      const orderDetailId = Number(cartId);
+      if (!Number.isInteger(orderDetailId) || orderDetailId <= 0) {
+        showAppAlert(
+          t.errorTitle || "Error",
+          t.orderItemMissingDetail ||
+            "No se pudo identificar el producto del pedido.",
+        );
+        return;
+      }
+
+      try {
+        await orderService.updateDetailToGo(orderDetailId, isToGo);
+        setOrderItems((items) =>
+          items.map((item) =>
+            item.cartId === cartId ? { ...item, isToGo } : item,
+          ),
+        );
+        await refetchOrders();
+      } catch (err: any) {
+        showAppAlert(
+          t.errorTitle || "Error",
+          err?.message ||
+            t.orderItemToGoError ||
+            "No se pudo actualizar si el producto es para llevar.",
+        );
+      }
       return;
     }
-    setOrderItems(items => items.map(i => i.cartId === cartId ? { ...i, isToGo: !i.isToGo } : i));
+
+    setOrderItems((items) =>
+      items.map((i) => (i.cartId === cartId ? { ...i, isToGo } : i)),
+    );
   };
 
-  const handleSubmitOrder = () => {
-    if (orderItems.length === 0) return Alert.alert(t.errorTitle || 'Error', t.errorAddProductsMessage || 'Agrega productos al pedido.');
+  const handleSubmitOrder = async () => {
+    if (orderItems.length === 0)
+      return showAppAlert(
+        t.errorTitle || "Error",
+        t.errorAddProductsMessage || "Agrega productos al pedido.",
+      );
 
-    let finalTableId = activeTableForOrder.id;
+    if (!branchId) {
+      return showAppAlert(
+        t.errorTitle || "Error",
+        "No se pudo determinar tu sede.",
+      );
+    }
+
+    // ----- CASO A: ya existe un pedido para esta mesa, solo agregamos lo nuevo -----
+    if (activeOrderId) {
+      const newItems = orderItems.filter((item) => !item.alreadySubmitted);
+
+      if (newItems.length === 0) {
+        showAppAlert(
+          t.warningTitle || "Aviso",
+          "No hay productos nuevos para enviar.",
+        );
+        return;
+      }
+
+      try {
+        await orderService.addDetails(
+          activeOrderId,
+          newItems.map((item) => ({
+            productId: item.id,
+            quantity: item.quantity,
+            notes: item.note?.trim() || null,
+            isToGo: item.isToGo ?? false,
+          })),
+        );
+
+        await refetchOrders();
+
+        showAppAlert(
+          t.orderUpdatedTitle || "¡Pedido Actualizado!",
+          (
+            t.orderUpdatedMessage || "Se actualizó la cuenta de {tableName}."
+          ).replace("{tableName}", activeTableForOrder.name),
+        );
+      } catch (err: any) {
+        showAppAlert(
+          t.errorTitle || "Error",
+          err?.message ?? "No se pudo actualizar el pedido.",
+        );
+        return;
+      }
+
+      setActiveTableForOrder(null);
+      setActiveOrderId(null);
+      setOrderItems([]);
+      setActiveTab("ORDENES");
+      return;
+    }
+
+    // ----- CASO B: pedido nuevo (mesa libre o para llevar) -----
+    let finalTableId: number | null = null;
     let finalTableName = activeTableForOrder.name;
-    let updateRealTable = false;
+    let orderType = OrderType.DineIn;
 
     if (activeTableForOrder.isGlobalToGo) {
-      if (destType === 'particular') {
-        finalTableId = `particular_${Date.now()}`;
-        const personName = toGoCustomerName.trim() !== '' ? toGoCustomerName.trim() : (t.orderToGoDefaultName || 'Particular');
-        finalTableName = (t.orderToGoPrefix || 'Llevar - ') + personName;
+      orderType = OrderType.ToGo;
+      if (destType === "particular") {
+        finalTableId = null;
+        const personName =
+          toGoCustomerName.trim() !== ""
+            ? toGoCustomerName.trim()
+            : t.orderToGoDefaultName || "Particular";
+        finalTableName = (t.orderToGoPrefix || "Llevar - ") + personName;
       } else {
-        if (!linkedTableId) return Alert.alert(t.warningTitle || 'Aviso', t.warningSelectTableMessage || 'Selecciona a qué mesa asignar este pedido.');
-        const selectedTable = tables.find(x => x.id === linkedTableId);
-        finalTableId = selectedTable?.id || finalTableId;
+        if (!linkedTableId)
+          return showAppAlert(
+            t.warningTitle || "Aviso",
+            t.warningSelectTableMessage ||
+              "Selecciona a qué mesa asignar este pedido.",
+          );
+        finalTableId = Number(linkedTableId);
+        const selectedTable = tables.find((x) => x.id === linkedTableId);
         finalTableName = selectedTable?.name || finalTableName;
-        updateRealTable = true;
       }
     } else {
-      updateRealTable = true;
+      finalTableId = Number(activeTableForOrder.id);
     }
 
-    const orderTotal = orderItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-    const existingOrderIndex = activeOrders.findIndex(o => o.tableId === finalTableId);
+    if (finalTableId !== null && !Number.isFinite(finalTableId)) {
+      showAppAlert(t.errorTitle || "Error", t.invalidTableMessage);
+      return;
+    }
 
-    if (existingOrderIndex >= 0) {
-      const updatedOrders = [...activeOrders];
-      updatedOrders[existingOrderIndex] = {
-        ...activeOrders[existingOrderIndex],
-        items: orderItems,
-        total: orderTotal,
-        status: 'PREPARANDO'
-      };
-      setActiveOrders(updatedOrders);
-      Alert.alert(t.orderUpdatedTitle || '¡Pedido Actualizado!', (t.orderUpdatedMessage || 'Se actualizó la cuenta de {tableName}.').replace('{tableName}', finalTableName));
-    } else {
-      const newOrder = {
-        id: `ORD-${Math.floor(Math.random() * 1000)}`,
+    let createdOrder: any = null;
+    try {
+      createdOrder = await orderService.create({
         tableId: finalTableId,
-        tableName: finalTableName,
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        status: 'PREPARANDO',
-        total: orderTotal,
-        items: orderItems
-      };
-      setActiveOrders([newOrder, ...activeOrders]);
-      Alert.alert(t.orderSentTitle || '¡Pedido Enviado!', t.orderSentMessage || 'El pedido fue enviado a la cocina.');
-    }
+        branchId,
+        orderType,
+        notes: null,
+        guestName:
+          activeTableForOrder.isGlobalToGo && destType === "particular"
+            ? toGoCustomerName.trim() || null
+            : null,
+      });
 
-    if (updateRealTable) {
-      setTables(tables.map(t => t.id === finalTableId ? { ...t, status: 'Ocupada' } : t));
+      await orderService.addDetails(
+        createdOrder.id,
+        orderItems.map((item) => ({
+          productId: item.id,
+          quantity: item.quantity,
+          notes: item.note?.trim() || null,
+          isToGo: item.isToGo ?? false,
+        })),
+      );
+
+      await orderService.updateStatus(createdOrder.id, OrderStatus.Confirmed);
+
+      await refetchOrders();
+
+      if (finalTableId) {
+        await refetchTables();
+      }
+
+      showAppAlert(
+        t.orderSentTitle || "¡Pedido Enviado!",
+        t.orderSentMessage || "El pedido fue enviado a la cocina.",
+      );
+    } catch (err: any) {
+      // Si el pedido ya se creó pero algo después falló (detalles o confirmación),
+      // lo cancelamos para no dejar la mesa ocupada "a medias" sin pedido válido.
+      if (createdOrder) {
+        try {
+          await orderService.cancel(
+            createdOrder.id,
+            "Cancelado automáticamente: error al enviar a cocina",
+          );
+        } catch (cancelErr) {
+          console.log("No se pudo revertir el pedido fallido:", cancelErr);
+        }
+      }
+
+      await refetchTables();
+
+      showAppAlert(
+        t.errorTitle || "Error",
+        err?.message ?? "No se pudo crear el pedido. Intenta de nuevo.",
+      );
+      return;
     }
 
     setActiveTableForOrder(null);
     setOrderItems([]);
-    setToGoCustomerName('');
-    setActiveTab('ORDENES');
+    setToGoCustomerName("");
+    setActiveTab("ORDENES");
   };
 
   // --- RENDER ---
-  if (activeTableForOrder) {
-    return <OrderTakingView
-      activeTableForOrder={activeTableForOrder} setActiveTableForOrder={setActiveTableForOrder}
-      orderItems={orderItems} isCartExpanded={isCartExpanded} setIsCartExpanded={setIsCartExpanded}
-      destType={destType} setDestType={setDestType} toGoCustomerName={toGoCustomerName}
-      setToGoCustomerName={setToGoCustomerName} tables={tables} linkedTableId={linkedTableId}
-      setLinkedTableId={setLinkedTableId} handleAddItem={handleAddItem} handleRemoveItem={handleRemoveItem}
-      toggleItemToGo={toggleItemToGo} handleUpdateItemNote={handleUpdateItemNote} handleSubmitOrder={handleSubmitOrder}
-    />;
-  }
-
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-      <View style={[styles.mainHeader, { backgroundColor: colors.header, borderColor: colors.border }]}>
-
-        <View style={styles.headerTitlesBox}>
-          <Text style={[styles.mainTitle, { color: colors.text }]}>saborEXPRESS</Text>
-          <Text style={[styles.mainSubtitle, { color: colors.mutedText }]}>{t.dashboardWaiterPanel || 'Panel de Mesero'}</Text>
-        </View>
-
-        <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
-          <TouchableOpacity
-            style={[styles.toGoButton, { backgroundColor: colors.elevatedSurface, paddingHorizontal: 12, borderWidth: 1, borderColor: colors.border }]}
-            onPress={() => setIsQrMenuVisible(true)}
+    <>
+      <NotificationToastContainer
+        notifications={toasts}
+        onDismiss={dismissToast}
+        t={(key) => t[key] || key}
+        colors={{
+          surface: colors.surface,
+          text: colors.text,
+          mutedText: colors.mutedText,
+          border: colors.border,
+        }}
+      />
+      {activeTableForOrder ? (
+        <OrderTakingView
+          activeTableForOrder={activeTableForOrder}
+          setActiveTableForOrder={setActiveTableForOrder}
+          orderItems={orderItems}
+          isCartExpanded={isCartExpanded}
+          setIsCartExpanded={setIsCartExpanded}
+          destType={destType}
+          setDestType={setDestType}
+          toGoCustomerName={toGoCustomerName}
+          setToGoCustomerName={setToGoCustomerName}
+          tables={tables}
+          linkedTableId={linkedTableId}
+          setLinkedTableId={setLinkedTableId}
+          handleAddItem={handleAddItem}
+          handleRemoveItem={handleRemoveItem}
+          toggleItemToGo={toggleItemToGo}
+          handleUpdateItemNote={handleUpdateItemNote}
+          handleSubmitOrder={handleSubmitOrder}
+          taxRate={branchSettings?.taxRate ?? 0}
+        />
+      ) : (
+        <SafeAreaView
+          edges={["top"]}
+          style={[styles.container, { backgroundColor: colors.background }]}
+        >
+          <View
+            style={[
+              styles.mainHeader,
+              windowWidth < 380 && {
+                flexDirection: "column",
+                alignItems: "stretch",
+                gap: 10,
+              },
+              { paddingHorizontal: windowWidth < 380 ? 16 : 20 },
+              { backgroundColor: colors.header, borderColor: colors.border },
+            ]}
           >
-            <Ionicons name="qr-code-outline" size={20} color={colors.text} />
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.toGoButton} onPress={handleStartToGoOrder}>
-            <Ionicons name="bag-handle-outline" size={20} color="#FFF" />
-            <Text style={styles.toGoButtonText}>{t.dashboardParaLlevar || 'Para Llevar'}</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      <View style={[styles.tabsContainer, { backgroundColor: colors.header, borderColor: colors.border }]}>
-        <TouchableOpacity style={[styles.tab, activeTab === 'MESAS' && styles.activeTab]} onPress={() => setActiveTab('MESAS')}>
-          <Ionicons name="grid-outline" size={20} color={activeTab === 'MESAS' ? colors.accent : colors.mutedText} />
-          <Text style={[styles.tabText, { color: colors.mutedText }, activeTab === 'MESAS' && { color: colors.accent }]}>{t.dashboardTabTables || 'Plano de Mesas'}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.tab, activeTab === 'ORDENES' && styles.activeTab]} onPress={() => setActiveTab('ORDENES')}>
-          <Ionicons name="receipt-outline" size={20} color={activeTab === 'ORDENES' ? colors.accent : colors.mutedText} />
-          <Text style={[styles.tabText, { color: colors.mutedText }, activeTab === 'ORDENES' && { color: colors.accent }]}>{t.dashboardTabOrders || 'Órdenes'} ({activeOrders.length})</Text>
-        </TouchableOpacity>
-      </View>
-
-      <View style={[styles.content, { backgroundColor: colors.background }]}>
-        {activeTab === 'MESAS' ?
-          <TablesGridView tables={tables} handleTablePress={handleTablePress} />
-          :
-          <ActiveOrdersView
-            activeOrders={activeOrders}
-            expandedOrderId={expandedOrderId}
-            setExpandedOrderId={setExpandedOrderId}
-            handleAddMoreToOrder={handleAddMoreToOrder}
-            handleCancelOrder={handleCancelOrder}
-            handleMarkOrderReady={handleMarkOrderReady}
-            handleDeliverOrder={handleDeliverOrder}
-          />
-        }
-      </View>
-
-      <Modal transparent visible={isQrMenuVisible} animationType="fade">
-        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' }}>
-          <View style={{ backgroundColor: colors.card, padding: 24, borderRadius: 24, alignItems: 'center', width: '85%', shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 10, elevation: 10, borderWidth: 1, borderColor: colors.border }}>
-            <View style={{ width: 60, height: 60, borderRadius: 30, backgroundColor: colors.accentSoft, justifyContent: 'center', alignItems: 'center', marginBottom: 15 }}>
-              <Ionicons name="book-outline" size={32} color={colors.accent} />
+            <View style={styles.headerTitlesBox}>
+              <Text style={[styles.mainSubtitle, { color: colors.mutedText }]}>
+                {employeeDisplayName}
+              </Text>
             </View>
-            <Text style={{ fontSize: 22, fontWeight: 'bold', color: colors.text, marginBottom: 8, textAlign: 'center', fontFamily: baseFontFamily }}>
-              {t.dashboardQrTitle || 'Carta Digital'}
-            </Text>
-            <Text style={{ fontSize: 15, color: colors.mutedText, textAlign: 'center', marginBottom: 20, lineHeight: 22, fontFamily: baseFontFamily }}>
-              {t.dashboardQrDescription || 'Muéstrale este código al cliente para que lea el menú en su celular. Una vez decida, tú le tomas el pedido.'}
-            </Text>
-            <View style={{ padding: 15, backgroundColor: colors.surface, borderRadius: 16, borderWidth: 1, borderColor: colors.border, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 10, elevation: 2 }}>
-              <Image
-                source={{ uri: 'https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=http://10.3.234.202:3000/letter' }}
-                style={{ width: 220, height: 220 }}
-              />
-            </View>
-            <TouchableOpacity
-              style={{ marginTop: 25, backgroundColor: colors.elevatedSurface, width: '100%', paddingVertical: 14, borderRadius: 12, alignItems: 'center', borderWidth: 1, borderColor: colors.border }}
-              onPress={() => setIsQrMenuVisible(false)}
+
+            <View
+              style={{
+                flexDirection: "row",
+                gap: 8,
+                alignItems: "center",
+                justifyContent: "flex-end",
+              }}
             >
-              <Text style={{ color: colors.text, fontWeight: 'bold', fontSize: 16, fontFamily: baseFontFamily }}>{t.dashboardQrHide || 'Ocultar QR'}</Text>
+              <NotificationCenter
+                notifications={todaysNotifications}
+                unreadCount={unreadCount}
+                colors={{
+                  background: colors.background,
+                  surface: colors.surface,
+                  elevated: colors.elevatedSurface,
+                  text: colors.text,
+                  muted: colors.mutedText,
+                  border: colors.border,
+                  accent: colors.accent,
+                }}
+                t={(key) => t[key] || key}
+                onOpen={handleOpenNotifications}
+                onClear={handleClearNotifications}
+                onSelect={handleNotificationSelect}
+              />
+              <TouchableOpacity
+                style={[
+                  styles.toGoButton,
+                  {
+                    backgroundColor: colors.success,
+                    shadowColor: colors.success,
+                  },
+                ]}
+                onPress={handleStartToGoOrder}
+              >
+                <Ionicons name="bag-handle-outline" size={20} color="#FFF" />
+                <Text style={styles.toGoButtonText} numberOfLines={1}>
+                  {t.dashboardParaLlevar || "Para Llevar"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {soundNotifications && !soundEnabled && (
+            <TouchableOpacity
+              onPress={enableSound}
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 8,
+                backgroundColor: `${colors.warning}22`,
+                paddingVertical: 10,
+              }}
+            >
+              <Ionicons
+                name="volume-mute-outline"
+                size={18}
+                color={colors.warning}
+              />
+              <Text
+                style={{
+                  color: colors.warning,
+                  fontWeight: "700",
+                  textAlign: "center",
+                  flexShrink: 1,
+                }}
+              >
+                {t.soundEnablePrompt}
+              </Text>
+            </TouchableOpacity>
+          )}
+
+          <View
+            style={[
+              styles.tabsContainer,
+              { backgroundColor: colors.header, borderColor: colors.border },
+            ]}
+          >
+            <TouchableOpacity
+              style={[
+                styles.tab,
+                activeTab === "MESAS" && styles.activeTab,
+                {
+                  borderBottomColor:
+                    activeTab === "MESAS" ? colors.accent : "transparent",
+                },
+              ]}
+              onPress={() => setActiveTab("MESAS")}
+            >
+              <Ionicons
+                name="grid-outline"
+                size={20}
+                color={activeTab === "MESAS" ? colors.accent : colors.mutedText}
+              />
+              <Text
+                style={[
+                  styles.tabText,
+                  { color: colors.mutedText },
+                  activeTab === "MESAS" && { color: colors.accent },
+                ]}
+              >
+                {t.dashboardTabTables || "Plano de Mesas"}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.tab,
+                activeTab === "ORDENES" && styles.activeTab,
+                {
+                  borderBottomColor:
+                    activeTab === "ORDENES" ? colors.accent : "transparent",
+                },
+              ]}
+              onPress={() => setActiveTab("ORDENES")}
+            >
+              <Ionicons
+                name="receipt-outline"
+                size={20}
+                color={
+                  activeTab === "ORDENES" ? colors.accent : colors.mutedText
+                }
+              />
+              <Text
+                style={[
+                  styles.tabText,
+                  { color: colors.mutedText },
+                  activeTab === "ORDENES" && { color: colors.accent },
+                ]}
+              >
+                {t.dashboardTabOrders || "Órdenes"} ({activeOrders.length})
+              </Text>
             </TouchableOpacity>
           </View>
-        </View>
-      </Modal>
 
-    </SafeAreaView>
+          <View
+            style={{
+              flex: 1,
+              minHeight: 0,
+              overflow: "hidden",
+              backgroundColor: colors.background,
+            }}
+          >
+            {activeTab === "MESAS" ? (
+              <TablesGridView
+                tables={tables}
+                handleTablePress={handleTablePress}
+                occupiedTableWaiters={occupiedTableWaiters}
+              />
+            ) : (
+              <ActiveOrdersView
+                activeOrders={activeOrders}
+                expandedOrderId={expandedOrderId}
+                setExpandedOrderId={setExpandedOrderId}
+                handleAddMoreToOrder={handleAddMoreToOrder}
+                handleCancelOrder={handleCancelOrder}
+                handleMarkOrderReady={handleMarkOrderReady}
+                handleDeliverOrder={handleDeliverOrder}
+              />
+            )}
+          </View>
+        </SafeAreaView>
+      )}
+    </>
   );
 };
