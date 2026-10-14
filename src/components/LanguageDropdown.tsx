@@ -12,9 +12,10 @@ type LanguageDropdownProps = {
     options: LanguageOption[];
     onChange: (value: string) => void;
     compact?: boolean;
+    colors?: { background: string; surface: string; text: string; mutedText: string; border: string; accent: string; accentSoft: string };
 };
 
-export const LanguageDropdown = ({ label = 'Idioma', value, options, onChange, compact = false }: LanguageDropdownProps) => {
+export const LanguageDropdown = ({ label = 'Idioma', value, options, onChange, compact = false, colors }: LanguageDropdownProps) => {
     const [visible, setVisible] = useState(false);
 
     const selectedOption = options.find((option) => option.value === value) ?? options[0];
@@ -22,31 +23,31 @@ export const LanguageDropdown = ({ label = 'Idioma', value, options, onChange, c
     return (
         <>
             <View style={[styles.wrapper, compact && styles.wrapperCompact]}>
-                {label ? <Text style={styles.label}>{label}</Text> : null}
-                <TouchableOpacity style={[styles.trigger, compact && styles.triggerCompact]} onPress={() => setVisible(true)} activeOpacity={0.9}>
+                {label ? <Text style={[styles.label, colors && { color: colors.mutedText }]}>{label}</Text> : null}
+                <TouchableOpacity style={[styles.trigger, compact && styles.triggerCompact, colors && { backgroundColor: colors.surface, borderColor: colors.border }]} onPress={() => setVisible(true)} activeOpacity={0.9}>
                     <View style={styles.triggerContent}>
-                        <Text style={styles.triggerText}>{selectedOption?.label ?? 'Seleccionar'}</Text>
-                        <Text style={styles.arrow}>▾</Text>
+                        <Text style={[styles.triggerText, colors && { color: colors.text }]}>{selectedOption?.label ?? 'Seleccionar'}</Text>
+                        <Text style={[styles.arrow, colors && { color: colors.accent }]}>▾</Text>
                     </View>
                 </TouchableOpacity>
             </View>
 
             <Modal transparent visible={visible} animationType="fade" onRequestClose={() => setVisible(false)}>
                 <Pressable style={styles.overlay} onPress={() => setVisible(false)}>
-                    <View style={styles.modalCard}>
+                    <View style={[styles.modalCard, colors && { backgroundColor: colors.surface, borderColor: colors.border }]}>
                         {options.map((option) => {
                             const isSelected = option.value === value;
 
                             return (
                                 <TouchableOpacity
                                     key={option.value}
-                                    style={[styles.option, isSelected && styles.optionSelected]}
+                                    style={[styles.option, colors && { borderBottomColor: colors.border }, isSelected && (colors ? { backgroundColor: colors.accentSoft } : styles.optionSelected)]}
                                     onPress={() => {
                                         onChange(option.value);
                                         setVisible(false);
                                     }}
                                 >
-                                    <Text style={[styles.optionText, isSelected && styles.optionTextSelected]}>{option.label}</Text>
+                                    <Text style={[styles.optionText, colors && { color: colors.text }, isSelected && !colors && styles.optionTextSelected, isSelected && colors && { color: colors.accent }]}>{option.label}</Text>
                                 </TouchableOpacity>
                             );
                         })}
