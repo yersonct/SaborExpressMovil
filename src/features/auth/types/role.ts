@@ -1,8 +1,11 @@
-// ⚠️ Ajustar estos valores para que coincidan EXACTO con el seed de la tabla Roles en tu BD
-export enum RoleId {
-  Cliente = 1,
-  Repartidor = 2,
-  Cocinero = 3,
-  Mesero = 4,
-  Cajero = 5,
-}
+export const ROLE_NAMES = {
+  Mesero: "MESERO",
+  Cajero: "CAJERO",
+  Cocinero: "COCINERO",
+  Repartidor: "REPARTIDOR",
+  Cliente: "CLIENTE",
+  AuxiliarCocina: "AUXILIAR_COCINA",
+
+} as const;
+
+export type RoleName = (typeof ROLE_NAMES)[keyof typeof ROLE_NAMES];

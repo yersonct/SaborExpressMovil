@@ -1,7 +1,10 @@
+import type { User } from "./user";
+
 export interface AuthResponse {
   token: string;
-  user: {
-    identifier: string;
-    roleId: number;
-  };
+  refreshToken: string;
+  identifier: string;
+  roles: string[];
+  hasActiveShift: boolean;
+  activeShiftRoleName: string | null;
 }

@@ -6,10 +6,9 @@ export const styles = StyleSheet.create({
   toastText: { color: '#FFFFFF', fontWeight: 'bold', textAlign: 'center', fontSize: 16 },
 
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, paddingTop: Platform.OS === 'android' ? 40 : 20, backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderColor: '#E2E8F0' },
-  headerLeft: { flexDirection: 'row', alignItems: 'center' },
+  headerLeft: { flexDirection: 'row', alignItems: 'center', flex: 1, minWidth: 0, marginRight: 8 },
   menuButton: { marginRight: 15 },
-  greeting: { fontSize: 20, fontWeight: 'bold', color: '#1E293B' },
-  subtitle: { fontSize: 14, color: '#64748B' },
+  greeting: { fontSize: 20, fontWeight: 'bold', color: '#1E293B', flexShrink: 1 },
   cartButtonHeader: { position: 'relative', padding: 5, backgroundColor: '#F1F5F9', borderRadius: 20, width: 44, height: 44, justifyContent: 'center', alignItems: 'center' },
   cartBadge: { position: 'absolute', top: -2, right: -2, backgroundColor: '#E61C24', width: 20, height: 20, borderRadius: 10, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#FFF' },
   cartBadgeText: { color: '#FFF', fontSize: 10, fontWeight: 'bold' },
@@ -20,7 +19,7 @@ export const styles = StyleSheet.create({
   categoryText: { fontSize: 14, color: '#64748B', fontWeight: '600' },
   categoryTextActive: { color: '#E61C24', fontWeight: 'bold' },
 
-  menuList: { padding: 15, paddingBottom: 100 },
+  menuList: { padding: 15, paddingBottom: 92 },
   menuCard: { flexDirection: 'row', backgroundColor: '#FFFFFF', borderRadius: 20, padding: 14, marginBottom: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 10, elevation: 3 },
   menuCardImagePlaceholder: { width: 85, height: 85, backgroundColor: '#F8FAFC', borderRadius: 16, justifyContent: 'center', alignItems: 'center', marginRight: 15 },
   menuCardInfo: { flex: 1, justifyContent: 'space-between' },
@@ -31,7 +30,7 @@ export const styles = StyleSheet.create({
   
   addButton: { backgroundColor: '#E61C24', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 12 },
 
-  floatingCartBtn: { position: 'absolute', bottom: 20, left: 20, right: 20, backgroundColor: '#E61C24', borderRadius: 16, padding: 18, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', elevation: 8, shadowColor: '#E61C24', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.3, shadowRadius: 8 },
+  floatingCartBtn: { position: 'absolute', bottom: 0, left: 15, right: 15, backgroundColor: '#E61C24', borderRadius: 16, padding: 14, minHeight: 58, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', elevation: 8, shadowColor: '#E61C24', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.3, shadowRadius: 8 },
   floatingCartLeft: { flexDirection: 'row', alignItems: 'center' },
   floatingCartCount: { backgroundColor: '#FFFFFF', width: 30, height: 30, borderRadius: 15, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
   floatingCartCountText: { color: '#E61C24', fontWeight: 'bold', fontSize: 16 },
@@ -52,7 +51,7 @@ export const styles = StyleSheet.create({
   confirmAcceptText: { color: '#FFFFFF', fontWeight: 'bold', fontSize: 16 },
 
   modalOverlay: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.6)', justifyContent: 'flex-end' },
-  modalBox: { backgroundColor: '#FFFFFF', borderTopLeftRadius: 30, borderTopRightRadius: 30, padding: 24, minHeight: '45%' },
+  modalBox: { backgroundColor: '#FFFFFF', borderTopLeftRadius: 30, borderTopRightRadius: 30, padding: 20, paddingBottom: 24, minHeight: '45%', maxHeight: '92%' },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 25 },
   modalTitle: { fontSize: 22, fontWeight: '900', color: '#1E293B' },
   backButton: { width: 26 },
