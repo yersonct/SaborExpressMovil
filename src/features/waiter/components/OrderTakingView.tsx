@@ -9,10 +9,14 @@ import {
   TextInput,
   Modal,
   Platform,
-  Image,
   useWindowDimensions,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import {
+  calcBreakdown,
+  getBreakdownLabels,
+} from "@/features/orders/utils/orderBreakdown";
+import { Image as ExpoImage } from "expo-image";
 import { Ionicons } from '@expo/vector-icons';
 import { styles as globalStyles } from './style/WaiterDashboardStyles'; // Asumo que tus estilos globales están aquí
 import { localStyles } from './style/OrderTakingStyles';
@@ -42,7 +46,8 @@ export const OrderTakingView = ({
   handleRemoveItem,
   toggleItemToGo,
   handleUpdateItemNote,
-  handleSubmitOrder,
+   handleSubmitOrder,
+  taxRate = 0,
 }: any) => {
   const { colors } = useWaiterTheme();
   const { t } = useWaiterLanguage();
@@ -51,6 +56,11 @@ export const OrderTakingView = ({
     web: "system-ui, -apple-system, sans-serif",
     default: undefined,
   });
+  const canEditCartItem = (item: any) => {
+    if (item.isDelivered || item.status === "Delivered") return false;
+    if (item.alreadySubmitted) return item.status === "Pending";
+    return item.status !== "InPreparation" && item.status !== "Ready";
+  };
 
   const {
     products,
@@ -71,8 +81,15 @@ export const OrderTakingView = ({
     (sum: any, item: any) => sum + item.price * item.quantity,
     0,
   );
-  let paddingBottom = isCartExpanded ? 350 : 150;
-  if (activeTableForOrder.isGlobalToGo && isCartExpanded) paddingBottom = 450;
+    const breakdown = calcBreakdown(orderTotal, taxRate, 0);
+  const breakdownLabels = getBreakdownLabels(t.language);
+  const cartScrollMaxHeight = Math.max(
+    140,
+    Math.min(280, screenHeight * (activeTableForOrder.isGlobalToGo ? 0.34 : 0.42)),
+  );
+  const paddingBottom = isCartExpanded
+    ? cartScrollMaxHeight + (activeTableForOrder.isGlobalToGo ? 190 : 130)
+    : 150;
 
   // 🔥 Categorías dinámicas, armadas desde los productos reales
   const categories = useMemo(() => {
@@ -92,9 +109,13 @@ export const OrderTakingView = ({
     setIsNoteModalVisible(true);
   };
 
-  const confirmUpdateNote = () => {
+  const confirmUpdateNote = async () => {
     if (!selectedCartItem) return;
-    handleUpdateItemNote(selectedCartItem.cartId, itemNote.trim());
+    const saved = await handleUpdateItemNote(
+      selectedCartItem.cartId,
+      itemNote.trim(),
+    );
+    if (saved === false) return;
     setIsNoteModalVisible(false);
     setSelectedCartItem(null);
     setItemNote("");
@@ -247,9 +268,13 @@ export const OrderTakingView = ({
                     ]}
                   >
                     {photoUrl ? (
-                      <Image
+                      <ExpoImage
                         source={{ uri: photoUrl }}
                         style={{ width: 60, height: 60, borderRadius: 8 }}
+                        contentFit="cover"
+                        cachePolicy="memory-disk"
+                        transition={120}
+                        recyclingKey={photoUrl}
                       />
                     ) : (
                       <Ionicons
@@ -304,7 +329,7 @@ export const OrderTakingView = ({
         ]}
       >
         <TouchableOpacity
-          style={globalStyles.cartHeader}
+          style={[globalStyles.cartHeader, { borderBottomColor: colors.border }]}
           activeOpacity={0.8}
           onPress={() => {
             LayoutAnimation.configureNext(
@@ -316,7 +341,7 @@ export const OrderTakingView = ({
           <Text style={[globalStyles.cartHeaderText, { color: colors.text }]}>
             {t.orderTakingCartTitle || "Ver Carrito"} (
             {orderItems.reduce((acc: any, it: any) => acc + it.quantity, 0)}{" "}
-            Productos)
+            {t.orderTakingProductsLabel || "Productos"})
           </Text>
           <Ionicons
             name={isCartExpanded ? "chevron-down" : "chevron-up"}
@@ -331,7 +356,7 @@ export const OrderTakingView = ({
               globalStyles.cartExpandedArea,
               {
                 backgroundColor: colors.background,
-                maxHeight: 280, // ≈ 4 platos visibles antes de necesitar scroll
+                maxHeight: cartScrollMaxHeight,
               },
             ]}
             showsVerticalScrollIndicator
@@ -359,7 +384,7 @@ export const OrderTakingView = ({
                         <Text
                           style={{
                             fontWeight: "900",
-                            color: "#E61C24",
+                            color: colors.accent,
                             fontFamily: baseFontFamily,
                           }}
                         >
@@ -374,24 +399,36 @@ export const OrderTakingView = ({
                               fontStyle: "italic",
                             }}
                           >
-                            {"  "}✓ {t.orderTakingAlreadySent || "Ya en cocina"}
+                            {"  "}✓ {item.isDelivered || item.status === "Delivered"
+                              ? t.orderTakingAlreadyDelivered || "Entregado"
+                              : item.status === "Ready"
+                                ? t.orderTakingReady || "Listo"
+                                : t.orderTakingAlreadySent || "Ya en cocina"}
                           </Text>
                         )}
                       </Text>
-                      <TouchableOpacity
-                        style={[
-                          globalStyles.cartNoteButton,
-                          item.note && globalStyles.cartNoteButtonActive,
-                        ]}
-                        onPress={() => openItemNoteModal(item)}
-                        activeOpacity={0.8}
-                      >
-                        <Ionicons
-                          name="document-text-outline"
-                          size={16}
-                          color={item.note ? colors.accent : colors.mutedText}
-                        />
-                      </TouchableOpacity>
+                      {canEditCartItem(item) && (
+                        <TouchableOpacity
+                          style={[
+                            globalStyles.cartNoteButton,
+                            item.note && globalStyles.cartNoteButtonActive,
+                            {
+                              backgroundColor: item.note
+                                ? colors.accentSoft
+                                : colors.elevatedSurface,
+                              borderColor: item.note ? colors.accent : colors.border,
+                            },
+                          ]}
+                          onPress={() => openItemNoteModal(item)}
+                          activeOpacity={0.8}
+                        >
+                          <Ionicons
+                            name="document-text-outline"
+                            size={16}
+                            color={item.note ? colors.accent : colors.mutedText}
+                          />
+                        </TouchableOpacity>
+                      )}
                     </View>
                     {!!item.note && (
                       <Text
@@ -408,13 +445,14 @@ export const OrderTakingView = ({
                       style={[
                         globalStyles.toGoToggleBtn,
                         item.isToGo && globalStyles.toGoToggleBtnActive,
+                        { backgroundColor: item.isToGo ? colors.accentSoft : colors.elevatedSurface, borderColor: item.isToGo ? colors.accent : colors.border },
                       ]}
                       onPress={() => toggleItemToGo(item.cartId)}
                     >
                       <Text
                         style={[
                           globalStyles.toGoToggleText,
-                          item.isToGo && globalStyles.toGoToggleTextActive,
+                          { color: item.isToGo ? colors.accent : colors.text },
                         ]}
                       >
                         {item.isToGo
@@ -428,12 +466,21 @@ export const OrderTakingView = ({
                   >
                     ${(item.price * item.quantity).toLocaleString()}
                   </Text>
-                  <TouchableOpacity
-                    onPress={() => handleRemoveItem(item.cartId)}
-                    style={globalStyles.deleteButton}
-                  >
-                    <Text style={globalStyles.deleteButtonText}>✕</Text>
-                  </TouchableOpacity>
+                  {canEditCartItem(item) && (
+                    <TouchableOpacity
+                      onPress={() => handleRemoveItem(item.cartId)}
+                      style={[globalStyles.deleteButton, { backgroundColor: colors.accentSoft }]}
+                    >
+                      <Text
+                        style={[
+                          globalStyles.deleteButtonText,
+                          { color: colors.danger },
+                        ]}
+                      >
+                        ✕
+                      </Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
               ))
             )}
@@ -458,6 +505,14 @@ export const OrderTakingView = ({
                     style={[
                       globalStyles.destTab,
                       destType === "particular" && globalStyles.destTabActive,
+                      {
+                        backgroundColor:
+                          destType === "particular"
+                            ? colors.accent
+                            : colors.elevatedSurface,
+                        borderColor:
+                          destType === "particular" ? colors.accent : colors.border,
+                      },
                     ]}
                     onPress={() => setDestType("particular")}
                   >
@@ -466,6 +521,10 @@ export const OrderTakingView = ({
                         globalStyles.destTabText,
                         destType === "particular" &&
                           globalStyles.destTabTextActive,
+                        {
+                          color:
+                            destType === "particular" ? "#FFFFFF" : colors.text,
+                        },
                       ]}
                     >
                       {t.orderTakingParticular || "👤 Particular"}
@@ -475,6 +534,12 @@ export const OrderTakingView = ({
                     style={[
                       globalStyles.destTab,
                       destType === "mesa" && globalStyles.destTabActive,
+                      {
+                        backgroundColor:
+                          destType === "mesa" ? colors.accent : colors.elevatedSurface,
+                        borderColor:
+                          destType === "mesa" ? colors.accent : colors.border,
+                      },
                     ]}
                     onPress={() => setDestType("mesa")}
                   >
@@ -482,6 +547,9 @@ export const OrderTakingView = ({
                       style={[
                         globalStyles.destTabText,
                         destType === "mesa" && globalStyles.destTabTextActive,
+                        {
+                          color: destType === "mesa" ? "#FFFFFF" : colors.text,
+                        },
                       ]}
                     >
                       {t.orderTakingTable || "🪑 A una Mesa"}
@@ -490,12 +558,12 @@ export const OrderTakingView = ({
                 </View>
                 {destType === "particular" && (
                   <TextInput
-                    style={globalStyles.inlineInput}
+                    style={[globalStyles.inlineInput, { backgroundColor: colors.surface, borderColor: colors.border, color: colors.text }]}
                     placeholder={
                       t.orderTakingCustomerPlaceholder ||
                       "Nombre del cliente (Opcional)"
                     }
-                    placeholderTextColor="#94A3B8"
+                    placeholderTextColor={colors.mutedText}
                     value={toGoCustomerName}
                     onChangeText={setToGoCustomerName}
                   />
@@ -513,6 +581,14 @@ export const OrderTakingView = ({
                           globalStyles.miniTableBtn,
                           linkedTableId === t.id &&
                             globalStyles.miniTableBtnActive,
+                          {
+                            backgroundColor:
+                              linkedTableId === t.id
+                                ? colors.accent
+                                : colors.elevatedSurface,
+                            borderColor:
+                              linkedTableId === t.id ? colors.accent : colors.border,
+                          },
                         ]}
                         onPress={() => setLinkedTableId(t.id)}
                       >
@@ -521,6 +597,10 @@ export const OrderTakingView = ({
                             globalStyles.miniTableText,
                             linkedTableId === t.id &&
                               globalStyles.miniTableTextActive,
+                            {
+                              color:
+                                linkedTableId === t.id ? "#FFFFFF" : colors.text,
+                            },
                           ]}
                         >
                           {t.name}
@@ -534,23 +614,36 @@ export const OrderTakingView = ({
           </ScrollView>
         )}
 
-        <View style={globalStyles.cartFooter}>
+        <View style={[globalStyles.cartFooter, { borderTopColor: colors.border }]}>
           <View>
             <Text
               style={[globalStyles.cartTotalLabel, { color: colors.mutedText }]}
             >
-              Total:
+              {t.orderTakingTotalLabel || "Total:"}
             </Text>
-            <Text
+           <Text
               style={[globalStyles.cartTotalAmount, { color: colors.accent }]}
             >
-              ${orderTotal.toLocaleString()}
+              ${breakdown.total.toLocaleString()}
+            </Text>
+            <Text style={{ fontSize: 11, color: colors.mutedText }}>
+              {breakdownLabels.subtotal} ${breakdown.subTotal.toLocaleString()}
+              {breakdown.tax > 0 && (
+                <>
+                  {" · "}
+                  {breakdownLabels.taxIncluded} ({taxRate}%) ${breakdown.tax.toLocaleString()}
+                </>
+              )}
             </Text>
           </View>
           <TouchableOpacity
             style={[
               globalStyles.submitButton,
               orderItems.length === 0 && globalStyles.submitButtonDisabled,
+              {
+                backgroundColor: colors.accent,
+                opacity: orderItems.length === 0 ? 0.55 : 1,
+              },
             ]}
             disabled={orderItems.length === 0}
             onPress={handleSubmitOrder}
@@ -573,7 +666,7 @@ export const OrderTakingView = ({
           <View
             style={[
               localStyles.modalContent,
-              { backgroundColor: colors.background },
+              { backgroundColor: colors.surface },
             ]}
           >
             {selectedProduct && (
@@ -596,9 +689,12 @@ export const OrderTakingView = ({
                   ]}
                 >
                   {resolvePhotoUrl(selectedProduct.photo) ? (
-                    <Image
+                    <ExpoImage
                       source={{ uri: resolvePhotoUrl(selectedProduct.photo)! }}
                       style={{ width: 100, height: 100, borderRadius: 12 }}
+                      contentFit="cover"
+                      cachePolicy="memory-disk"
+                      transition={120}
                     />
                   ) : (
                     <Ionicons
@@ -620,7 +716,12 @@ export const OrderTakingView = ({
                   {selectedProduct.categoryName}
                 </Text>
 
-                <View style={localStyles.modalDivider} />
+                <View
+                  style={[
+                    localStyles.modalDivider,
+                    { backgroundColor: colors.border },
+                  ]}
+                />
 
                 <Text
                   style={[localStyles.modalDesc, { color: colors.mutedText }]}
@@ -684,7 +785,12 @@ export const OrderTakingView = ({
               { backgroundColor: colors.card, borderColor: colors.border },
             ]}
           >
-            <View style={globalStyles.noteModalIconWrap}>
+            <View
+              style={[
+                globalStyles.noteModalIconWrap,
+                { backgroundColor: colors.accentSoft },
+              ]}
+            >
               <Ionicons
                 name="document-text-outline"
                 size={28}
@@ -705,12 +811,12 @@ export const OrderTakingView = ({
             </Text>
 
             <TextInput
-              style={globalStyles.noteModalInput}
+              style={[globalStyles.noteModalInput, { backgroundColor: colors.surface, borderColor: colors.border, color: colors.text }]}
               placeholder={
                 t.orderTakingNotePlaceholder ||
                 "Ej: Sin cebolla, poco queso, bien cocida..."
               }
-              placeholderTextColor="#94A3B8"
+              placeholderTextColor={colors.mutedText}
               value={itemNote}
               onChangeText={setItemNote}
               multiline
@@ -718,15 +824,15 @@ export const OrderTakingView = ({
 
             <View style={globalStyles.noteModalActions}>
               <TouchableOpacity
-                style={globalStyles.noteModalCancelBtn}
+                style={[globalStyles.noteModalCancelBtn, { backgroundColor: colors.elevatedSurface }]}
                 onPress={() => setIsNoteModalVisible(false)}
               >
-                <Text style={globalStyles.noteModalCancelText}>
+                <Text style={[globalStyles.noteModalCancelText, { color: colors.text }]}>
                   {t.orderTakingNoteCancel || "Cancelar"}
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={globalStyles.noteModalConfirmBtn}
+                style={[globalStyles.noteModalConfirmBtn, { backgroundColor: colors.accent }]}
                 onPress={confirmUpdateNote}
               >
                 <Text style={globalStyles.noteModalConfirmText}>

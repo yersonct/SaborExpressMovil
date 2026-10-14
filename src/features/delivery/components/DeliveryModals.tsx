@@ -1,5 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import React, { useEffect, useMemo, useState } from "react";
+import { BreakdownRows } from "@/features/orders/components/BreakdownRows";
 import {
   Linking,
   Modal,
@@ -18,6 +19,7 @@ import { useDeliveryRoute } from "@/features/branches/hooks/useDeliveryRoute";
 import { useDriverLocation } from "../hooks/useDriverLocation";
 
 import { useDeliveryContext } from "./context/DeliveryContext";
+import { getDeliveryTheme } from "./context/deliveryTheme";
 import {
   TRANSLATIONS,
   LanguageCode,
@@ -108,33 +110,7 @@ const onConfirmDelivery = async () => {
     selectedDelivery?.addressText,
   ]);
 
-  const colors = isDark
-    ? {
-        background: "#0F172A",
-        card: "#1E293B",
-        text: "#F8FAFC",
-        muted: "#94A3B8",
-        border: "#334155",
-        accent: "#E61C24",
-        boxBg: "#0F172A",
-        successBg: "#064E3B",
-        successText: "#34D399",
-        dangerBg: "#7F1D1D",
-        dangerText: "#FCA5A5",
-      }
-    : {
-        background: "#F8FAFC",
-        card: "#FFFFFF",
-        text: "#1E293B",
-        muted: "#64748B",
-        border: "#E2E8F0",
-        accent: "#E61C24",
-        boxBg: "#F8FAFC",
-        successBg: "#ECFDF5",
-        successText: "#10B981",
-        dangerBg: "#FEF2F2",
-        dangerText: "#DC2626",
-      };
+  const colors = getDeliveryTheme(isDark);
 
   const isCashPending = Boolean(
     selectedDelivery && (selectedDelivery.amountPending ?? 0) > 0,
@@ -192,7 +168,7 @@ const onConfirmDelivery = async () => {
               }}
             >
               <Text style={{ color: colors.muted }}>
-                Este pedido no tiene ubicación en el mapa
+                {t.noMapLocation}
               </Text>
             </View>
           )}
@@ -242,11 +218,11 @@ const onConfirmDelivery = async () => {
                     ]}
                     numberOfLines={isSheetExpanded ? undefined : 1}
                   >
-                    {selectedDelivery.addressText ?? "Sin dirección"}
+                    {selectedDelivery.addressText ?? t.noAddressLabel}
                   </Text>
                   {!!selectedDelivery.addressReference && (
                     <Text style={{ color: colors.muted, fontSize: 12 }}>
-                      Ref: {selectedDelivery.addressReference}
+                      {t.referenceLabel} {selectedDelivery.addressReference}
                     </Text>
                   )}
                 </View>
@@ -317,7 +293,7 @@ const onConfirmDelivery = async () => {
                     <Text
                       style={[styles.mapProductsTitle, { color: colors.muted }]}
                     >
-                      {selectedDelivery.itemsCount} artículos en este pedido
+                      {t.itemsInOrder(selectedDelivery.itemsCount)}
                     </Text>
 
                     {(selectedDelivery.items ?? []).map((it, idx) => (
@@ -357,16 +333,28 @@ const onConfirmDelivery = async () => {
                           fontWeight: "600",
                         }}
                       >
-                        Nota del cliente: {selectedDelivery.orderNotes}
+                        {t.customerNote} {selectedDelivery.orderNotes}
                       </Text>
                     )}
 
+                  <View style={{ marginTop: 8 }}>
+                      <BreakdownRows
+                        subTotal={selectedDelivery.subTotal ?? 0}
+                        tax={selectedDelivery.tax ?? 0}
+                        taxRate={selectedDelivery.taxRate ?? 0}
+                        taxIncludedInPrice={selectedDelivery.taxIncludedInPrice}
+                        deliveryFee={selectedDelivery.deliveryFee ?? 0}
+                        lang={language}
+                        textColor={colors.text}
+                        mutedColor={colors.muted}
+                      />
+                    </View>
                     <Text
                       style={{
                         color: colors.text,
                         fontWeight: "bold",
                         fontSize: 16,
-                        marginTop: 8,
+                        marginTop: 4,
                         textAlign: "right",
                       }}
                     >
@@ -403,7 +391,7 @@ const onConfirmDelivery = async () => {
                       }
                     >
                       <Text style={{ color: "#FFF", fontWeight: "700" }}>
-                        Abrir en Google Maps
+                        {t.openGoogleMaps}
                       </Text>
                     </TouchableOpacity>
                   )}
@@ -437,6 +425,7 @@ const onConfirmDelivery = async () => {
       isCash={isCashPending}
       amount={selectedDelivery ? money(selectedDelivery.amountPending ?? 0) : undefined}
       isDark={isDark}
+      t={t}
       onCancel={() => setConfirmVisible(false)}
       onConfirm={onConfirmDelivery}
     />

@@ -17,8 +17,12 @@ export const ORDERS_ENDPOINTS = {
     const qs = params.toString();
     return `${ORDERS_BASE_URL}${qs ? `?${qs}` : ""}`;
   },
+  occupiedTableWaiters: (branchId: number) =>
+    `${ORDERS_BASE_URL}/branch/${branchId}/occupied-tables`,
+  byBranch: (branchId: number) => `${ORDERS_BASE_URL}/branch/${branchId}`,
   cancel: (id: number) => `${ORDERS_BASE_URL}/${id}/cancel`,
   cancelMine: (id: number) => `${ORDERS_BASE_URL}/${id}/cancel-mine`,
+  confirmCash: (id: number) => `${ORDERS_BASE_URL}/${id}/confirm-cash`,
   updateStatus: (id: number) => `${ORDERS_BASE_URL}/${id}/status`, // 👈 nuevo
   addDetail: (orderId: number) =>
     `${API_BASE_URL}/api/orders/${orderId}/details`,

@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   LayoutAnimation,
   Platform,
@@ -6,38 +7,48 @@ import {
   TouchableOpacity,
   View,
   Modal,
-  Image,
-  Alert,
+  useWindowDimensions,
 } from "react-native";
+import { useBranchSettings } from "@/features/branches/hooks/useBranchSettings";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "expo-router";
 
-import { orderService } from "@/features/orders/services/orderService";
 import {
+  orderService,
   OrderType,
   OrderStatus,
   OrderDetailStatus,
-} from "@/features/orders/types/order.types";
+  type OccupiedTableWaiter,
+} from "@/features/orders";
 import { showAppAlert } from "@/features/shared/services/alertEvents";
-import { AppAlertModal } from "@/features/shared/components/AppAlertModal";
-import { NotificationToastContainer, ToastNotification } from "@/features/shared/components/NotificationToast";
+import {
+  NotificationToastContainer,
+  ToastNotification,
+} from "@/features/shared/components/NotificationToast";
 import { NotificationCenter } from "@/features/shared/components/NotificationCenter";
 
 import { useAuth } from "@/features/auth/context/AuthContext";
-import { getEmployeeIdFromToken, getUserIdFromToken } from "@/features/auth/services/decodeToken";
-import { notificationService } from "@/features/notifications/services/notificationService";
+import {
+  getEmployeeIdFromToken,
+  getUserIdFromToken,
+} from "@/features/auth/services/decodeToken";
+import { notificationService } from "@/features/notifications";
 import { normalizeNotificationType } from "@/features/notifications/utils/notificationType";
 import { TablesGridView } from "./TablesGridView";
 import { ActiveOrdersView } from "./ActiveOrdersView";
 import { OrderTakingView } from "./OrderTakingView";
 import { useWaiterTheme } from "@/features/waiter/context/WaiterThemeContext";
 import { useWaiterLanguage } from "@/features/waiter/context/WaiterLanguageContext";
+import { useWaiterNotificationPreferences } from "@/features/waiter/context/WaiterNotificationPreferencesContext";
 import { useMyBranch } from "@/features/employees/hooks/useMyBranch";
+import { useMyProfile } from "@/features/employees/hooks/useMyProfile";
 import { useTables } from "@/features/tables/hooks/useTables";
 import { TableStatus } from "@/features/tables/types/table.types";
 import { useActiveOrders } from "@/features/orders/hooks/useActiveOrders";
 import { useKitchenNotifications } from "@/features/shared/hooks/useKitchenNotifications";
+import { useRealtimeEvents } from "@/features/shared/hooks/useRealtimeEvents";
+import { getColombiaDayKey } from "@/features/shared/utils/colombia-date";
 import { styles } from "./style/WaiterDashboardStyles";
 
 const baseFontFamily = Platform.select({
@@ -45,15 +56,37 @@ const baseFontFamily = Platform.select({
   default: undefined,
 });
 
+const WAITER_LAST_NOTIFICATIONS_VIEWED_KEY =
+  "saborexpress-waiter-notifications-seen-through";
+
+function getTodayInColombiaKey(date: Date): string {
+  return getColombiaDayKey(date) ?? "";
+}
+
+function isFromColombiaDay(
+  createdAt: string | undefined,
+  dayKey: string,
+): boolean {
+  if (!createdAt) return false;
+  return getColombiaDayKey(createdAt) === dayKey;
+}
 
 export const WaiterDashboard = () => {
   const navigation = useNavigation();
+  const { width: windowWidth } = useWindowDimensions();
   const { colors } = useWaiterTheme();
+  const { soundNotifications } = useWaiterNotificationPreferences();
   const { t } = useWaiterLanguage();
   const { user } = useAuth();
+  const { profile: employeeProfile } = useMyProfile();
+  const employeeDisplayName = [employeeProfile?.name, employeeProfile?.lastName]
+    .filter(Boolean)
+    .join(" ")
+    .trim();
   const myEmployeeId = user?.token ? getEmployeeIdFromToken(user.token) : null;
   const myUserId = user?.token ? getUserIdFromToken(user.token) : null;
   const { branchId } = useMyBranch();
+  const { settings: branchSettings } = useBranchSettings(branchId);
   const {
     tables: realTables,
     setTableStatus,
@@ -72,105 +105,214 @@ export const WaiterDashboard = () => {
   const [activeTab, setActiveTab] = useState<"MESAS" | "ORDENES">("MESAS");
   const { orders: activeOrders, refetch: refetchOrders } =
     useActiveOrders(branchId);
-  const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
-const [toasts, setToasts] = useState<ToastNotification[]>([]);
-const [notificationHistory, setNotificationHistory] = useState<ToastNotification[]>([]);
-const [unreadCount, setUnreadCount] = useState(0);
+  const [occupiedTableWaiters, setOccupiedTableWaiters] = useState<
+    OccupiedTableWaiter[]
+  >([]);
+  const refetchOccupiedTableWaiters = useCallback(async () => {
+    if (!branchId) {
+      setOccupiedTableWaiters([]);
+      return null;
+    }
+    try {
+      const assignments = await orderService.getOccupiedTableWaiters(branchId);
+      setOccupiedTableWaiters(assignments);
+      return assignments;
+    } catch (error) {
+      console.log("No se pudo actualizar quién atiende cada mesa:", error);
+      return null;
+    }
+  }, [branchId]);
 
-  // Carga el histórico de notificaciones guardado en el backend al entrar
-  // a la pantalla (antes se perdía al recargar porque solo vivía en memoria).
   useEffect(() => {
-    if (!myUserId) return;
-    notificationService
-      .getByUser(myUserId)
-      .then((list) => {
-        // La pantalla de Mesero solo debe mostrar notificaciones de "pedido
-        // listo" — si este usuario también tiene rol de Gerente/Administrador,
-        // el backend igual le manda notificaciones de "Pedido nuevo" (OrderCreated)
-        // que son para esos otros roles, no para el panel de Mesero.
-        const mapped: ToastNotification[] = list
-          .map((n) => ({
-            id: n.id,
-            title: n.title,
-            message: n.message,
-            type: normalizeNotificationType(n.type),
-            relatedEntityType: n.relatedEntityType,
-            relatedEntityId: n.relatedEntityId,
-          }))
-          .filter((n) => n.type === "OrderReady");
-        setNotificationHistory(mapped);
+    void refetchOccupiedTableWaiters();
+  }, [refetchOccupiedTableWaiters]);
+  const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
+  const [toasts, setToasts] = useState<ToastNotification[]>([]);
+  const [notificationHistory, setNotificationHistory] = useState<
+    ToastNotification[]
+  >([]);
+  const [todayKey, setTodayKey] = useState(() =>
+    getTodayInColombiaKey(new Date()),
+  );
+  const [lastSeenNotificationId, setLastSeenNotificationId] = useState<
+    number | null
+  >(null);
+
+  useEffect(() => {
+    const timer = setInterval(
+      () => setTodayKey(getTodayInColombiaKey(new Date())),
+      60_000,
+    );
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    if (!myUserId) {
+      setLastSeenNotificationId(0);
+      return () => {
+        active = false;
+      };
+    }
+
+    AsyncStorage.getItem(`${WAITER_LAST_NOTIFICATIONS_VIEWED_KEY}:${myUserId}`)
+      .then((stored) => {
+        if (!active) return;
+        const parsed = stored ? Number(stored) : 0;
+        setLastSeenNotificationId(
+          Number.isFinite(parsed) && parsed > 0 ? parsed : 0,
+        );
       })
-      .catch((err) => {
-        console.log("No se pudo cargar el histórico de notificaciones:", err);
+      .catch(() => {
+        if (active) setLastSeenNotificationId(0);
       });
 
-    // El contador de la campana representa NO LEÍDAS, no el total del historial.
-    notificationService
-      .getUnreadCount(myUserId)
-      .then(setUnreadCount)
-      .catch(() => {});
+    return () => {
+      active = false;
+    };
   }, [myUserId]);
 
-  // Sonido + refresco inmediato cuando cocina cambia el estado de un pedido.
-const { soundEnabled, enableSound } = useKitchenNotifications((notification) => {
-  if (notification.relatedEntityType === "Order") {
-    refetchOrders();
-    // Un pago puede haber liberado la mesa en el backend — sin esto, el
-    // mesero seguía viéndola "ocupada" hasta refrescar manualmente.
-    refetchTables();
-  }
+  const todaysNotifications = useMemo(
+    () =>
+      notificationHistory.filter((item) =>
+        isFromColombiaDay(item.createdAt, todayKey),
+      ),
+    [notificationHistory, todayKey],
+  );
+  const unreadCount = useMemo(() => {
+    if (lastSeenNotificationId === null) return 0;
+    return todaysNotifications.filter(
+      (item) => item.isRead !== true && item.id > lastSeenNotificationId,
+    ).length;
+  }, [todaysNotifications, lastSeenNotificationId]);
 
-  const normalizedType = normalizeNotificationType(notification.type);
+  useEffect(() => {
+    setNotificationHistory((prev) =>
+      prev.filter((item) => isFromColombiaDay(item.createdAt, todayKey)),
+    );
+    setToasts((prev) =>
+      prev.filter((item) => isFromColombiaDay(item.createdAt, todayKey)),
+    );
+  }, [todayKey]);
 
-  // Igual que con el histórico: en la pantalla de Mesero solo nos interesa
-  // "pedido listo". Si este usuario también es Gerente/Administrador, las
-  // notificaciones de "Pedido nuevo" no deben aparecer ni sonar aquí.
-  if (normalizedType !== "OrderReady") return;
+  // Carga historial al entrar y al recibir cambios o recuperar la conexión.
+  const loadNotificationHistory = useCallback(async () => {
+    if (!myUserId) return;
+    try {
+      const list = await notificationService.getByUser(myUserId);
+      const mapped: ToastNotification[] = list
+        .filter((n) => isFromColombiaDay(n.createdAt, todayKey))
+        .map((n) => ({
+          id: n.id,
+          title: n.title,
+          message: n.message,
+          type: normalizeNotificationType(n.type),
+          relatedEntityType: n.relatedEntityType,
+          relatedEntityId: n.relatedEntityId,
+          createdAt: n.createdAt,
+          isRead: n.isRead,
+        }))
+        .filter((n) => n.type === "OrderReady" || n.type === "TableAvailable");
+      setNotificationHistory((previous) => {
+        const merged = new Map<number, ToastNotification>();
+        mapped.forEach((item) => merged.set(item.id, item));
+        previous
+          .filter((item) => isFromColombiaDay(item.createdAt, todayKey))
+          .forEach((item) => merged.set(item.id, item));
+        return Array.from(merged.values());
+      });
+    } catch (err) {
+      console.log("No se pudo cargar el histórico de notificaciones:", err);
+    }
+  }, [myUserId, todayKey]);
 
-  const toast: ToastNotification = {
-    id: notification.id ?? Date.now(),
-    title: notification.title,
-    message: notification.message,
-    type: normalizedType,
-    relatedEntityType: notification.relatedEntityType,
-    relatedEntityId: notification.relatedEntityId,
+  useEffect(() => {
+    void loadNotificationHistory();
+  }, [loadNotificationHistory]);
+
+  useRealtimeEvents(
+    ["NotificationsChanged", "RealtimeConnected"],
+    () => void loadNotificationHistory(),
+  );
+
+  // Sonido y aviso inmediato cuando cocina cambia el estado de un pedido.
+  const { soundEnabled, enableSound } = useKitchenNotifications(
+    (notification) => {
+      const normalizedType = normalizeNotificationType(notification.type);
+
+      // Igual que con el histórico: en la pantalla de Mesero solo nos interesa
+      // "pedido listo". Si este usuario también es Gerente/Administrador, las
+      // notificaciones de "Pedido nuevo" no deben aparecer ni sonar aquí.
+      if (
+        normalizedType !== "OrderReady" &&
+        normalizedType !== "TableAvailable"
+      )
+        return;
+
+      const createdAt = notification.createdAt ?? new Date().toISOString();
+      if (!isFromColombiaDay(createdAt, todayKey)) return;
+
+      const toast: ToastNotification = {
+        id: notification.id ?? -Date.now(),
+        title: notification.title,
+        message: notification.message,
+        type: normalizedType,
+        relatedEntityType: notification.relatedEntityType,
+        relatedEntityId: notification.relatedEntityId,
+        createdAt,
+        isRead: false,
+      };
+      setToasts((prev) => [...prev, toast]);
+      setNotificationHistory((prev) =>
+        prev.some((item) => item.id === toast.id) ? prev : [...prev, toast],
+      );
+    },
+    () => {
+      void refetchOccupiedTableWaiters();
+    },
+  );
+
+  const dismissToast = (id: number) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
   };
-  setToasts((prev) => [...prev, toast]);
-  setNotificationHistory((prev) => [...prev, toast]);
-  // Es una notificación nueva que aún no se ha "visto" (no se ha abierto la campana).
-  setUnreadCount((prev) => prev + 1);
-});
+  const handleNotificationSelect = (notification: ToastNotification) => {
+    if (
+      notification.relatedEntityType === "Order" &&
+      notification.relatedEntityId
+    ) {
+      setActiveTab("ORDENES");
+      setExpandedOrderId(String(notification.relatedEntityId));
+    }
+  };
 
-const dismissToast = (id: number) => {
-  setToasts((prev) => prev.filter((t) => t.id !== id));
-};
+  // Recordamos qué notificaciones ya vio para que no reaparezcan en el contador.
+  const handleOpenNotifications = () => {
+    const seenThroughId = todaysNotifications.reduce(
+      (maxId, item) => Math.max(maxId, item.id),
+      lastSeenNotificationId ?? 0,
+    );
+    setLastSeenNotificationId(seenThroughId);
+    setNotificationHistory((prev) =>
+      prev.map((item) => ({ ...item, isRead: true })),
+    );
+    if (myUserId) {
+      AsyncStorage.setItem(
+        `${WAITER_LAST_NOTIFICATIONS_VIEWED_KEY}:${myUserId}`,
+        String(seenThroughId),
+      ).catch(() => {});
+      notificationService.markAllAsRead(myUserId).catch(() => {});
+    }
+  };
 
-const handleNotificationSelect = (notification: ToastNotification) => {
-  if (notification.relatedEntityType === "Order" && notification.relatedEntityId) {
-    setActiveTab("ORDENES");
-    setExpandedOrderId(String(notification.relatedEntityId));
-  }
-};
-
-// Abrir la campana = "vista", el número desaparece. La lista se queda
-// visible hasta que el usuario le dé "Limpiar" explícitamente.
-const handleOpenNotifications = () => {
-  setUnreadCount(0);
-  if (myUserId) {
-    notificationService.markAllAsRead(myUserId).catch(() => {});
-  }
-};
-
-// "Limpiar" ahora sí las borra en el backend, para que no reaparezcan
-// al salir y volver a entrar a la pantalla.
-const handleClearNotifications = () => {
-  const idsToDelete = notificationHistory.map((n) => n.id);
-  setNotificationHistory([]);
-  setUnreadCount(0);
-  idsToDelete.forEach((id) => {
-    notificationService.delete(id).catch(() => {});
-  });
-};
+  // "Limpiar" ahora sí las borra en el backend, para que no reaparezcan
+  // al salir y volver a entrar a la pantalla.
+  const handleClearNotifications = () => {
+    const idsToDelete = notificationHistory.map((n) => n.id);
+    setNotificationHistory([]);
+    idsToDelete.forEach((id) => {
+      notificationService.delete(id).catch(() => {});
+    });
+  };
 
   const [isQrMenuVisible, setIsQrMenuVisible] = useState(false);
   const [activeTableForOrder, setActiveTableForOrder] = useState<any>(null);
@@ -181,13 +323,36 @@ const handleClearNotifications = () => {
   const [linkedTableId, setLinkedTableId] = useState<string | null>(null);
   const [toGoCustomerName, setToGoCustomerName] = useState("");
 
-  const handleTablePress = (table: any) => {
+  const handleTablePress = async (table: any) => {
     if (table.status === "Ocupada") {
       const orderForTable = activeOrders.find((o) => o.tableId === table.id);
-      const isMyOrder = orderForTable?.employeeId === myEmployeeId;
+      let assignment = occupiedTableWaiters.find(
+        (item) => String(item.tableId) === String(table.id),
+      );
+      if (!assignment) {
+        const refreshedAssignments = await refetchOccupiedTableWaiters();
+        if (!refreshedAssignments) {
+          showAppAlert(
+            t.errorTitle || "Error",
+            t.tableWaiterLoadError ||
+              "No se pudo consultar quién atiende esta mesa. Revisa la conexión e inténtalo de nuevo.",
+            [{ text: t.tableOccupiedCancel || "Entendido", style: "cancel" }],
+          );
+          return;
+        }
+        assignment = refreshedAssignments?.find(
+          (item) => String(item.tableId) === String(table.id),
+        );
+      }
+      const assignedEmployeeId =
+        assignment?.employeeId ?? orderForTable?.employeeId ?? null;
+      const assignedEmployeeName =
+        assignment?.employeeName ?? orderForTable?.employeeName ?? null;
+      const isMyOrder =
+        assignedEmployeeId !== null && assignedEmployeeId === myEmployeeId;
 
       if (isMyOrder) {
-        Alert.alert(
+        showAppAlert(
           t.tableOccupiedTitle || "Mesa Ocupada",
           t.tableOccupiedMessage ||
             "Ve a la pestaña de órdenes activas para ver o agregar productos.",
@@ -200,11 +365,11 @@ const handleClearNotifications = () => {
           ],
         );
       } else {
-        const waiterName = orderForTable?.employeeName || "otro mesero";
-        Alert.alert(
-          "Mesa no disponible",
-          `Esta mesa está siendo atendida por ${waiterName}.`,
-          [{ text: "Entendido", style: "cancel" }],
+        const waiterName = assignedEmployeeName || t.otherWaiter;
+        showAppAlert(
+          t.tableUnavailableTitle,
+          t.tableUnavailableMessage.replace("{waiter}", waiterName),
+          [{ text: t.tableOccupiedCancel || "Entendido", style: "cancel" }],
         );
       }
       return;
@@ -259,7 +424,9 @@ const handleClearNotifications = () => {
           d.status !== OrderDetailStatus.Voided &&
           d.status !== OrderDetailStatus.Cancelled,
       );
-      const pending = live.filter((d) => d.status === OrderDetailStatus.Pending);
+      const pending = live.filter(
+        (d) => d.status === OrderDetailStatus.Pending,
+      );
       // Si TODO está en espera se cancela el pedido completo (libera la mesa).
       // Si cocina ya tocó algo, solo se anulan los productos que siguen en espera.
       const onlyPending = live.length > 0 && pending.length === live.length;
@@ -312,11 +479,11 @@ const handleClearNotifications = () => {
     }
 
     try {
-      await Promise.all(
-        pendingItems.map((item: any) =>
-          orderService.markDelivered(Number(item.cartId)),
-        ),
-      );
+      // Confirma cada plato antes de mandar el siguiente para que la última
+      // confirmación pueda liberar la mesa al ver el pedido completo.
+      for (const item of pendingItems) {
+        await orderService.markDelivered(Number(item.cartId));
+      }
       await refetchOrders();
     } catch (err: any) {
       showAppAlert(
@@ -364,9 +531,10 @@ const handleClearNotifications = () => {
     if (orderItems.length === 0) setIsCartExpanded(true);
   };
 
-  const handleUpdateItemNote = (cartId: string, note: string) => {
+  const handleUpdateItemNote = async (cartId: string, note: string) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     const itemToUpdate = orderItems.find((i) => i.cartId === cartId);
+    if (!itemToUpdate) return false;
 
     const lockMessage = getKitchenLockMessage(itemToUpdate);
     if (lockMessage) {
@@ -374,16 +542,63 @@ const handleClearNotifications = () => {
         t.actionNotAllowedTitle || "Acción no permitida",
         lockMessage,
       );
-      return;
+      return false;
+    }
+
+    if (itemToUpdate.alreadySubmitted) {
+      if (!activeOrderId) {
+        showAppAlert(
+          t.errorTitle || "Error",
+          t.orderItemMissingOrder || "No se pudo identificar el pedido.",
+        );
+        return false;
+      }
+      try {
+        const orderId = Number(activeOrderId);
+        const freshOrder = await orderService.getById(orderId);
+        const freshDetail = freshOrder.orderDetails.find(
+          (detail) => detail.id === Number(cartId),
+        );
+        if (!freshDetail || freshDetail.status !== OrderDetailStatus.Pending) {
+          await refetchOrders();
+          showAppAlert(
+            t.actionNotAllowedTitle || "Acción no permitida",
+            t.orderItemNotPendingEdit ||
+              "Este producto ya no está pendiente y no se puede modificar.",
+          );
+          return false;
+        }
+
+        await orderService.updateDetail(freshDetail.id, {
+          quantity: freshDetail.quantity,
+          notes: note || null,
+        });
+        await refetchOrders();
+      } catch (err: any) {
+        showAppAlert(
+          t.errorTitle || "Error",
+          err?.message ||
+            t.orderItemSaveNoteError ||
+            "No se pudo guardar la nota del producto.",
+        );
+        return false;
+      }
     }
 
     setOrderItems((items) =>
       items.map((item) => (item.cartId === cartId ? { ...item, note } : item)),
     );
+    return true;
   };
-  // Bloquea edición (nota / para llevar) si cocina ya tomó el plato.
+  // Bloquea las notas y anulaciones si cocina ya tomó el plato.
   // Devuelve el mensaje de alerta con el estado real, o null si se puede editar.
   const getKitchenLockMessage = (item: any): string | null => {
+    if (item?.isDelivered || item?.status === "Delivered") {
+      return (
+        t.orderItemDeliveredLock ||
+        "Este producto ya fue entregado y no se puede modificar."
+      );
+    }
     if (item?.status === "InPreparation") {
       return "Este plato ya está en preparación en cocina, no se puede modificar.";
     }
@@ -393,10 +608,12 @@ const handleClearNotifications = () => {
     return null;
   };
 
-  const handleRemoveItem = (cartId: string) => {
+  const handleRemoveItem = async (cartId: string) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     const itemToRemove = orderItems.find((i) => i.cartId === cartId);
-    if (itemToRemove?.isDelivered) {
+    if (!itemToRemove) return;
+
+    if (itemToRemove.isDelivered || itemToRemove.status === "Delivered") {
       showAppAlert(
         t.actionNotAllowedTitle || "Acción no permitida",
         t.actionNotAllowedRemoveMessage ||
@@ -404,32 +621,8 @@ const handleClearNotifications = () => {
       );
       return;
     }
-    if (itemToRemove?.alreadySubmitted) {
-      showAppAlert(
-        t.actionNotAllowedTitle || "Acción no permitida",
-        "Este plato ya fue enviado a cocina y no se puede quitar desde aquí.",
-      );
-      return;
-    }
-    const updated = orderItems.filter((item) => item.cartId !== cartId);
-    setOrderItems(updated);
-    if (updated.length === 0) setIsCartExpanded(false);
-  };
 
-  const toggleItemToGo = (cartId: string) => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    const itemToToggle = orderItems.find((i) => i.cartId === cartId);
-
-    if (itemToToggle?.isDelivered) {
-      showAppAlert(
-        t.actionNotAllowedTitle || "Acción no permitida",
-        t.actionNotAllowedToGoMessage ||
-          'El plato ya se sirvió, no se puede cambiar a "para llevar".',
-      );
-      return;
-    }
-
-    const lockMessage = getKitchenLockMessage(itemToToggle);
+    const lockMessage = getKitchenLockMessage(itemToRemove);
     if (lockMessage) {
       showAppAlert(
         t.actionNotAllowedTitle || "Acción no permitida",
@@ -438,8 +631,90 @@ const handleClearNotifications = () => {
       return;
     }
 
+    if (itemToRemove?.alreadySubmitted) {
+      if (!activeOrderId) {
+        showAppAlert(
+          t.errorTitle || "Error",
+          t.orderItemMissingOrder || "No se pudo identificar el pedido.",
+        );
+        return;
+      }
+      try {
+        const orderId = Number(activeOrderId);
+        const freshOrder = await orderService.getById(orderId);
+        const freshDetail = freshOrder.orderDetails.find(
+          (detail) => detail.id === Number(cartId),
+        );
+        if (!freshDetail || freshDetail.status !== OrderDetailStatus.Pending) {
+          await refetchOrders();
+          showAppAlert(
+            t.actionNotAllowedTitle || "Acción no permitida",
+            t.orderItemNotPendingCancel ||
+              "Este producto ya no está pendiente y no se puede cancelar.",
+          );
+          return;
+        }
+
+        await orderService.voidDetail(
+          freshDetail.id,
+          t.orderItemVoidReason || "Quitado por el mesero",
+        );
+        await refetchOrders();
+      } catch (err: any) {
+        showAppAlert(
+          t.errorTitle || "Error",
+          err?.message ||
+            t.orderItemCancelError ||
+            "No se pudo cancelar el producto.",
+        );
+        return;
+      }
+    }
+
+    const updated = orderItems.filter((item) => item.cartId !== cartId);
+    setOrderItems(updated);
+    if (updated.length === 0) setIsCartExpanded(false);
+  };
+
+  const toggleItemToGo = async (cartId: string) => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    const itemToToggle = orderItems.find((i) => i.cartId === cartId);
+    if (!itemToToggle) return;
+
+    const isToGo = !itemToToggle.isToGo;
+
+    if (itemToToggle.alreadySubmitted) {
+      const orderDetailId = Number(cartId);
+      if (!Number.isInteger(orderDetailId) || orderDetailId <= 0) {
+        showAppAlert(
+          t.errorTitle || "Error",
+          t.orderItemMissingDetail ||
+            "No se pudo identificar el producto del pedido.",
+        );
+        return;
+      }
+
+      try {
+        await orderService.updateDetailToGo(orderDetailId, isToGo);
+        setOrderItems((items) =>
+          items.map((item) =>
+            item.cartId === cartId ? { ...item, isToGo } : item,
+          ),
+        );
+        await refetchOrders();
+      } catch (err: any) {
+        showAppAlert(
+          t.errorTitle || "Error",
+          err?.message ||
+            t.orderItemToGoError ||
+            "No se pudo actualizar si el producto es para llevar.",
+        );
+      }
+      return;
+    }
+
     setOrderItems((items) =>
-      items.map((i) => (i.cartId === cartId ? { ...i, isToGo: !i.isToGo } : i)),
+      items.map((i) => (i.cartId === cartId ? { ...i, isToGo } : i)),
     );
   };
 
@@ -533,10 +808,7 @@ const handleClearNotifications = () => {
     }
 
     if (finalTableId !== null && !Number.isFinite(finalTableId)) {
-      showAppAlert(
-        t.errorTitle || "Error",
-        "La mesa seleccionada no es válida.",
-      );
+      showAppAlert(t.errorTitle || "Error", t.invalidTableMessage);
       return;
     }
 
@@ -607,7 +879,17 @@ const handleClearNotifications = () => {
   // --- RENDER ---
   return (
     <>
-      <NotificationToastContainer notifications={toasts} onDismiss={dismissToast} />
+      <NotificationToastContainer
+        notifications={toasts}
+        onDismiss={dismissToast}
+        t={(key) => t[key] || key}
+        colors={{
+          surface: colors.surface,
+          text: colors.text,
+          mutedText: colors.mutedText,
+          border: colors.border,
+        }}
+      />
       {activeTableForOrder ? (
         <OrderTakingView
           activeTableForOrder={activeTableForOrder}
@@ -627,46 +909,75 @@ const handleClearNotifications = () => {
           toggleItemToGo={toggleItemToGo}
           handleUpdateItemNote={handleUpdateItemNote}
           handleSubmitOrder={handleSubmitOrder}
+          taxRate={branchSettings?.taxRate ?? 0}
         />
       ) : (
         <SafeAreaView
+          edges={["top"]}
           style={[styles.container, { backgroundColor: colors.background }]}
         >
           <View
             style={[
               styles.mainHeader,
+              windowWidth < 380 && {
+                flexDirection: "column",
+                alignItems: "stretch",
+                gap: 10,
+              },
+              { paddingHorizontal: windowWidth < 380 ? 16 : 20 },
               { backgroundColor: colors.header, borderColor: colors.border },
             ]}
           >
             <View style={styles.headerTitlesBox}>
               <Text style={[styles.mainSubtitle, { color: colors.mutedText }]}>
-                {t.dashboardWaiterPanel || "Panel de Mesero"}
+                {employeeDisplayName}
               </Text>
             </View>
 
             <View
-              style={{ flexDirection: "row", gap: 8, alignItems: "center" }}
+              style={{
+                flexDirection: "row",
+                gap: 8,
+                alignItems: "center",
+                justifyContent: "flex-end",
+              }}
             >
               <NotificationCenter
-                notifications={notificationHistory}
+                notifications={todaysNotifications}
                 unreadCount={unreadCount}
+                colors={{
+                  background: colors.background,
+                  surface: colors.surface,
+                  elevated: colors.elevatedSurface,
+                  text: colors.text,
+                  muted: colors.mutedText,
+                  border: colors.border,
+                  accent: colors.accent,
+                }}
+                t={(key) => t[key] || key}
                 onOpen={handleOpenNotifications}
                 onClear={handleClearNotifications}
                 onSelect={handleNotificationSelect}
               />
               <TouchableOpacity
-                style={styles.toGoButton}
+                style={[
+                  styles.toGoButton,
+                  {
+                    backgroundColor: colors.success,
+                    shadowColor: colors.success,
+                  },
+                ]}
                 onPress={handleStartToGoOrder}
               >
                 <Ionicons name="bag-handle-outline" size={20} color="#FFF" />
-                <Text style={styles.toGoButtonText}>
+                <Text style={styles.toGoButtonText} numberOfLines={1}>
                   {t.dashboardParaLlevar || "Para Llevar"}
                 </Text>
               </TouchableOpacity>
             </View>
           </View>
 
-          {!soundEnabled && (
+          {soundNotifications && !soundEnabled && (
             <TouchableOpacity
               onPress={enableSound}
               style={{
@@ -674,13 +985,24 @@ const handleClearNotifications = () => {
                 alignItems: "center",
                 justifyContent: "center",
                 gap: 8,
-                backgroundColor: "#FEF3C7",
+                backgroundColor: `${colors.warning}22`,
                 paddingVertical: 10,
               }}
             >
-              <Ionicons name="volume-mute-outline" size={18} color="#92400E" />
-              <Text style={{ color: "#92400E", fontWeight: "700" }}>
-                Toca aquí para activar el sonido de pedidos
+              <Ionicons
+                name="volume-mute-outline"
+                size={18}
+                color={colors.warning}
+              />
+              <Text
+                style={{
+                  color: colors.warning,
+                  fontWeight: "700",
+                  textAlign: "center",
+                  flexShrink: 1,
+                }}
+              >
+                {t.soundEnablePrompt}
               </Text>
             </TouchableOpacity>
           )}
@@ -692,7 +1014,14 @@ const handleClearNotifications = () => {
             ]}
           >
             <TouchableOpacity
-              style={[styles.tab, activeTab === "MESAS" && styles.activeTab]}
+              style={[
+                styles.tab,
+                activeTab === "MESAS" && styles.activeTab,
+                {
+                  borderBottomColor:
+                    activeTab === "MESAS" ? colors.accent : "transparent",
+                },
+              ]}
               onPress={() => setActiveTab("MESAS")}
             >
               <Ionicons
@@ -711,7 +1040,14 @@ const handleClearNotifications = () => {
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.tab, activeTab === "ORDENES" && styles.activeTab]}
+              style={[
+                styles.tab,
+                activeTab === "ORDENES" && styles.activeTab,
+                {
+                  borderBottomColor:
+                    activeTab === "ORDENES" ? colors.accent : "transparent",
+                },
+              ]}
               onPress={() => setActiveTab("ORDENES")}
             >
               <Ionicons
@@ -734,12 +1070,18 @@ const handleClearNotifications = () => {
           </View>
 
           <View
-            style={[styles.content, { backgroundColor: colors.background }]}
+            style={{
+              flex: 1,
+              minHeight: 0,
+              overflow: "hidden",
+              backgroundColor: colors.background,
+            }}
           >
             {activeTab === "MESAS" ? (
               <TablesGridView
                 tables={tables}
                 handleTablePress={handleTablePress}
+                occupiedTableWaiters={occupiedTableWaiters}
               />
             ) : (
               <ActiveOrdersView
@@ -755,7 +1097,6 @@ const handleClearNotifications = () => {
           </View>
         </SafeAreaView>
       )}
-      <AppAlertModal />
     </>
   );
-};;
+};

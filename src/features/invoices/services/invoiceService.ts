@@ -18,4 +18,9 @@ export const invoiceService = {
     const res = await fetchAuthed(`${INVOICES_BASE_URL}/payment/${paymentId}`);
     return handleResponse<Invoice>(res);
   },
+
+  getByOrder: async (orderId: number): Promise<Invoice[]> => {
+    const res = await fetchAuthed(`${INVOICES_BASE_URL}/order/${orderId}`);
+    return handleResponse<Invoice[]>(res);
+  },
 };

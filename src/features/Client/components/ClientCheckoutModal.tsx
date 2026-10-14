@@ -7,11 +7,14 @@ import {
   ScrollView,
   Alert,
   LayoutAnimation,
-  Image,
   ActivityIndicator,
 } from "react-native";
 import { Ionicons } from '@expo/vector-icons';
-import { styles } from './style/ClientStyles';
+import { Image as ExpoImage } from "expo-image";
+import { styles as baseStyles } from './style/ClientStyles';
+import { getClientLocale, useClientPreferences, useClientThemedStyles } from "@/features/userPreferences/context/ClientPreferencesContext";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { BreakdownRows } from "@/features/orders/components/BreakdownRows";
 
 export const ClientCheckoutModal = ({
   cartModalVisible,
@@ -22,6 +25,7 @@ export const ClientCheckoutModal = ({
   cart,
   removeFromCart,
   totalCart,
+  breakdown,
   proceedToCheckout,
   paymentMethod,
   setPaymentMethod,
@@ -36,7 +40,13 @@ export const ClientCheckoutModal = ({
   waitingPayment,
   stopWaiting,
   orderPaid,
+  outOfRadius,
+  radiusTitle,
+  radiusText,
 }: any) => {
+  const styles = useClientThemedStyles(baseStyles);
+  const { t, colors, language } = useClientPreferences();
+  const insets = useSafeAreaInsets();
 
   return (
     <Modal
@@ -49,24 +59,43 @@ export const ClientCheckoutModal = ({
         <View
           style={[
             styles.modalBox,
+            { paddingBottom: Math.max(24, insets.bottom + 12) },
             (isCheckingOut || isUploadingReceipt) && { minHeight: "65%" },
           ]}
         >
+          {outOfRadius && !orderConfirmed && (
+            <View
+              accessibilityRole="alert"
+              style={{
+                padding: 12,
+                marginBottom: 14,
+                borderRadius: 10,
+                backgroundColor: "#FEE2E2",
+                borderWidth: 1,
+                borderColor: "#FCA5A5",
+              }}
+            >
+              <Text style={{ color: "#991B1B", fontWeight: "700", marginBottom: 2 }}>
+                {radiusTitle}
+              </Text>
+              <Text style={{ color: "#991B1B", fontSize: 12 }}>
+                {radiusText}
+              </Text>
+            </View>
+          )}
           {orderConfirmed ? (
             // 4. PANTALLA DE ÉXITO
             <View style={styles.successContainer}>
               <Ionicons name="checkmark-circle" size={90} color="#10B981" />
               <Text style={styles.successTitle}>
-                {orderPaid ? "¡Pago confirmado!" : "¡Pedido Recibido!"}
+                {orderPaid ? t("paymentConfirmed") : t("orderReceived")}
               </Text>
               <Text style={styles.successText}>
-                {orderPaid
-                  ? "Recibimos tu pago y tu pedido ya está en preparación. Te avisaremos cuando salga hacia tu dirección."
-                  : "Tu pedido está pendiente de confirmación en la sede. Te avisaremos cuando esté en camino."}
+                {orderPaid ? t("orderPaidMessage") : t("orderPendingMessage")}
               </Text>
               <View style={styles.successDivider} />
               <Text style={styles.successNote}>
-                Sigue el estado de tu pedido en "Mi Perfil".
+                {t("profileTrackingNote")}
               </Text>
             </View>
           ) : isUploadingReceipt ? (
@@ -80,12 +109,12 @@ export const ClientCheckoutModal = ({
                   }}
                   style={styles.backButton}
                 >
-                  <Ionicons name="arrow-back" size={26} color="#1E293B" />
+              <Ionicons name="arrow-back" size={26} color={colors.text} />
                 </TouchableOpacity>
                 <Text
                   style={[styles.modalTitle, { flex: 1, textAlign: "center" }]}
                 >
-                  Confirmación
+                  {t("confirmation")}
                 </Text>
                 <TouchableOpacity
                   onPress={handleCloseCart}
@@ -101,14 +130,14 @@ export const ClientCheckoutModal = ({
                     <Ionicons
                       name="card"
                       size={32}
-                      color="#1E293B"
+                      color={colors.text}
                       style={{ marginBottom: 10 }}
                     />
                     <Text style={styles.bankInfoText}>
-                      Monto a pagar con Wompi:
+                      {t("wompiAmount")}
                     </Text>
                     <Text style={styles.bankInfoTotal}>
-                      ${totalCart.toLocaleString("es-CO")}
+                      ${totalCart.toLocaleString(getClientLocale(language))}
                     </Text>
                     <Text
                       style={[
@@ -116,9 +145,7 @@ export const ClientCheckoutModal = ({
                         { marginTop: 15, textAlign: "center", fontSize: 13 },
                       ]}
                     >
-                      Se abrirá la pasarela segura de Wompi (Nequi, tarjeta,
-                      PSE). Al terminar, vuelve a esta app: confirmaremos tu
-                      pago automáticamente.
+                      {t("wompiInstructions")}
                     </Text>
                   </View>
                 ) : (
@@ -139,10 +166,10 @@ export const ClientCheckoutModal = ({
                       style={{ marginBottom: 10 }}
                     />
                     <Text style={[styles.bankInfoText, { color: "#065F46" }]}>
-                      Pago en Efectivo (Contra entrega):
+                      {t("cashPayment")}
                     </Text>
                     <Text style={[styles.bankInfoTotal, { color: "#047857" }]}>
-                      ${totalCart.toLocaleString("es-CO")}
+                      ${totalCart.toLocaleString(getClientLocale(language))}
                     </Text>
                     <Text
                       style={[
@@ -155,8 +182,7 @@ export const ClientCheckoutModal = ({
                         },
                       ]}
                     >
-                      Le pagarás directamente al repartidor cuando entregue tu
-                      pedido. Por favor, intenta tener el dinero exacto.
+                      {t("cashInstructions")}
                     </Text>
                   </View>
                 )}
@@ -164,15 +190,15 @@ export const ClientCheckoutModal = ({
                 {waitingPayment && (
                   <View style={{ alignItems: "center", marginTop: 20 }}>
                     <ActivityIndicator size="large" color="#E61C24" />
-                    <Text style={{ marginTop: 10, color: "#64748B" }}>
-                      Esperando confirmación del pago...
+                    <Text style={{ marginTop: 10, color: colors.muted }}>
+                      {t("waitingPayment")}
                     </Text>
                     <TouchableOpacity
                       onPress={stopWaiting}
                       style={{ marginTop: 8, padding: 8 }}
                     >
                       <Text style={{ color: "#E61C24", fontWeight: "600" }}>
-                        Cancelar espera
+                        {t("cancelWait")}
                       </Text>
                     </TouchableOpacity>
                   </View>
@@ -183,25 +209,34 @@ export const ClientCheckoutModal = ({
                     styles.confirmOrderBtn,
                     (submitting || waitingPayment) &&
                       styles.confirmOrderBtnDisabled,
+                    outOfRadius && {
+                      backgroundColor: "#E2E8F0",
+                      shadowOpacity: 0,
+                    },
                     { marginTop: 20, marginBottom: 20 },
                   ]}
                   onPress={submitFinalOrder}
-                  disabled={submitting || waitingPayment}
+                  disabled={submitting || waitingPayment || outOfRadius}
                 >
                   <Ionicons
                     name={
                       paymentMethod === "efectivo" ? "bicycle" : "lock-closed"
                     }
                     size={20}
-                    color="#FFF"
+                    color={outOfRadius ? "#475569" : "#FFF"}
                     style={{ marginRight: 8 }}
                   />
-                  <Text style={styles.confirmOrderBtnText}>
+                  <Text
+                    style={[
+                      styles.confirmOrderBtnText,
+                      outOfRadius && { color: "#475569" },
+                    ]}
+                  >
                     {submitting
-                      ? "Procesando..."
+                      ? t("processing")
                       : paymentMethod === "efectivo"
-                        ? "Confirmar Pedido y Enviar"
-                        : "Pagar con Wompi"}
+                        ? t("confirmOrderAndSend")
+                        : t("payWithWompi")}
                   </Text>
                 </TouchableOpacity>
               </ScrollView>
@@ -214,12 +249,12 @@ export const ClientCheckoutModal = ({
                   onPress={() => setIsCheckingOut(false)}
                   style={styles.backButton}
                 >
-                  <Ionicons name="arrow-back" size={26} color="#1E293B" />
+                  <Ionicons name="arrow-back" size={26} color={colors.text} />
                 </TouchableOpacity>
                 <Text
                   style={[styles.modalTitle, { flex: 1, textAlign: "center" }]}
                 >
-                  Método de Pago
+                  {t("paymentMethod")}
                 </Text>
                 <TouchableOpacity
                   onPress={handleCloseCart}
@@ -230,13 +265,24 @@ export const ClientCheckoutModal = ({
               </View>
 
               <View style={styles.paymentTotalBox}>
-                <Text style={styles.paymentTotalLabel}>Total a pagar</Text>
+              <Text style={styles.paymentTotalLabel}>{t("totalToPay")}</Text>
                 <Text style={styles.paymentTotalBig}>
-                  ${totalCart.toLocaleString("es-CO")}
+                  ${totalCart.toLocaleString(getClientLocale(language))}
                 </Text>
               </View>
 
-              <Text style={styles.paymentSubtitle}>¿Cómo deseas pagar?</Text>
+              {breakdown && (
+                <View style={{ paddingHorizontal: 4 }}>
+                  <BreakdownRows
+                    {...breakdown}
+                    lang={language}
+                    locale={getClientLocale(language)}
+                    textColor={colors.text}
+                    mutedColor={colors.muted}
+                  />
+                </View>
+              )}
+              <Text style={styles.paymentSubtitle}>{t("paymentQuestion")}</Text>
 
               <View style={styles.paymentGrid}>
                 {/* OPCIÓN 1: WOMPI */}
@@ -259,7 +305,7 @@ export const ClientCheckoutModal = ({
                     <Ionicons
                       name="card"
                       size={28}
-                      color={paymentMethod === "wompi" ? "#E61C24" : "#64748B"}
+                      color={paymentMethod === "wompi" ? colors.accent : colors.muted}
                     />
                   </View>
                   <Text
@@ -272,7 +318,7 @@ export const ClientCheckoutModal = ({
                     Wompi
                   </Text>
                   <Text style={styles.paymentCardDesc}>
-                    Nequi, Tarjetas, PSE
+                    {t("cardTypes")}
                   </Text>
                 </TouchableOpacity>
 
@@ -298,7 +344,7 @@ export const ClientCheckoutModal = ({
                       name="cash"
                       size={28}
                       color={
-                        paymentMethod === "efectivo" ? "#E61C24" : "#64748B"
+                        paymentMethod === "efectivo" ? colors.accent : colors.muted
                       }
                     />
                   </View>
@@ -309,9 +355,9 @@ export const ClientCheckoutModal = ({
                         styles.paymentCardTitleActive,
                     ]}
                   >
-                    Efectivo
+                    {t("cash")}
                   </Text>
-                  <Text style={styles.paymentCardDesc}>Pago al repartidor</Text>
+                  <Text style={styles.paymentCardDesc}>{t("payDriver")}</Text>
                 </TouchableOpacity>
               </View>
 
@@ -319,16 +365,28 @@ export const ClientCheckoutModal = ({
                 <TouchableOpacity
                   style={[
                     styles.confirmOrderBtn,
-                    !paymentMethod && styles.confirmOrderBtnDisabled,
+                    (!paymentMethod || outOfRadius) &&
+                      styles.confirmOrderBtnDisabled,
+                    outOfRadius && {
+                      backgroundColor: "#E2E8F0",
+                      shadowOpacity: 0,
+                    },
                   ]}
                   onPress={handlePaymentNextStep}
-                  disabled={!paymentMethod}
+                  disabled={!paymentMethod || outOfRadius}
                 >
-                  <Text style={styles.confirmOrderBtnText}>Continuar</Text>
+                  <Text
+                    style={[
+                      styles.confirmOrderBtnText,
+                      outOfRadius && { color: "#475569" },
+                    ]}
+                  >
+                    {t("continue")}
+                  </Text>
                   <Ionicons
                     name="arrow-forward"
                     size={20}
-                    color="#FFF"
+                    color={outOfRadius ? "#475569" : "#FFF"}
                     style={{ marginLeft: 8 }}
                   />
                 </TouchableOpacity>
@@ -338,7 +396,7 @@ export const ClientCheckoutModal = ({
             // 1. PANTALLA DEL CARRITO (Tus platos seleccionados)
             <>
               <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>Tu Pedido</Text>
+                <Text style={styles.modalTitle}>{t("orderTitle")}</Text>
                 <TouchableOpacity onPress={handleCloseCart}>
                   <Ionicons name="close" size={28} color="#94A3B8" />
                 </TouchableOpacity>
@@ -348,7 +406,7 @@ export const ClientCheckoutModal = ({
                 <View style={{ alignItems: "center", paddingVertical: 40 }}>
                   <Ionicons name="cart-outline" size={60} color="#E2E8F0" />
                   <Text style={styles.emptyCartText}>
-                    Aún no has agregado nada.
+                    {t("emptyCart")}
                   </Text>
                 </View>
               ) : (
@@ -360,14 +418,16 @@ export const ClientCheckoutModal = ({
                     <View key={item.cartId} style={styles.cartItem}>
                       <View style={styles.cartItemImageMini}>
                         {item.image ? (
-                          <Image
+                          <ExpoImage
                             source={{ uri: item.image }}
                             style={{
                               width: "100%",
                               height: "100%",
                               borderRadius: 8,
                             }}
-                            resizeMode="cover"
+                            contentFit="cover"
+                            cachePolicy="memory-disk"
+                            transition={120}
                           />
                         ) : (
                           <Text style={{ fontSize: 24 }}>🍽️</Text>
@@ -376,7 +436,7 @@ export const ClientCheckoutModal = ({
                       <View style={{ flex: 1, marginLeft: 12 }}>
                         <Text style={styles.cartItemName}>{item.name}</Text>
                         <Text style={styles.cartItemPrice}>
-                          ${item.price.toLocaleString("es-CO")}
+                          ${item.price.toLocaleString(getClientLocale(language))}
                         </Text>
                       </View>
                       <TouchableOpacity
@@ -396,23 +456,44 @@ export const ClientCheckoutModal = ({
 
               {cart.length > 0 && (
                 <View style={styles.checkoutFooter}>
+                    {breakdown && (
+                    <BreakdownRows
+                      {...breakdown}
+                      lang={language}
+                      locale={getClientLocale(language)}
+                      textColor={colors.text}
+                      mutedColor={colors.muted}
+                    />
+                  )}
                   <View style={styles.checkoutTotalRow}>
-                    <Text style={styles.checkoutTotalLabel}>Total:</Text>
+                    <Text style={styles.checkoutTotalLabel}>{t("total")}:</Text>
                     <Text style={styles.checkoutTotalValue}>
-                      ${totalCart.toLocaleString("es-CO")}
+                      ${totalCart.toLocaleString(getClientLocale(language))}
                     </Text>
                   </View>
                   <TouchableOpacity
-                    style={styles.confirmOrderBtn}
+                    style={[
+                      styles.confirmOrderBtn,
+                      outOfRadius && {
+                        backgroundColor: "#E2E8F0",
+                        shadowOpacity: 0,
+                      },
+                    ]}
                     onPress={proceedToCheckout}
+                    disabled={outOfRadius}
                   >
-                    <Text style={styles.confirmOrderBtnText}>
-                      Continuar al Pago
+                    <Text
+                      style={[
+                        styles.confirmOrderBtnText,
+                        outOfRadius && { color: "#475569" },
+                      ]}
+                    >
+                      {t("continueToPayment")}
                     </Text>
                     <Ionicons
                       name="arrow-forward"
                       size={20}
-                      color="#FFF"
+                      color={outOfRadius ? "#475569" : "#FFF"}
                       style={{ marginLeft: 8 }}
                     />
                   </TouchableOpacity>

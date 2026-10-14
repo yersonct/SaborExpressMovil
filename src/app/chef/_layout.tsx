@@ -2,12 +2,17 @@ import React from "react";
 import { Stack, Redirect } from "expo-router";
 import { View, ActivityIndicator } from "react-native";
 import { ChefThemeProvider } from "@/features/chef/context/ChefThemeContext";
+import { ChefLanguageProvider } from "@/features/chef/context/ChefLanguageContext";
+import { getUserIdFromToken } from "@/features/auth/services/decodeToken";
 import { useAuth } from "../../features/auth/context/AuthContext";
 import { resolveEffectiveRole } from "../../features/auth/services/roleMap";
 import { ROLE_NAMES } from "../../features/auth/types/role";
 
 export default function ChefLayout() {
   const { user, initializing } = useAuth();
+  const preferenceScope = user
+    ? String(getUserIdFromToken(user.token) ?? user.identifier.trim().toLowerCase())
+    : "anonymous";
 
   if (initializing) {
     return (
@@ -36,8 +41,10 @@ if (
 }
 
   return (
-    <ChefThemeProvider>
-      <Stack screenOptions={{ headerShown: false }} />
+    <ChefThemeProvider key={preferenceScope}>
+      <ChefLanguageProvider>
+        <Stack screenOptions={{ headerShown: false }} />
+      </ChefLanguageProvider>
     </ChefThemeProvider>
   );
 }

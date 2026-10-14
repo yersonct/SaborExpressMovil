@@ -16,6 +16,9 @@ let listener: Listener | null = null;
 
 export function setAlertListener(fn: Listener) {
   listener = fn;
+  return () => {
+    if (listener === fn) listener = null;
+  };
 }
 
 // Misma firma que Alert.alert(title, message?, buttons?) — así el reemplazo

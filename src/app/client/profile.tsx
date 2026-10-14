@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
+import { getClientLocale, useClientPreferences, useClientThemedStyles } from "@/features/userPreferences/context/ClientPreferencesContext";
 import { useRouter, useFocusEffect } from "expo-router";
 import { useAuth } from "@/features/auth/context/AuthContext";
 import { getCustomerIdFromToken } from "@/features/auth/services/decodeToken";
@@ -60,13 +61,13 @@ const STATUS_UI: Record<
   },
 };
 
-function formatOrderDate(iso: string) {
+function formatOrderDate(iso: string, language: "es" | "en" | "pt" | "fr") {
   const d = new Date(iso);
-  const day = d.toLocaleDateString("es-CO", { day: "numeric", month: "short" });
-  const time = d.toLocaleTimeString("es-CO", {
+  const locale = getClientLocale(language);
+  const day = d.toLocaleDateString(locale, { day: "numeric", month: "short" });
+  const time = d.toLocaleTimeString(locale, {
     hour: "numeric",
     minute: "2-digit",
-    hour12: true,
   });
   return `${day}, ${time}`;
 }
@@ -92,6 +93,7 @@ function Field({
   keyboardType = "default",
   placeholder,
 }: FieldProps) {
+  const styles = useClientThemedStyles(baseStyles);
   const disabled = locked || !editable;
   return (
     <View style={styles.inputGroup}>
@@ -125,6 +127,7 @@ function Stat({
   value: number;
   label: string;
 }) {
+  const styles = useClientThemedStyles(baseStyles);
   return (
     <View style={styles.statColumn}>
       <Ionicons name={icon} size={24} color={color} />
@@ -135,6 +138,8 @@ function Stat({
 }
 
 export default function ClientProfile() {
+  const styles = useClientThemedStyles(baseStyles);
+  const { t, language } = useClientPreferences();
   const router = useRouter();
   const { customer, loading, completeProfile } = useCompleteProfile();
   const { activeOrder } = useActiveClientOrder();
@@ -215,16 +220,16 @@ export default function ClientProfile() {
     const name = formData.name.trim();
     const phone = formData.phone.replace(/\s/g, "");
 
-    if (!name) newErrors.name = "El nombre no puede estar vacío.";
+    if (!name) newErrors.name = t("nameRequired");
     else if (name.length < 3)
-      newErrors.name = "El nombre debe tener mínimo 3 caracteres.";
+      newErrors.name = t("nameMin");
     else if (/\d/.test(name))
-      newErrors.name = "El nombre no puede contener números.";
+      newErrors.name = t("nameNoDigits");
 
     // Mismo formato que valida el backend: 7 dígitos (fijo) o 10 (celular).
-    if (!phone) newErrors.phone = "El teléfono es obligatorio.";
+    if (!phone) newErrors.phone = t("phoneRequired");
     else if (!/^\d{7}(\d{3})?$/.test(phone))
-      newErrors.phone = "Debe tener 7 o 10 dígitos, sin espacios ni guiones.";
+      newErrors.phone = t("phoneFormat");
 
     setErrors(newErrors);
     if (newErrors.name || newErrors.phone) return;
@@ -246,13 +251,13 @@ export default function ClientProfile() {
       });
       setIsEditing(false);
       Alert.alert(
-        "✅ ¡Guardado!",
-        "Tu información personal se ha actualizado exitosamente.",
+        t("savedTitle"),
+        t("profileSavedMessage"),
       );
     } catch (err: any) {
       Alert.alert(
-        "Error",
-        err?.message ?? "No se pudo guardar tu información. Intenta de nuevo.",
+        t("error"),
+        err?.message ?? t("profileSaveError"),
       );
     } finally {
       setSaving(false);
@@ -261,7 +266,7 @@ export default function ClientProfile() {
 
   const handleCallDriver = (phone: string) => {
     Linking.openURL(`tel:${phone}`).catch(() =>
-      Alert.alert("Error", "No se pudo abrir el marcador del teléfono."),
+      Alert.alert(t("error"), t("phoneDialError")),
     );
   };
 
@@ -289,7 +294,7 @@ export default function ClientProfile() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Mi Perfil</Text>
+      <Text style={styles.headerTitle}>{t("profileTitle")}</Text>
       </View>
 
       <ScrollView
@@ -298,28 +303,28 @@ export default function ClientProfile() {
       >
         {/* ===== MIS PEDIDOS ===== */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Mis pedidos</Text>
+          <Text style={styles.sectionTitle}>{t("myOrders")}</Text>
 
           <View style={[styles.card, styles.statsRow]}>
             <Stat
               icon="time-outline"
               color="#F59E0B"
               value={inProgressCount}
-              label="En curso"
+              label={t("inProgress")}
             />
             <View style={styles.statDivider} />
             <Stat
               icon="checkmark-circle-outline"
               color="#10B981"
               value={deliveredCount}
-              label="Entregados"
+              label={t("delivered")}
             />
             <View style={styles.statDivider} />
             <Stat
               icon="receipt-outline"
               color="#3B82F6"
               value={orders.length}
-              label="Total"
+              label={t("total")}
             />
           </View>
 
@@ -328,11 +333,11 @@ export default function ClientProfile() {
             <View style={[styles.card, { marginTop: 14 }]}>
               <View style={styles.trackingHeader}>
                 <Text style={styles.trackingTitle}>
-                  Pedido #{activeOrder.order.id} en curso
+                  {t("currentOrder")} #{activeOrder.order.id}
                 </Text>
                 <View style={styles.liveBadge}>
                   <View style={styles.liveDot} />
-                  <Text style={styles.liveText}>EN VIVO</Text>
+                  <Text style={styles.liveText}>{t("live")}</Text>
                 </View>
               </View>
 
@@ -383,7 +388,7 @@ export default function ClientProfile() {
               </View>
 
               <View style={styles.progressLabels}>
-                <Text style={styles.labelActive}>Preparando</Text>
+                <Text style={styles.labelActive}>{t("preparing")}</Text>
                 <Text
                   style={
                     activeOrder.step >= 2
@@ -391,7 +396,7 @@ export default function ClientProfile() {
                       : styles.labelInactive
                   }
                 >
-                  En camino
+                  {t("onTheWay")}
                 </Text>
                 <Text
                   style={
@@ -400,7 +405,7 @@ export default function ClientProfile() {
                       : styles.labelInactive
                   }
                 >
-                  Entregado
+                  {t("delivered")}
                 </Text>
               </View>
 
@@ -445,7 +450,7 @@ export default function ClientProfile() {
 
           {/* Últimos pedidos */}
           <Text style={[styles.subTitle, { marginTop: 18 }]}>
-            Últimos pedidos
+            {t("latestOrders")}
           </Text>
           {loadingOrders ? (
             <ActivityIndicator style={{ marginTop: 12 }} color="#E61C24" />
@@ -453,7 +458,7 @@ export default function ClientProfile() {
             <View style={[styles.card, styles.emptyOrders]}>
               <Ionicons name="bag-outline" size={32} color="#CBD5E1" />
               <Text style={styles.emptyOrdersText}>
-                Aún no has hecho pedidos.
+                {t("noOrders")}
               </Text>
             </View>
           ) : (
@@ -476,10 +481,9 @@ export default function ClientProfile() {
                     ]}
                   >
                     <View style={{ flex: 1 }}>
-                      <Text style={styles.orderTitle}>Pedido #{o.id}</Text>
+                      <Text style={styles.orderTitle}>{t("orderNumber")} #{o.id}</Text>
                       <Text style={styles.orderMeta}>
-                        {formatOrderDate(o.createdAt)} · {itemsCount} producto
-                        {itemsCount === 1 ? "" : "s"}
+                        {formatOrderDate(o.createdAt, language)} · {itemsCount} {t(itemsCount === 1 ? "oneProduct" : "manyProducts")}
                       </Text>
                       {isActive && o.assignedDeliveryPersonName ? (
                         <Text style={styles.orderDriver}>
@@ -489,11 +493,11 @@ export default function ClientProfile() {
                     </View>
                     <View style={{ alignItems: "flex-end" }}>
                       <Text style={styles.orderTotal}>
-                        ${o.total.toLocaleString("es-CO")}
+                        ${o.total.toLocaleString(getClientLocale(language))}
                       </Text>
                       <View style={[styles.badge, { backgroundColor: ui.bg }]}>
                         <Text style={[styles.badgeText, { color: ui.fg }]}>
-                          {ui.label}
+                          {t(`status${o.status}`)}
                         </Text>
                       </View>
                     </View>
@@ -507,7 +511,7 @@ export default function ClientProfile() {
                   onPress={() => setShowAllOrders((v) => !v)}
                 >
                   <Text style={styles.moreButtonText}>
-                    {showAllOrders ? "Ver menos" : "Ver más pedidos"}
+                    {showAllOrders ? t("seeLess") : t("moreOrders")}
                   </Text>
                 </TouchableOpacity>
               )}
@@ -519,7 +523,7 @@ export default function ClientProfile() {
         <View style={styles.section}>
           <View style={styles.dataHeaderRow}>
             <Text style={[styles.sectionTitle, { marginBottom: 0 }]}>
-              Mis datos
+              {t("myData")}
             </Text>
             <TouchableOpacity
               onPress={() =>
@@ -528,7 +532,7 @@ export default function ClientProfile() {
               disabled={saving}
             >
               <Text style={styles.editLinkText}>
-                {isEditing ? "Cancelar" : "Editar"}
+                {isEditing ? t("cancel") : t("edit")}
               </Text>
             </TouchableOpacity>
           </View>
@@ -543,30 +547,30 @@ export default function ClientProfile() {
             </View>
 
             <Field
-              label="Nombre"
+              label={t("name")}
               value={formData.name}
               onChangeText={(t) => setField("name", t)}
               editable={isEditing}
               error={errors.name}
             />
             <Field
-              label="Apellido"
+              label={t("lastName")}
               value={formData.lastName}
               onChangeText={(t) => setField("lastName", t)}
               editable={isEditing}
             />
             <Field
-              label="Documento"
+              label={t("document")}
               value={customer?.document ?? "No registrado"}
               locked
             />
             <Field
-              label="Correo electrónico"
+              label={t("email")}
               value={customer?.email ?? "No disponible"}
               locked
             />
             <Field
-              label="Teléfono móvil"
+              label={t("phone")}
               value={formData.phone}
               onChangeText={(t) => setField("phone", t)}
               editable={isEditing}
@@ -574,10 +578,10 @@ export default function ClientProfile() {
               error={errors.phone}
             />
             <Field
-              label="Dirección predeterminada"
+              label={t("address")}
               value={defaultAddress?.addressLine ?? customer?.address ?? ""}
               locked
-              placeholder="Sin dirección registrada"
+              placeholder={t("noAddress")}
             />
 
             {/* Guardar: solo aparece mientras se edita */}
@@ -590,7 +594,7 @@ export default function ClientProfile() {
                 >
                   <Ionicons name="checkmark" size={16} color="#FFF" />
                   <Text style={styles.saveBtnText}>
-                    {saving ? "Guardando..." : "Guardar cambios"}
+                    {saving ? t("saving") : t("save")}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -603,7 +607,7 @@ export default function ClientProfile() {
             >
               <Ionicons name="location-outline" size={22} color="#E61C24" />
               <Text style={styles.addressLinkText}>
-                Gestionar mis direcciones de entrega
+                {t("manageAddresses")}
               </Text>
               <Ionicons name="chevron-forward" size={20} color="#CBD5E1" />
             </TouchableOpacity>
@@ -630,7 +634,7 @@ export default function ClientProfile() {
   );
 }
 
-const styles = StyleSheet.create({
+const baseStyles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: "#F8FAFC" },
   header: {
     flexDirection: "row",

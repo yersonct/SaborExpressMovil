@@ -1,6 +1,15 @@
 import { useCallback, useEffect, useState } from "react";
+import { useRealtimeEvents } from "@/features/shared/hooks/useRealtimeEvents";
 import { orderService } from "../services/orderService";
-import { ACTIVE_ORDER_STATUSES, OrderDetailStatus } from "../types/order.types";
+import {
+  ACTIVE_ORDER_STATUSES,
+  OrderDetailStatus,
+  OrderType,
+} from "../types/order.types";
+import {
+  formatColombiaTime,
+  isColombiaToday,
+} from "@/features/shared/utils/colombia-date";
 
 export interface WaiterOrderItem {
   id: number;
@@ -19,10 +28,15 @@ export interface WaiterOrder {
   id: string;
   tableId: string;
   tableName: string;
+  orderType: OrderType;
   time: string;
   createdAt: string;
   status: string;
   total: number;
+  subTotal: number;
+  tax: number;
+  taxRate: number;
+  taxIncludedInPrice: boolean;
   items: WaiterOrderItem[];
   employeeId: number | null;
   employeeName: string | null;
@@ -40,7 +54,6 @@ export function useActiveOrders(branchId: number | null) {
       setLoading(false);
       return;
     }
-    setLoading(true);
     setError(null);
     try {
       const summaries = await orderService.getAll(branchId);
@@ -48,11 +61,10 @@ export function useActiveOrders(branchId: number | null) {
       // Solo pedidos de HOY: uno de ayer que quedó sin cerrar (nunca se
       // marcó Delivered/Cancelled) seguía "activo" por estado y se colaba
       // en la lista del mesero como si fuera de hoy.
-      const todayISO = new Date().toDateString();
       const activeSummaries = summaries.filter(
         (s) =>
           ACTIVE_ORDER_STATUSES.includes(s.status) &&
-          new Date(s.createdAt).toDateString() === todayISO,
+          isColombiaToday(s.createdAt),
       );
 
       // 👇 Ya no hace falta un GET /api/Orders/{id} por cada pedido —
@@ -60,14 +72,23 @@ export function useActiveOrders(branchId: number | null) {
   const mapped: WaiterOrder[] = activeSummaries.map((order) => ({
     id: String(order.id),
     tableId: order.tableId ? String(order.tableId) : `particular_${order.id}`,
-    tableName: order.tableNumber ? `Mesa ${order.tableNumber}` : "Para Llevar",
-    time: new Date(order.createdAt).toLocaleTimeString([], {
+    tableName: order.tableNumber
+      ? `Mesa ${order.tableNumber}`
+      : order.orderType === OrderType.ToGo
+        ? order.customerName?.trim() || "Particular"
+        : "Para Llevar",
+    orderType: order.orderType,
+    time: formatColombiaTime(order.createdAt, undefined, {
       hour: "2-digit",
       minute: "2-digit",
     }),
     createdAt: order.createdAt,
     status: order.status,
     total: order.total,
+    subTotal: order.subTotal,
+    tax: order.tax,
+    taxRate: order.taxRate,
+    taxIncludedInPrice: order.taxIncludedInPrice,
     employeeId: order.employeeId ?? null,
     employeeName: order.employeeName ?? null,
     isFullyPaid: order.isFullyPaid,
@@ -102,6 +123,11 @@ export function useActiveOrders(branchId: number | null) {
   useEffect(() => {
     fetchOrders();
   }, [fetchOrders]);
+
+  useRealtimeEvents(
+    ["OrdersChanged", "DeliveriesChanged", "PaymentsChanged", "RealtimeConnected"],
+    () => void fetchOrders(),
+  );
 
   return { orders, loading, error, refetch: fetchOrders };
 }

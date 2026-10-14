@@ -7,6 +7,9 @@ import {
   View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useOptionalClientPreferences } from "@/features/userPreferences/context/ClientPreferencesContext";
+import { localizeClientNotification } from "@/features/notifications/utils/localizeClientNotification";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export interface ToastNotification {
   id: number;
@@ -15,11 +18,24 @@ export interface ToastNotification {
   type: string;
   relatedEntityType?: string | null;
   relatedEntityId?: number | null;
+  createdAt?: string;
+  isRead?: boolean;
+  deliveryId?: number;
+  latitude?: number;
+  longitude?: number;
+  updatedAt?: string;
 }
 
 interface Props {
   notifications: ToastNotification[];
   onDismiss: (id: number) => void;
+  t?: (key: string) => string;
+  colors?: {
+    surface: string;
+    text: string;
+    mutedText: string;
+    border: string;
+  };
 }
 
 const ICONS: Record<
@@ -29,6 +45,7 @@ const ICONS: Record<
   OrderReady: { name: "checkmark-circle", color: "#22C55E" },
   OrderInPreparation: { name: "flame", color: "#F59E0B" },
   PaymentConfirmed: { name: "card", color: "#10B981" },
+  TableAvailable: { name: "checkmark-circle", color: "#22C55E" },
   DeliveryAssigned: { name: "bicycle", color: "#3B82F6" },
   OrderStatusChanged: { name: "refresh-circle", color: "#F59E0B" },
   Default: { name: "notifications", color: "#3B82F6" },
@@ -37,13 +54,18 @@ const ICONS: Record<
 function ToastItem({
   notification,
   onDismiss,
+  t,
+  colors,
 }: {
   notification: ToastNotification;
   onDismiss: (id: number) => void;
+  t?: (key: string) => string;
+  colors?: Props["colors"];
 }) {
   const translateY = useRef(new Animated.Value(-80)).current;
   const opacity = useRef(new Animated.Value(0)).current;
   const icon = ICONS[notification.type] || ICONS.Default;
+  const displayNotification = localizeClientNotification(notification, t);
 
   useEffect(() => {
     Animated.parallel([
@@ -80,21 +102,29 @@ function ToastItem({
 
   return (
     <Animated.View
-      style={[styles.toast, { transform: [{ translateY }], opacity }]}
+      style={[
+        styles.toast,
+        colors && {
+          backgroundColor: colors.surface,
+          borderColor: colors.border,
+          borderWidth: 1,
+        },
+        { transform: [{ translateY }], opacity },
+      ]}
     >
       <View style={[styles.iconBox, { backgroundColor: icon.color + "22" }]}>
         <Ionicons name={icon.name} size={22} color={icon.color} />
       </View>
       <View style={styles.textBox}>
-        <Text style={styles.title} numberOfLines={1}>
-          {notification.title}
+        <Text style={[styles.title, colors && { color: colors.text }]} numberOfLines={1}>
+          {displayNotification.title}
         </Text>
-        <Text style={styles.message} numberOfLines={2}>
-          {notification.message}
+        <Text style={[styles.message, colors && { color: colors.mutedText }]} numberOfLines={2}>
+          {displayNotification.message}
         </Text>
       </View>
       <TouchableOpacity onPress={handleDismiss} hitSlop={10}>
-        <Ionicons name="close" size={18} color="#94A3B8" />
+        <Ionicons name="close" size={18} color={colors?.mutedText ?? "#94A3B8"} />
       </TouchableOpacity>
     </Animated.View>
   );
@@ -103,13 +133,26 @@ function ToastItem({
 export function NotificationToastContainer({
   notifications,
   onDismiss,
+  t,
+  colors,
 }: Props) {
+  const preferences = useOptionalClientPreferences();
+  const insets = useSafeAreaInsets();
   if (notifications.length === 0) return null;
 
   return (
-    <View style={styles.container} pointerEvents="box-none">
+    <View
+      style={[styles.container, { top: Math.max(10, insets.top + 10) }]}
+      pointerEvents="box-none"
+    >
       {notifications.map((n) => (
-        <ToastItem key={n.id} notification={n} onDismiss={onDismiss} />
+        <ToastItem
+          key={n.id}
+          notification={n}
+          onDismiss={onDismiss}
+          t={t ?? preferences?.t}
+          colors={colors}
+        />
       ))}
     </View>
   );
@@ -118,7 +161,6 @@ export function NotificationToastContainer({
 const styles = StyleSheet.create({
   container: {
     position: "absolute",
-    top: 10,
     left: 12,
     right: 12,
     zIndex: 999,

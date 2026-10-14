@@ -4,12 +4,9 @@ import { Ionicons } from "@expo/vector-icons";
 import { OrderDetailStatus } from "@/features/orders/types/order.types";
 import { chefStyles } from "./style/ChefStyles";
 import { useChefTheme } from "../context/ChefThemeContext";
+import { useChefLanguage } from "../context/ChefLanguageContext";
 import type { KitchenBatch } from "./ChefOrders";
-
-const BUTTON_LABEL: Partial<Record<OrderDetailStatus, string>> = {
-  [OrderDetailStatus.Pending]: "Empezar a preparar",
-  [OrderDetailStatus.InPreparation]: "Marcar como listo",
-};
+import { formatColombiaTime } from "@/features/shared/utils/colombia-date";
 
 const STATUS_COLOR: Partial<Record<OrderDetailStatus, string>> = {
   [OrderDetailStatus.Pending]: "#f97316",
@@ -18,21 +15,14 @@ const STATUS_COLOR: Partial<Record<OrderDetailStatus, string>> = {
   [OrderDetailStatus.Delivered]: "#64748b",
 };
 
-const getElapsedLabel = (createdAt: string) => {
+const getElapsedLabel = (createdAt: string, t: ReturnType<typeof useChefLanguage>["t"]) => {
   const minutes = Math.floor(
     (Date.now() - new Date(createdAt).getTime()) / 60000,
   );
-  if (minutes < 1) return "recién";
-  if (minutes < 60) return `hace ${minutes} min`;
+  if (minutes < 1) return t.justNow;
+  if (minutes < 60) return t.minutesAgo(minutes);
   const hours = Math.floor(minutes / 60);
-  return `hace ${hours} h`;
-};
-
-const STATUS_LABEL: Partial<Record<OrderDetailStatus, string>> = {
-  [OrderDetailStatus.Pending]: "Por preparar",
-  [OrderDetailStatus.InPreparation]: "En preparación",
-  [OrderDetailStatus.Ready]: "Listo",
-  [OrderDetailStatus.Delivered]: "Entregado",
+  return t.hoursAgo(hours);
 };
 
 interface PedidoCardProps {
@@ -47,9 +37,23 @@ export default function PedidoCard({
   canUpdateStatus = true,
 }: PedidoCardProps) {
   const { colors } = useChefTheme();
+  const { language, t } = useChefLanguage();
   const [modalVisible, setModalVisible] = useState(false);
 
-  const buttonLabel = canUpdateStatus ? BUTTON_LABEL[batch.status] : undefined;
+  const buttonLabel = !canUpdateStatus
+    ? undefined
+    : batch.status === OrderDetailStatus.Pending
+      ? t.startPrep
+      : batch.status === OrderDetailStatus.InPreparation
+        ? t.markReady
+        : undefined;
+  const statusLabel = batch.status === OrderDetailStatus.Pending
+    ? t.status_Pendiente
+    : batch.status === OrderDetailStatus.InPreparation
+      ? t.status_EnPreparacion
+      : batch.status === OrderDetailStatus.Ready
+        ? t.statusReady
+        : t.status_Entregado;
   const statusColor = STATUS_COLOR[batch.status] ?? colors.mutedText;
 
   const handleConfirmar = () => {
@@ -75,13 +79,13 @@ export default function PedidoCard({
             )}
             <Text style={[chefStyles.mesaBadge, { color: colors.text }]}>
               {batch.tableNumber
-                ? `Mesa ${batch.tableNumber}`
-                : batch.customerName || "Para llevar"}
+                ? `${t.tablePrefix} ${batch.tableNumber}`
+                : batch.customerName || t.takeaway}
             </Text>
           </View>
           {!!batch.employeeName && (
             <Text style={[chefStyles.mesero, { color: colors.mutedText }]}>
-              Mesero: {batch.employeeName}
+              {t.waiterPrefix} {batch.employeeName}
             </Text>
           )}
           {batch.orderType === "Delivery" && (
@@ -97,8 +101,8 @@ export default function PedidoCard({
             >
               🛵{" "}
               {batch.assignedDeliveryPersonName
-                ? `Repartidor: ${batch.assignedDeliveryPersonName}`
-                : "Sin repartidor asignado"}
+                ? `${t.deliveryPersonPrefix} ${batch.assignedDeliveryPersonName}`
+                : t.noDeliveryPerson}
             </Text>
           )}
         </View>
@@ -114,18 +118,44 @@ export default function PedidoCard({
         ]}
       >
         <Text style={{ color: statusColor, fontSize: 12, fontWeight: "700" }}>
-          {STATUS_LABEL[batch.status]}
+          {statusLabel}
         </Text>
       </View>
+
+      {batch.awaitingCashierConfirmation && (
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "flex-start",
+            gap: 8,
+            padding: 10,
+            marginBottom: 8,
+            borderRadius: 10,
+            backgroundColor: "#FEF3C7",
+            borderWidth: 1,
+            borderColor: "#FCD34D",
+          }}
+        >
+          <Ionicons name="lock-closed" size={16} color="#92400E" />
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: "#78350F", fontSize: 12, fontWeight: "800" }}>
+              {t.waitingCashierTitle}
+            </Text>
+            <Text style={{ color: "#78350F", fontSize: 11, marginTop: 2 }}>
+              {t.waitingCashierDetail}
+            </Text>
+          </View>
+        </View>
+      )}
 
       <View style={chefStyles.tagTiempo}>
         <Ionicons name="time-outline" size={12} color={colors.mutedText} />
         <Text style={{ fontSize: 11, color: colors.mutedText }}>
-          {new Date(batch.createdAt).toLocaleTimeString("es-CO", {
+          {formatColombiaTime(batch.createdAt, language === "en" ? "en-US" : language === "pt" ? "pt-BR" : language === "fr" ? "fr-FR" : "es-CO", {
             hour: "2-digit",
             minute: "2-digit",
           })}{" "}
-          · {getElapsedLabel(batch.createdAt)}
+          · {getElapsedLabel(batch.createdAt, t)}
         </Text>
       </View>
 
@@ -138,7 +168,7 @@ export default function PedidoCard({
             marginBottom: 6,
           }}
         >
-          🔁 Mesa {batch.batchNumber} (agregado después)
+          🔁 {t.tablePrefix} {batch.batchNumber} {t.batchAdded}
         </Text>
       )}
 
@@ -169,13 +199,13 @@ export default function PedidoCard({
                     },
                   ]}
                 >
-                  Para llevar
+                  {t.takeaway}
                 </Text>
               )}
             </View>
             {!!item.notes && (
               <Text style={[chefStyles.nota, { color: colors.mutedText }]}>
-                Nota: {item.notes}
+                {t.notePrefix} {item.notes}
               </Text>
             )}
           </View>
@@ -246,8 +276,8 @@ export default function PedidoCard({
                   }}
                 >
                   {batch.tableNumber
-                    ? `Mesa ${batch.tableNumber}`
-                    : batch.customerName || "Para llevar"}
+                    ? `${t.tablePrefix} ${batch.tableNumber}`
+                    : batch.customerName || t.takeaway}
                 </Text>
                 <Text
                   style={{
@@ -256,7 +286,7 @@ export default function PedidoCard({
                     marginTop: 2,
                   }}
                 >
-                  Pedido #{batch.orderId}
+                  {t.orderPrefix} #{batch.orderId}
                 </Text>
                 <Text
                   style={{
@@ -265,11 +295,11 @@ export default function PedidoCard({
                     marginTop: 2,
                   }}
                 >
-                  {new Date(batch.createdAt).toLocaleTimeString("es-CO", {
+                  {formatColombiaTime(batch.createdAt, language === "en" ? "en-US" : language === "pt" ? "pt-BR" : language === "fr" ? "fr-FR" : "es-CO", {
                     hour: "2-digit",
                     minute: "2-digit",
                   })}{" "}
-                  · {getElapsedLabel(batch.createdAt)}
+                  · {getElapsedLabel(batch.createdAt, t)}
                 </Text>
               </View>
 
@@ -291,7 +321,7 @@ export default function PedidoCard({
                       fontWeight: "700",
                     }}
                   >
-                    {STATUS_LABEL[batch.status]}
+                    {statusLabel}
                   </Text>
                 </View>
                 <TouchableOpacity onPress={() => setModalVisible(false)}>
@@ -301,6 +331,23 @@ export default function PedidoCard({
             </View>
 
             <View style={{ padding: 16, gap: 12 }}>
+              {batch.awaitingCashierConfirmation && (
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 8,
+                    padding: 10,
+                    borderRadius: 10,
+                    backgroundColor: "#FEF3C7",
+                  }}
+                >
+                  <Ionicons name="lock-closed" size={16} color="#92400E" />
+                  <Text style={{ color: "#78350F", fontSize: 12, flex: 1 }}>
+                    {t.waitingCashierNotice}
+                  </Text>
+                </View>
+              )}
               {batch.items.map((item) => (
                 <View key={item.id}>
                   <View
@@ -321,7 +368,7 @@ export default function PedidoCard({
                           fontWeight: "600",
                         }}
                       >
-                        Para llevar
+                        {t.takeaway}
                       </Text>
                     )}
                   </View>
@@ -333,7 +380,7 @@ export default function PedidoCard({
                         marginTop: 2,
                       }}
                     >
-                      Nota: {item.notes}
+                      {t.notePrefix} {item.notes}
                     </Text>
                   )}
                 </View>
@@ -365,7 +412,7 @@ export default function PedidoCard({
                     marginTop: 8,
                   }}
                 >
-                  El estado solo cambia al presionar este botón
+                  {t.stateOnlyOnButton}
                 </Text>
               </View>
             )}

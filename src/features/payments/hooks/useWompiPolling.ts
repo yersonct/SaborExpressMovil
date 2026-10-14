@@ -2,8 +2,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AppState } from "react-native";
 import { paymentService } from "../services/paymentService";
 import { PaymentStatus } from "../types/payment.types";
+import { useRealtimeEvents } from "@/features/shared/hooks/useRealtimeEvents";
 
-const INTERVAL_MS = 2500;
 const MAX_WAIT_MS = 5 * 60 * 1000;
 
 interface PollJob {
@@ -17,13 +17,13 @@ interface PollJob {
 export function useWompiPolling() {
   const [status, setStatus] = useState<PaymentStatus | null>(null);
   const [polling, setPolling] = useState(false);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const jobRef = useRef<PollJob | null>(null);
 
   const stopPolling = useCallback(() => {
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
     }
     jobRef.current = null;
     setPolling(false);
@@ -64,19 +64,30 @@ export function useWompiPolling() {
       onTimeout?: () => void,
     ) => {
       stopPolling();
-      jobRef.current = {
+      const job: PollJob = {
         paymentId,
         deadline: Date.now() + MAX_WAIT_MS,
         checking: false,
         onResolved,
         onTimeout,
       };
+      jobRef.current = job;
       setPolling(true);
       setStatus(PaymentStatus.Pending);
-      intervalRef.current = setInterval(check, INTERVAL_MS);
+      timeoutRef.current = setTimeout(() => {
+        if (jobRef.current !== job) return;
+        stopPolling();
+        job.onTimeout?.();
+      }, MAX_WAIT_MS);
     },
     [check, stopPolling],
   );
+
+  // Wompi informa al backend por webhook/sincronización. El backend publica
+  // PaymentsChanged y aquí consultamos el resultado una sola vez por evento.
+  useRealtimeEvents(["PaymentsChanged", "RealtimeConnected"], () => {
+    void check();
+  });
 
   // Al volver de la pasarela de Wompi (app a primer plano) se consulta de inmediato.
   useEffect(() => {
@@ -88,7 +99,7 @@ export function useWompiPolling() {
 
   useEffect(
     () => () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
     },
     [],
   );

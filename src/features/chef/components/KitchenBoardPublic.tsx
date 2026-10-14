@@ -1,26 +1,17 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { View, Text, ScrollView, ActivityIndicator } from "react-native";
+import { AppState, View, Text, ScrollView, ActivityIndicator } from "react-native";
+import * as signalR from "@microsoft/signalr";
+import { Ionicons } from "@expo/vector-icons";
+import { API_BASE_URL } from "@/config/api";
 import { orderService } from "@/features/orders/services/orderService";
 import { OrderDetailStatus } from "@/features/orders/types/order.types";
 import { chefStyles, boardStyles } from "./style/ChefStyles";
 import { useChefTheme } from "../context/ChefThemeContext";
 import { buildBatches, KitchenBatch } from "./ChefOrders";
+import KitchenColumns from "./KitchenColumns";
+import { formatColombiaTime } from "@/features/shared/utils/colombia-date";
 
-const COLUMNS: { status: OrderDetailStatus; label: string; color: string }[] = [
-  {
-    status: OrderDetailStatus.Pending,
-    label: "Por preparar",
-    color: "#f97316",
-  },
-  {
-    status: OrderDetailStatus.InPreparation,
-    label: "En preparación",
-    color: "#3b82f6",
-  },
-  { status: OrderDetailStatus.Ready, label: "Listos", color: "#22c55e" },
-];
 
-const POLL_INTERVAL_MS = 15000;
 
 const getElapsedLabel = (createdAt: string) => {
   const minutes = Math.floor(
@@ -102,9 +93,30 @@ function PedidoCardReadOnly({ batch }: { batch: KitchenBatch }) {
         </Text>
       </View>
 
+      {batch.awaitingCashierConfirmation && (
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 8,
+            padding: 10,
+            marginBottom: 8,
+            borderRadius: 10,
+            backgroundColor: "#FEF3C7",
+            borderWidth: 1,
+            borderColor: "#FCD34D",
+          }}
+        >
+          <Ionicons name="lock-closed" size={16} color="#92400E" />
+          <Text style={{ color: "#78350F", fontSize: 12, flex: 1 }}>
+            Esperando confirmación de caja para iniciar la preparación.
+          </Text>
+        </View>
+      )}
+
       <View style={chefStyles.tagTiempo}>
         <Text style={{ fontSize: 11, color: colors.mutedText }}>
-          {new Date(batch.createdAt).toLocaleTimeString("es-CO", {
+          {formatColombiaTime(batch.createdAt, "es-CO", {
             hour: "2-digit",
             minute: "2-digit",
           })}{" "}
@@ -166,16 +178,81 @@ export default function KitchenBoardPublic({
       setBatches(buildBatches(orders));
       setError(null);
     } catch (err: any) {
-      setError(err?.message ?? "No se pudo cargar el tablero de cocina.");
+      // Si ya hay datos en pantalla, se conservan y se reintenta en el siguiente ciclo
+      setBatches((prev) => {
+        if (prev.length === 0) {
+          setError(err?.message ?? "No se pudo cargar el tablero de cocina.");
+        }
+        return prev;
+      });
     } finally {
       setLoading(false);
     }
   }, [accessToken]);
 
   useEffect(() => {
-    load();
-    const interval = setInterval(load, POLL_INTERVAL_MS);
-    return () => clearInterval(interval);
+    let disposed = false;
+    let starting = false;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    const connection = new signalR.HubConnectionBuilder()
+      .withUrl(`${API_BASE_URL}/hubs/public-menu`, {
+        withCredentials: false,
+        headers: { "X-Tunnel-Skip-AntiPhishing-Page": "true" },
+      })
+      .withAutomaticReconnect({
+        nextRetryDelayInMilliseconds: ({ previousRetryCount }) => {
+          if (previousRetryCount === 0) return 0;
+          if (previousRetryCount === 1) return 2000;
+          if (previousRetryCount === 2) return 10000;
+          return 30000;
+        },
+      })
+      .configureLogging(signalR.LogLevel.None)
+      .build();
+
+    const refresh = () => {
+      if (!disposed) void load();
+    };
+    const scheduleRetry = () => {
+      if (disposed || retryTimer) return;
+      retryTimer = setTimeout(() => {
+        retryTimer = null;
+        start();
+      }, 5000);
+    };
+    const start = () => {
+      if (
+        disposed ||
+        starting ||
+        connection.state !== signalR.HubConnectionState.Disconnected
+      ) return;
+      starting = true;
+      connection
+        .start()
+        .then(refresh)
+        .catch(scheduleRetry)
+        .finally(() => {
+          starting = false;
+        });
+    };
+
+    connection.on("KitchenBoardChanged", refresh);
+    connection.onreconnected(refresh);
+    connection.onclose(scheduleRetry);
+    const appStateSub = AppState.addEventListener("change", (state) => {
+      if (state !== "active" || disposed) return;
+      if (connection.state === signalR.HubConnectionState.Disconnected) start();
+      else refresh();
+    });
+
+    void load();
+    start();
+    return () => {
+      disposed = true;
+      if (retryTimer) clearTimeout(retryTimer);
+      appStateSub.remove();
+      connection.stop().catch(() => {});
+    };
   }, [load]);
 
   if (loading) {
@@ -231,52 +308,10 @@ export default function KitchenBoardPublic({
         </View>
       </View>
 
-      <View style={boardStyles.board}>
-        {COLUMNS.map((col) => {
-          const batchesColumna = batches.filter((b) =>
-            col.status === OrderDetailStatus.Ready
-              ? b.status === OrderDetailStatus.Ready ||
-                b.status === OrderDetailStatus.Delivered
-              : b.status === col.status,
-          );
-          return (
-            <View
-              key={col.status}
-              style={[
-                boardStyles.column,
-                { backgroundColor: colors.card, borderColor: colors.border },
-              ]}
-            >
-              <View
-                style={[
-                  boardStyles.columnHeader,
-                  { borderBottomColor: colors.border },
-                ]}
-              >
-                <Text style={[boardStyles.columnTitle, { color: col.color }]}>
-                  {col.label} · {batchesColumna.length}
-                </Text>
-              </View>
-              <ScrollView contentContainerStyle={boardStyles.columnBody}>
-                {batchesColumna.length === 0 ? (
-                  <View style={boardStyles.emptyColumn}>
-                    <Text style={{ color: colors.mutedText, fontSize: 12 }}>
-                      Sin pedidos
-                    </Text>
-                  </View>
-                ) : (
-                  batchesColumna.map((batch) => (
-                    <PedidoCardReadOnly
-                      key={`${batch.orderId}-${batch.batchNumber}`}
-                      batch={batch}
-                    />
-                  ))
-                )}
-              </ScrollView>
-            </View>
-          );
-        })}
-      </View>
+      <KitchenColumns
+        batches={batches}
+        renderCard={(batch) => <PedidoCardReadOnly batch={batch} />}
+      />
     </View>
   );
 }

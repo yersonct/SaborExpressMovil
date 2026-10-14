@@ -10,6 +10,7 @@ import {
   View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { BreakdownRows } from "./BreakdownRows";
 import {
   LeafletMap,
   type MapMarker,
@@ -24,6 +25,9 @@ import {
   OrderType,
   type OrderSummary,
 } from "../types/order.types";
+import { getClientLocale, useClientPreferences, useClientThemedStyles } from "@/features/userPreferences/context/ClientPreferencesContext";
+import { DELIVERY_LOCATION_UPDATED } from "@/features/shared/services/realtimeEvents";
+import { useRealtimeEvents } from "@/features/shared/hooks/useRealtimeEvents";
 
 type Props = {
   visible: boolean;
@@ -40,19 +44,60 @@ export function OrderTrackingModal({
   onClose,
   onRate,
 }: Props) {
+  const s = useClientThemedStyles(baseStyles);
+  const { t, language } = useClientPreferences();
   const [delivery, setDelivery] = useState<Delivery | null>(null);
+  const [driverPosition, setDriverPosition] = useState<{
+    latitude: number;
+    longitude: number;
+    updatedAt: string | null;
+  } | null>(null);
+  const [isDriverPositionLive, setIsDriverPositionLive] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!driverPosition?.updatedAt) {
+      setIsDriverPositionLive(false);
+      return;
+    }
+
+    const refreshFreshness = () => {
+      const updatedAt = new Date(driverPosition.updatedAt!).getTime();
+      setIsDriverPositionLive(
+        Number.isFinite(updatedAt) && Date.now() - updatedAt <= 45_000,
+      );
+    };
+
+    refreshFreshness();
+    const interval = setInterval(refreshFreshness, 10_000);
+    return () => clearInterval(interval);
+  }, [driverPosition?.updatedAt]);
 
   const load = useCallback(
     async (silent = false) => {
       if (!order || order.orderType !== OrderType.Delivery) {
         setDelivery(null);
+        setDriverPosition(null);
         return;
       }
       if (!silent) setLoading(true);
       try {
-        const list = await deliveryService.getByOrder(order.id);
-        setDelivery(list[0] ?? null);
+        const [list, tracking] = await Promise.all([
+          deliveryService.getByOrder(order.id).catch(() => null),
+          deliveryService.getCustomerTracking(order.id).catch(() => null),
+        ]);
+        if (list) setDelivery(list[0] ?? null);
+        if (tracking) {
+          setDriverPosition(
+            tracking.courierLatitude != null && tracking.courierLongitude != null
+              ? {
+                  latitude: Number(tracking.courierLatitude),
+                  longitude: Number(tracking.courierLongitude),
+                  updatedAt: tracking.locationUpdatedAt,
+                }
+              : null,
+          );
+        }
       } catch {
         // si falla, se muestran los datos básicos del pedido
       } finally {
@@ -65,10 +110,37 @@ export function OrderTrackingModal({
   useEffect(() => {
     if (!visible) return;
     setDelivery(null);
+    setDriverPosition(null);
     load();
-    const id = setInterval(() => load(true), 15000);
-    return () => clearInterval(id);
   }, [visible, load, refreshKey]);
+
+  useRealtimeEvents(
+    [DELIVERY_LOCATION_UPDATED, "OrdersChanged", "DeliveriesChanged", "RealtimeConnected"],
+    (eventName, payload) => {
+      if (!visible) return;
+      if (eventName === DELIVERY_LOCATION_UPDATED) {
+        if (!payload || typeof payload !== "object") return;
+        const update = payload as {
+          orderId?: number;
+          latitude?: number;
+          longitude?: number;
+          updatedAt?: string;
+        };
+        if (
+          update.orderId !== order?.id ||
+          !Number.isFinite(update.latitude) ||
+          !Number.isFinite(update.longitude)
+        ) return;
+        setDriverPosition({
+          latitude: Number(update.latitude),
+          longitude: Number(update.longitude),
+          updatedAt: update.updatedAt ?? new Date().toISOString(),
+        });
+        return;
+      }
+      void load(true);
+    },
+  );
 
   const cancelled = order?.status === OrderStatus.Cancelled;
   const step: 1 | 2 | 3 =
@@ -95,21 +167,33 @@ export function OrderTrackingModal({
             {
               id: "dest",
               ...destination,
-              title: "Tu dirección",
+              title: t("yourAddress"),
               description: delivery?.addressText ?? undefined,
               color: "#E61C24",
             },
+            ...(isDriverPositionLive && driverPosition && delivery?.status === DeliveryStatus.InTransit
+              ? [
+                  {
+                    id: "courier",
+                    latitude: driverPosition.latitude,
+                    longitude: driverPosition.longitude,
+                    title: t("assignedDriver"),
+                    description: t("gpsTrackingLive"),
+                    color: "#2563EB",
+                  },
+                ]
+              : []),
           ]
         : [],
-    [destination, delivery?.addressText],
+    [destination, delivery?.addressText, delivery?.status, driverPosition, isDriverPositionLive],
   );
 
   if (!order) return null;
 
   const steps = [
-    { icon: "restaurant", label: "Preparando" },
-    { icon: "bicycle", label: "En camino" },
-    { icon: "home", label: "Entregado" },
+    { icon: "restaurant", label: t("preparing") },
+    { icon: "bicycle", label: t("onTheWay") },
+    { icon: "home", label: t("delivered") },
   ] as const;
 
   return (
@@ -119,13 +203,13 @@ export function OrderTrackingModal({
           <TouchableOpacity onPress={onClose} style={s.back}>
             <Ionicons name="chevron-down" size={26} color="#1E293B" />
           </TouchableOpacity>
-          <Text style={s.title}>Pedido #{order.id}</Text>
+          <Text style={s.title}>{t("trackTitle")} #{order.id}</Text>
         </View>
 
         {cancelled ? (
           <View style={s.cancelBanner}>
             <Ionicons name="close-circle" size={20} color="#B91C1C" />
-            <Text style={s.cancelText}>Este pedido fue cancelado.</Text>
+            <Text style={s.cancelText}>{t("cancelledOrder")}</Text>
           </View>
         ) : (
           <View style={s.stepsRow}>
@@ -156,9 +240,36 @@ export function OrderTrackingModal({
           <ActivityIndicator style={{ marginTop: 16 }} color="#E61C24" />
         )}
 
+        {step === 2 && !cancelled && (
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 8,
+              paddingHorizontal: 16,
+              paddingVertical: 10,
+              backgroundColor: isDriverPositionLive ? "#EFF6FF" : "#F1F5F9",
+            }}
+          >
+            <Ionicons
+              name="bicycle"
+              size={18}
+              color={isDriverPositionLive ? "#2563EB" : "#64748B"}
+            />
+            <Text style={{ color: "#334155", fontSize: 12, fontWeight: "700" }}>
+              {isDriverPositionLive
+                ? `${t("onTheWay")} · ${t("gpsTrackingLive")}`
+                : `${t("onTheWay")} · ${t("gpsWaiting")}`}
+            </Text>
+          </View>
+        )}
+
         {destination && (
           <View style={s.mapBox}>
-            <LeafletMap markers={markers} fitKey={`track-${order.id}`} />
+            <LeafletMap
+              markers={markers}
+              fitKey={`track-${order.id}-${isDriverPositionLive ? driverPosition?.updatedAt : "destination"}`}
+            />
           </View>
         )}
 
@@ -173,7 +284,7 @@ export function OrderTrackingModal({
               <View style={{ flex: 1, marginLeft: 12 }}>
                 <Text style={s.driverName}>{delivery.deliveryPersonName}</Text>
                 <Text style={s.driverPhone}>
-                  {delivery.deliveryPersonPhone ?? "Sin teléfono"}
+                  {delivery.deliveryPersonPhone ?? t("noPhone")}
                 </Text>
               </View>
               {delivery.deliveryPersonPhone && step < 3 && !cancelled && (
@@ -189,19 +300,30 @@ export function OrderTrackingModal({
             </View>
           ) : null}
 
-          <Text style={s.sectionTitle}>Productos</Text>
+          <Text style={s.sectionTitle}>{t("products")}</Text>
           {order.orderDetails.map((d) => (
             <View key={d.id} style={s.itemRow}>
               <Text style={s.itemName}>
                 {d.quantity}x {d.productName}
               </Text>
               <Text style={s.itemPrice}>
-                ${(d.unitPrice * d.quantity).toLocaleString("es-CO")}
+                ${(d.unitPrice * d.quantity).toLocaleString(getClientLocale(language))}
               </Text>
             </View>
           ))}
+            <View style={{ marginTop: 10 }}>
+            <BreakdownRows
+              subTotal={order.subTotal}
+              tax={order.tax}
+              taxRate={order.taxRate}
+              taxIncludedInPrice={order.taxIncludedInPrice}
+              deliveryFee={order.deliveryFee}
+              lang={language}
+              locale={getClientLocale(language)}
+            />
+          </View>
           <Text style={s.total}>
-            Total: ${order.total.toLocaleString("es-CO")}
+            {t("total")}: ${order.total.toLocaleString(getClientLocale(language))}
           </Text>
 
           {step === 3 &&
@@ -220,7 +342,7 @@ export function OrderTrackingModal({
                 onPress={() => onRate(delivery)}
               >
                 <Ionicons name="star-outline" size={18} color="#FFF" />
-                <Text style={s.rateBtnText}>Calificar al repartidor</Text>
+                <Text style={s.rateBtnText}>{t("rateDriver")}</Text>
               </TouchableOpacity>
             ))}
         </ScrollView>
@@ -229,7 +351,7 @@ export function OrderTrackingModal({
   );
 }
 
-const s = StyleSheet.create({
+const baseStyles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F8FAFC" },
   header: {
     flexDirection: "row",

@@ -6,6 +6,11 @@ export interface Order {
   table?: number;
   items: string;
   total: number;
+  subTotal?: number;
+  tax?: number;
+  taxRate?: number;
+  taxIncludedInPrice?: boolean;
+  deliveryFee?: number;
   status: 'pendiente' | 'pagado' | 'pagando_transferencia';
   paymentMethod?: 'transferencia' | 'efectivo';
   deliveryPerson?: string;

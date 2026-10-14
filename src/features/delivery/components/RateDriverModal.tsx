@@ -11,8 +11,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { deliveryService } from "../services/deliveryService";
-
-const LABELS = ["", "Muy malo", "Malo", "Regular", "Bueno", "Excelente"];
+import { useClientPreferences, useClientThemedStyles } from "@/features/userPreferences/context/ClientPreferencesContext";
 
 type Props = {
   visible: boolean;
@@ -29,6 +28,8 @@ export default function RateDriverModal({
   onClose,
   onSubmitted,
 }: Props) {
+  const s = useClientThemedStyles(baseStyles);
+  const { t } = useClientPreferences();
   const [score, setScore] = useState(0);
   const [comment, setComment] = useState("");
   const [sending, setSending] = useState(false);
@@ -47,11 +48,11 @@ export default function RateDriverModal({
       await deliveryService.rate(deliveryId, score, comment);
       onSubmitted();
       onClose();
-      Alert.alert("¡Gracias!", "Tu calificación fue enviada.");
+      Alert.alert(t("thankYou"), t("sendRating"));
     } catch (err: any) {
       Alert.alert(
-        "Error",
-        err?.message ?? "No se pudo enviar la calificación.",
+        t("error"),
+        err?.message ?? t("ratingSendError"),
       );
     } finally {
       setSending(false);
@@ -67,9 +68,9 @@ export default function RateDriverModal({
     >
       <View style={s.overlay}>
         <View style={s.card}>
-          <Text style={s.title}>¡Pedido entregado!</Text>
+          <Text style={s.title}>{t("deliveryComplete")}</Text>
           <Text style={s.subtitle}>
-            ¿Cómo estuvo el servicio de {driverName ?? "tu repartidor"}?
+            {t("rateQuestion")} {driverName ?? t("assignedDriver")}?
           </Text>
 
           <View style={s.stars}>
@@ -87,11 +88,18 @@ export default function RateDriverModal({
               </TouchableOpacity>
             ))}
           </View>
-          <Text style={s.label}>{LABELS[score] || "Toca una estrella"}</Text>
+          <Text style={s.label}>{[
+            "",
+            t("rateVeryBad"),
+            t("rateBad"),
+            t("rateFair"),
+            t("rateGood"),
+            t("rateExcellent"),
+          ][score] || t("starPrompt")}</Text>
 
           <TextInput
             style={s.input}
-            placeholder="Cuéntanos más (opcional)"
+            placeholder={t("feedbackPlaceholder")}
             placeholderTextColor="#94A3B8"
             value={comment}
             onChangeText={setComment}
@@ -106,7 +114,7 @@ export default function RateDriverModal({
               onPress={onClose}
               disabled={sending}
             >
-              <Text style={s.laterText}>Ahora no</Text>
+              <Text style={s.laterText}>{t("notNow")}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[
@@ -120,7 +128,7 @@ export default function RateDriverModal({
               {sending ? (
                 <ActivityIndicator color="#fff" />
               ) : (
-                <Text style={s.sendText}>Enviar calificación</Text>
+                <Text style={s.sendText}>{t("sendRating")}</Text>
               )}
             </TouchableOpacity>
           </View>
@@ -130,7 +138,7 @@ export default function RateDriverModal({
   );
 }
 
-const s = StyleSheet.create({
+const baseStyles = StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.55)",

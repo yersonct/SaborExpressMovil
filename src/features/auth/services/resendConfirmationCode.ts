@@ -1,5 +1,6 @@
 import { handleResponse } from "./handleResponse";
 import { AUTH_ENDPOINTS } from "./authEndpoints";
+import { fetchWithNetworkHandling } from "@/features/shared/services/networkStatus";
 
 export interface ResendConfirmationPayload {
   identifier: string;
@@ -8,7 +9,7 @@ export interface ResendConfirmationPayload {
 export async function resendConfirmationCode(
   payload: ResendConfirmationPayload,
 ): Promise<{ message: string }> {
-  const res = await fetch(AUTH_ENDPOINTS.resendConfirmationCode, {
+  const res = await fetchWithNetworkHandling(AUTH_ENDPOINTS.resendConfirmationCode, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

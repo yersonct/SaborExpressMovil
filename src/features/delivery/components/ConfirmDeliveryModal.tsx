@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { getDeliveryTheme } from "./context/deliveryTheme";
 
 type Props = {
   visible: boolean;
@@ -14,6 +15,7 @@ type Props = {
   isCash: boolean;
   amount?: string; // ya formateado, ej: "$25.000"
   isDark?: boolean;
+  t: Record<string, any>;
   onCancel: () => void;
   onConfirm: () => void;
 };
@@ -24,12 +26,11 @@ export default function ConfirmDeliveryModal({
   isCash,
   amount,
   isDark = false,
+  t,
   onCancel,
   onConfirm,
 }: Props) {
-  const card = isDark ? "#1E293B" : "#FFFFFF";
-  const text = isDark ? "#F8FAFC" : "#1E293B";
-  const muted = isDark ? "#94A3B8" : "#64748B";
+  const colors = getDeliveryTheme(isDark);
 
   return (
     <Modal
@@ -39,25 +40,25 @@ export default function ConfirmDeliveryModal({
       onRequestClose={onCancel}
     >
       <View style={s.overlay}>
-        <View style={[s.card, { backgroundColor: card }]}>
-          <Text style={[s.title, { color: text }]}>Confirmar entrega</Text>
-          <Text style={[s.message, { color: muted }]}>
+        <View style={[s.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <Text style={[s.title, { color: colors.text }]}>{t.confirmDelivery}</Text>
+          <Text style={[s.message, { color: colors.muted }]}>
             {isCash
-              ? `¿Confirma que entregó el pedido y recibió el efectivo${amount ? ` (${amount})` : ""}?`
-              : "¿Confirma que entregó el pedido al cliente?"}
+              ? t.confirmCashReceivedMessage(amount)
+              : t.confirmDeliveredMessage}
           </Text>
 
           <View style={s.row}>
             <TouchableOpacity
-              style={[s.btn, s.cancel]}
+              style={[s.btn, s.cancel, { backgroundColor: colors.elevated }]}
               onPress={onCancel}
               disabled={loading}
             >
-              <Text style={s.cancelText}>Cancelar</Text>
+              <Text style={[s.cancelText, { color: colors.text }]}>{t.cancelBtn || t.cancel}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[s.btn, s.confirm, loading && { opacity: 0.6 }]}
+              style={[s.btn, s.confirm, { backgroundColor: colors.accent }, loading && { opacity: 0.6 }]}
               onPress={onConfirm}
               disabled={loading}
             >
@@ -65,7 +66,7 @@ export default function ConfirmDeliveryModal({
                 <ActivityIndicator color="#fff" />
               ) : (
                 <Text style={s.confirmText}>
-                  {isCash ? "Sí, efectivo recibido" : "Sí, entregado"}
+                  {isCash ? t.confirmCashReceived : t.confirmDelivered}
                 </Text>
               )}
             </TouchableOpacity>
@@ -83,7 +84,7 @@ const s = StyleSheet.create({
     justifyContent: "center",
     padding: 24,
   },
-  card: { borderRadius: 16, padding: 20 },
+  card: { borderRadius: 16, padding: 20, borderWidth: 1 },
   title: { fontSize: 18, fontWeight: "700", marginBottom: 8 },
   message: { fontSize: 15, lineHeight: 21, marginBottom: 20 },
   row: { flexDirection: "row", gap: 10 },
@@ -94,8 +95,8 @@ const s = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  cancel: { backgroundColor: "#E2E8F0" },
-  cancelText: { color: "#334155", fontWeight: "700" },
-  confirm: { backgroundColor: "#10B981" },
+  cancel: {},
+  cancelText: { fontWeight: "700" },
+  confirm: {},
   confirmText: { color: "#FFFFFF", fontWeight: "700" },
 });

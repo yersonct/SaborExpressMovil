@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   View,
   Text,
@@ -6,21 +6,38 @@ import {
   TouchableOpacity,
   TextInput,
   Image,
-  Alert,
   ActivityIndicator,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { profileStyles as styles } from "./style/ProfileStyles";
 import { useWaiterTheme } from "@/features/waiter/context/WaiterThemeContext";
 import { useWaiterLanguage } from "@/features/waiter/context/WaiterLanguageContext";
 import { useMyProfile } from "@/features/employees/hooks/useMyProfile";
 import { InitialsAvatar } from "@/features/shared/components/InitialsAvatar";
+import { showAppAlert } from "@/features/shared/services/alertEvents";
 
 export const WaiterProfileView = () => {
   const { colors } = useWaiterTheme();
   const { t } = useWaiterLanguage();
-  const { profile, loading, error, updateProfile } = useMyProfile();
+  const { profile, loading, error, updateProfile, refetch } = useMyProfile();
+  const hasReceivedInitialFocus = useRef(false);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!hasReceivedInitialFocus.current) {
+        hasReceivedInitialFocus.current = true;
+        return;
+      }
+      void refetch();
+    }, [refetch]),
+  );
+  const inputColors = (editable: boolean) => ({
+    backgroundColor: editable ? colors.surface : colors.elevatedSurface,
+    color: editable ? colors.text : colors.mutedText,
+    borderColor: colors.border,
+  });
 
   const [isEditing, setIsEditing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -58,13 +75,13 @@ export const WaiterProfileView = () => {
         phone: phone.trim() || undefined,
       });
       setIsEditing(false);
-      Alert.alert(
+      showAppAlert(
         t.profileUpdatedTitle || "¡Perfil Actualizado!",
         t.profileUpdatedMessage ||
           "Tus datos han sido guardados correctamente.",
       );
     } catch (err: any) {
-      Alert.alert("Error", err?.message ?? "No se pudo actualizar el perfil.");
+      showAppAlert(t.profileErrorTitle || "Error", err?.message ?? t.profileSaveError);
     } finally {
       setSaving(false);
     }
@@ -100,11 +117,11 @@ export const WaiterProfileView = () => {
           },
         ]}
       >
-        <Ionicons name="alert-circle-outline" size={48} color="#E61C24" />
+        <Ionicons name="alert-circle-outline" size={48} color={colors.danger} />
         <Text
           style={{ color: colors.text, marginTop: 12, textAlign: "center" }}
         >
-          {error || "No se pudo cargar tu perfil"}
+          {error || t.profileLoadError}
         </Text>
       </SafeAreaView>
     );
@@ -148,12 +165,22 @@ export const WaiterProfileView = () => {
             ]}
           >
             <View style={styles.statColumn}>
-              <Ionicons name="receipt" size={28} color="#3B82F6" />
+              <Ionicons name="receipt" size={28} color={colors.accent} />
               <Text style={[styles.statValue, { color: colors.text }]}>
                 {profile.tablesAttendedToday}
               </Text>
               <Text style={[styles.statLabel, { color: colors.mutedText }]}>
                 {t.profileStatsTables || "Mesas Atendidas"}
+              </Text>
+            </View>
+            <View style={styles.dividerVertical} />
+            <View style={styles.statColumn}>
+              <Ionicons name="bag-handle-outline" size={28} color={colors.accent} />
+              <Text style={[styles.statValue, { color: colors.text }]}>
+                {profile.toGoOrdersToday}
+              </Text>
+              <Text style={[styles.statLabel, { color: colors.mutedText }]}>
+                {t.profileStatsToGo || "Pedidos para llevar hoy"}
               </Text>
             </View>
           </View>
@@ -169,8 +196,8 @@ export const WaiterProfileView = () => {
               onPress={() => setIsEditing(!isEditing)}
               disabled={saving}
             >
-              <Text style={[styles.editButtonText, { color: colors.accent }]}>
-                {isEditing ? t.profileCancel || "Cancelar" : t.profileEdit || "Editar"}
+              <Text style={[styles.editButtonText, { color: isEditing ? colors.mutedText : "#3B82F6" }]}>
+                {isEditing ? t.profileCancel : t.profileEdit || "Editar"}
               </Text>
             </TouchableOpacity>
           </View>
@@ -196,12 +223,8 @@ export const WaiterProfileView = () => {
               <TextInput
                 style={[
                   styles.input,
-                  {
-                    backgroundColor: colors.surface,
-                    color: colors.text,
-                    borderColor: colors.border,
-                  },
                   !isEditing && styles.inputDisabled,
+                  inputColors(isEditing),
                   nameError ? styles.inputError : null,
                 ]}
                 value={name}
@@ -223,12 +246,8 @@ export const WaiterProfileView = () => {
               <TextInput
                 style={[
                   styles.input,
-                  {
-                    backgroundColor: colors.surface,
-                    color: colors.text,
-                    borderColor: colors.border,
-                  },
                   !isEditing && styles.inputDisabled,
+                  inputColors(isEditing),
                 ]}
                 value={lastName}
                 onChangeText={setLastName}
@@ -243,12 +262,8 @@ export const WaiterProfileView = () => {
               <TextInput
                 style={[
                   styles.input,
-                  {
-                    backgroundColor: colors.surface,
-                    color: colors.text,
-                    borderColor: colors.border,
-                  },
                   !isEditing && styles.inputDisabled,
+                  inputColors(isEditing),
                 ]}
                 value={phone}
                 onChangeText={setPhone}
@@ -264,12 +279,8 @@ export const WaiterProfileView = () => {
               <TextInput
                 style={[
                   styles.input,
-                  {
-                    backgroundColor: colors.surface,
-                    color: colors.text,
-                    borderColor: colors.border,
-                  },
                   styles.inputDisabled,
+                  inputColors(false),
                 ]}
                 value={profile.email ?? "—"}
                 editable={false}
@@ -283,14 +294,10 @@ export const WaiterProfileView = () => {
               <TextInput
                 style={[
                   styles.input,
-                  {
-                    backgroundColor: colors.surface,
-                    color: colors.text,
-                    borderColor: colors.border,
-                  },
                   styles.inputDisabled,
+                  inputColors(false),
                 ]}
-                value={profile.branchName ?? "Sin sede asignada"}
+                value={profile.branchName ?? t.profileNoBranch}
                 editable={false}
               />
             </View>
@@ -302,14 +309,10 @@ export const WaiterProfileView = () => {
               <TextInput
                 style={[
                   styles.input,
-                  {
-                    backgroundColor: colors.surface,
-                    color: colors.text,
-                    borderColor: colors.border,
-                  },
                   styles.inputDisabled,
+                  inputColors(false),
                 ]}
-                value="Mesero"
+                value={t.profileRoleWaiter}
                 editable={false}
               />
             </View>
@@ -317,12 +320,12 @@ export const WaiterProfileView = () => {
 
           {isEditing && (
             <TouchableOpacity
-              style={[styles.saveButton, { backgroundColor: colors.accent }]}
+              style={[styles.saveButton, { backgroundColor: colors.success }]}
               onPress={handleSaveProfile}
               disabled={saving}
             >
               <Text style={styles.saveButtonText}>
-                {saving ? "Guardando..." : t.profileSave || "Guardar"}
+                {saving ? t.profileSaving : t.profileSave || "Guardar"}
               </Text>
             </TouchableOpacity>
           )}

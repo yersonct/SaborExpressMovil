@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { fetchWithNetworkHandling } from "@/features/shared/services/networkStatus";
 
 type Coords = { latitude: number; longitude: number };
 
@@ -27,7 +28,7 @@ export function useDeliveryRoute(from: Coords | null, to: Coords | null) {
           `https://router.project-osrm.org/route/v1/driving/` +
           `${from.longitude},${from.latitude};${to.longitude},${to.latitude}` +
           `?overview=full&geometries=geojson`;
-        const res = await fetch(url);
+        const res = await fetchWithNetworkHandling(url);
         const json = await res.json();
         const r = json?.routes?.[0];
         if (!r) throw new Error("Sin ruta");

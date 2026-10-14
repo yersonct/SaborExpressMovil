@@ -13,7 +13,12 @@ export function decodeToken(token: string): DecodedToken | null {
   try {
     const payload = token.split(".")[1];
     // atob funciona en web; en nativo React Native también lo soporta desde RN 0.7x+ / Hermes moderno
-    const decoded = JSON.parse(atob(payload));
+    if (!payload) return null;
+
+    // JWT usa Base64URL ( - y _ , sin padding); atob espera Base64 normal.
+    const base64 = payload.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, "=");
+    const decoded = JSON.parse(atob(padded));
     return decoded;
   } catch {
     return null;

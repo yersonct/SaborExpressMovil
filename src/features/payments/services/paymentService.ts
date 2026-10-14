@@ -1,5 +1,5 @@
-import { getToken } from "@/features/auth/services/tokenStorage";
 import { handleResponse } from "@/features/auth/services/handleResponse";
+import { fetchAuthed } from "@/features/auth/services/apiClient";
 import type {
   Payment,
   CreatePaymentPayload,
@@ -11,22 +11,11 @@ import type {
 import { API_BASE_URL } from "@/config/api";
 const PAYMENTS_BASE_URL = `${API_BASE_URL}/api/Payments`;
 
-async function authHeaders() {
-  const token = await getToken();
-  return {
-    "Content-Type": "application/json",
-    Accept: "*/*",
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-  };
-}
-
 export const paymentService = {
   // Pago en efectivo — se registra directo como completado
   create: async (payload: CreatePaymentPayload): Promise<Payment> => {
-    const headers = await authHeaders();
-    const res = await fetch(PAYMENTS_BASE_URL, {
+    const res = await fetchAuthed(PAYMENTS_BASE_URL, {
       method: "POST",
-      headers,
       body: JSON.stringify(payload),
     });
     return handleResponse<Payment>(res);
@@ -36,26 +25,22 @@ export const paymentService = {
   initWompi: async (
     payload: InitWompiPaymentPayload,
   ): Promise<WompiWidgetData> => {
-    const headers = await authHeaders();
-    const res = await fetch(`${PAYMENTS_BASE_URL}/wompi/init`, {
+    const res = await fetchAuthed(`${PAYMENTS_BASE_URL}/wompi/init`, {
       method: "POST",
-      headers,
       body: JSON.stringify(payload),
     });
     return handleResponse<WompiWidgetData>(res);
   },
 
-  // Consulta el estado actual de un pago (para hacer polling tras Wompi)
+  // Consulta el estado actual cuando SignalR avisa un cambio de Wompi.
   getById: async (id: number): Promise<Payment> => {
-    const headers = await authHeaders();
-    const res = await fetch(`${PAYMENTS_BASE_URL}/${id}`, { headers });
+    const res = await fetchAuthed(`${PAYMENTS_BASE_URL}/${id}`);
     return handleResponse<Payment>(res);
   },
 
   // NUEVO — cierre de caja: solo lo que el cajero autenticado cobró hoy
   getMyShift: async (): Promise<CashierShiftSummary> => {
-    const headers = await authHeaders();
-    const res = await fetch(`${PAYMENTS_BASE_URL}/my-shift`, { headers });
+    const res = await fetchAuthed(`${PAYMENTS_BASE_URL}/my-shift`);
     return handleResponse<CashierShiftSummary>(res);
   },
 
@@ -63,8 +48,7 @@ export const paymentService = {
   // pendiente real antes de cobrar (evita mandar el total completo si
   // ya hubo un pago parcial/previo sobre el mismo pedido).
   getByOrder: async (orderId: number): Promise<Payment[]> => {
-    const headers = await authHeaders();
-    const res = await fetch(`${PAYMENTS_BASE_URL}/order/${orderId}`, { headers });
+    const res = await fetchAuthed(`${PAYMENTS_BASE_URL}/order/${orderId}`);
     return handleResponse<Payment[]>(res);
   },
 
@@ -72,10 +56,8 @@ export const paymentService = {
   initWompiCashier: async (payload: {
     orderId: number;
   }): Promise<WompiWidgetData> => {
-    const headers = await authHeaders();
-    const res = await fetch(`${PAYMENTS_BASE_URL}/wompi/cashier-init`, {
+    const res = await fetchAuthed(`${PAYMENTS_BASE_URL}/wompi/cashier-init`, {
       method: "POST",
-      headers,
       body: JSON.stringify(payload),
     });
     return handleResponse<WompiWidgetData>(res);
@@ -83,10 +65,8 @@ export const paymentService = {
 
   // NUEVO — pide al back que consulte a Wompi el estado real (respaldo del webhook)
   syncWompi: async (id: number): Promise<Payment> => {
-    const headers = await authHeaders();
-    const res = await fetch(`${PAYMENTS_BASE_URL}/${id}/wompi-sync`, {
+    const res = await fetchAuthed(`${PAYMENTS_BASE_URL}/${id}/wompi-sync`, {
       method: "POST",
-      headers,
     });
     return handleResponse<Payment>(res);
   },

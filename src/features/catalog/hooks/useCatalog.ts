@@ -1,12 +1,28 @@
 import { useEffect, useState } from "react";
 import { catalogService } from "../services/catalogService";
 import type { Category, Product } from "../types/catalog.types";
+import {
+  PRODUCTS_CHANGED,
+  REALTIME_CONNECTED,
+  subscribeRealtimeEvent,
+} from "@/features/shared/services/realtimeEvents";
 
 export function useCatalog(branchId?: number | null) {
   const [categories, setCategories] = useState<Category[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [refreshVersion, setRefreshVersion] = useState(0);
+
+  useEffect(() => {
+    const refresh = () => setRefreshVersion((version) => version + 1);
+    const unsubscribeProducts = subscribeRealtimeEvent(PRODUCTS_CHANGED, refresh);
+    const unsubscribeReconnect = subscribeRealtimeEvent(REALTIME_CONNECTED, refresh);
+    return () => {
+      unsubscribeProducts();
+      unsubscribeReconnect();
+    };
+  }, []);
 
   useEffect(() => {
     // Sin sede resuelta no mostramos nada
@@ -51,7 +67,7 @@ export function useCatalog(branchId?: number | null) {
     return () => {
       cancelled = true;
     };
-  }, [branchId]);
+  }, [branchId, refreshVersion]);
 
   return { categories, products, loading, error };
 }

@@ -1,26 +1,26 @@
 import React, { createContext, useContext, useState, ReactNode } from "react";
 
 const darkColors = {
-  background: "#0d0e12",
-  card: "#15181e",
-  header: "#1a1e24",
-  text: "#f1f5f9",
-  mutedText: "#94a3b8",
-  border: "#22252a",
-  divider: "#262a30",
-  surface: "#1a1e24",
-  accent: "#3b82f6",
+  background: "#0B1220",
+  card: "#111827",
+  header: "#111827",
+  text: "#F8FAFC",
+  mutedText: "#CBD5E1",
+  border: "#334155",
+  divider: "#334155",
+  surface: "#111827",
+  accent: "#F87171",
 };
 const lightColors = {
-  background: "#f0f2f5",
-  card: "#ffffff",
-  header: "#f8fafc",
-  text: "#0f172a",
-  mutedText: "#475569",
-  border: "#e2e8f0",
-  divider: "#cbd5e1",
-  surface: "#ffffff",
-  accent: "#3b82f6",
+  background: "#F8FAFC",
+  card: "#FFFFFF",
+  header: "#FFFFFF",
+  text: "#1E293B",
+  mutedText: "#64748B",
+  border: "#E2E8F0",
+  divider: "#F1F5F9",
+  surface: "#FFFFFF",
+  accent: "#E61C24",
 };
 
 interface ChefThemeContextType {

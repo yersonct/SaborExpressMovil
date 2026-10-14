@@ -1,5 +1,6 @@
 import { handleResponse } from "./handleResponse";
 import { AUTH_ENDPOINTS } from "./authEndpoints";
+import { fetchWithNetworkHandling } from "@/features/shared/services/networkStatus";
 
 export interface ResendActivationPayload {
   identifier: string;
@@ -8,7 +9,7 @@ export interface ResendActivationPayload {
 export async function resendActivationCode(
   payload: ResendActivationPayload,
 ): Promise<{ message: string }> {
-  const res = await fetch(AUTH_ENDPOINTS.resendActivationCode, {
+  const res = await fetchWithNetworkHandling(AUTH_ENDPOINTS.resendActivationCode, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

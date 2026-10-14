@@ -11,6 +11,7 @@ import * as Location from "expo-location";
 import { Ionicons } from "@expo/vector-icons";
 import { usePublicBranches } from "../hooks/usePublicBranches";
 import { LeafletMap, type MapMarker } from "./LeafletMap";
+import { useClientPreferences } from "@/features/userPreferences/context/ClientPreferencesContext";
 
 type Coords = { latitude: number; longitude: number };
 
@@ -41,6 +42,7 @@ export function LocationPickerModal({
   onConfirm,
   initialLocation,
 }: Props) {
+  const { colors, t } = useClientPreferences();
   const { branches } = usePublicBranches();
   const [pin, setPin] = useState<Coords | null>(null);
   const [locating, setLocating] = useState(false);
@@ -94,13 +96,13 @@ export function LocationPickerModal({
         id: "pin",
         latitude: pin.latitude,
         longitude: pin.longitude,
-        title: "Tu ubicación",
+        title: t("yourDeliveryAddress"),
         color: "#2563EB",
         draggable: true,
       });
     }
     return list;
-  }, [located, pin]);
+  }, [located, pin, t]);
 
   const fitKey = visible
     ? `open-${located.length}-${pin ? "p" : "n"}`
@@ -112,8 +114,8 @@ export function LocationPickerModal({
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== "granted") {
         Alert.alert(
-          "Permiso necesario",
-          "Activa el permiso de ubicación o toca el mapa para elegir el punto.",
+          t("locationPermissionTitle"),
+          t("locationPermissionMessage"),
         );
         return;
       }
@@ -127,7 +129,7 @@ export function LocationPickerModal({
       setPin(here);
       setFocus((prev) => ({ ...here, nonce: (prev?.nonce ?? 0) + 1 }));
     } catch {
-      Alert.alert("Error", "No se pudo obtener tu ubicación actual.");
+      Alert.alert(t("error"), t("locationError"));
     } finally {
       setLocating(false);
     }
@@ -135,7 +137,7 @@ export function LocationPickerModal({
 
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
-      <View style={{ flex: 1, backgroundColor: "#FFF" }}>
+      <View style={{ flex: 1, backgroundColor: colors.background }}>
         {/* Header */}
         <View
           style={{
@@ -144,14 +146,14 @@ export function LocationPickerModal({
             justifyContent: "space-between",
             padding: 16,
             paddingTop: 48,
-            backgroundColor: "#1E293B",
+            backgroundColor: colors.surface,
           }}
         >
-          <Text style={{ color: "#FFF", fontSize: 18, fontWeight: "bold" }}>
-            ¿Dónde estás?
+          <Text style={{ color: colors.text, fontSize: 18, fontWeight: "bold" }}>
+            {t("whereDeliver")}
           </Text>
           <TouchableOpacity onPress={onClose}>
-            <Ionicons name="close" size={26} color="#FFF" />
+            <Ionicons name="close" size={26} color={colors.text} />
           </TouchableOpacity>
         </View>
 
@@ -174,42 +176,42 @@ export function LocationPickerModal({
               position: "absolute",
               right: 16,
               top: 16,
-              backgroundColor: "#FFF",
+              backgroundColor: colors.surface,
               padding: 12,
               borderRadius: 30,
               elevation: 4,
             }}
           >
             {locating ? (
-              <ActivityIndicator size="small" color="#E61C24" />
+              <ActivityIndicator size="small" color={colors.accent} />
             ) : (
-              <Ionicons name="locate" size={24} color="#E61C24" />
+              <Ionicons name="locate" size={24} color={colors.accent} />
             )}
           </TouchableOpacity>
         </View>
 
         {/* Panel inferior */}
-        <View style={{ padding: 16, gap: 10, backgroundColor: "#FFF" }}>
-          <Text style={{ color: "#64748B", fontSize: 13 }}>
+        <View style={{ padding: 16, gap: 10, backgroundColor: colors.surface }}>
+          <Text style={{ color: colors.muted, fontSize: 13 }}>
             {!pin
-              ? "Toca el mapa para colocar tu ubicación, o usa el botón GPS."
+              ? t("tapMapGps")
               : nearest
-                ? `Sede más cercana: ${nearest.branch.name} (${nearest.km.toFixed(1)} km). Arrastra el pin para ajustar.`
-                : "Arrastra el pin para ajustar tu ubicación."}
+                ? `${t("nearBranch")}: ${nearest.branch.name} (${nearest.km.toFixed(1)} km). ${t("dragPinAdjust")}`
+                : t("dragPin")}
           </Text>
 
           <TouchableOpacity
             disabled={!pin}
             onPress={() => pin && onConfirm(pin)}
             style={{
-              backgroundColor: pin ? "#E61C24" : "#CBD5E1",
+              backgroundColor: pin ? colors.accent : colors.border,
               padding: 14,
               borderRadius: 12,
               alignItems: "center",
             }}
           >
             <Text style={{ color: "#FFF", fontWeight: "700", fontSize: 15 }}>
-              Confirmar ubicación
+              {t("confirmLocation")}
             </Text>
           </TouchableOpacity>
         </View>

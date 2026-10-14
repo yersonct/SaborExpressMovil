@@ -1,5 +1,6 @@
 import React from "react";
 import { Modal, View, Text, TouchableOpacity } from "react-native";
+import { useClientPreferences } from "@/features/userPreferences/context/ClientPreferencesContext";
 
 type Props = {
   visible: boolean;
@@ -10,6 +11,7 @@ type Props = {
 
 // Versión web: react-native-maps es solo nativo y rompe el bundle web.
 export function LocationPickerModal({ visible, onClose }: Props) {
+  const { colors, t } = useClientPreferences();
   return (
     <Modal
       visible={visible}
@@ -26,16 +28,16 @@ export function LocationPickerModal({ visible, onClose }: Props) {
         }}
       >
         <View
-          style={{ backgroundColor: "#FFF", borderRadius: 16, padding: 20 }}
+          style={{ backgroundColor: colors.surface, borderRadius: 16, padding: 20 }}
         >
-          <Text style={{ color: "#1E293B", marginBottom: 12 }}>
-            El mapa solo está disponible en la app móvil.
+          <Text style={{ color: colors.text, marginBottom: 12 }}>
+            {t("mapMobileOnly")}
           </Text>
           <TouchableOpacity
             onPress={onClose}
             style={{ alignItems: "center", padding: 10 }}
           >
-            <Text style={{ color: "#E61C24", fontWeight: "700" }}>Cerrar</Text>
+            <Text style={{ color: colors.accent, fontWeight: "700" }}>{t("close")}</Text>
           </TouchableOpacity>
         </View>
       </View>

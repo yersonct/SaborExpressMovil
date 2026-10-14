@@ -4,6 +4,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { styles } from './style/WaiterDashboardStyles';
 import { localStyles, modalStyles } from './style/ActiveOrdersStyles';
 import { useWaiterLanguage } from '@/features/waiter/context/WaiterLanguageContext';
+import { useWaiterTheme } from '@/features/waiter/context/WaiterThemeContext';
+import { OrderType } from '@/features/orders/types/order.types';
+import { BreakdownRows } from "@/features/orders/components/BreakdownRows";
 
 export const ActiveOrdersView = ({
   activeOrders,
@@ -14,6 +17,7 @@ export const ActiveOrdersView = ({
   handleCancelOrder,
 }: any) => {
   const { t } = useWaiterLanguage();
+  const { colors } = useWaiterTheme();
 
   const [isCancelModalVisible, setIsCancelModalVisible] = useState(false);
   const [selectedOrderToCancel, setSelectedOrderToCancel] = useState<any>(null);
@@ -42,10 +46,10 @@ export const ActiveOrdersView = ({
     const minutes = Math.floor(
       (Date.now() - new Date(createdAt).getTime()) / 60000,
     );
-    if (minutes < 1) return "recién";
-    if (minutes < 60) return `hace ${minutes} min`;
+    if (minutes < 1) return t.elapsedJustNow;
+    if (minutes < 60) return t.elapsedMinutes.replace("{count}", String(minutes));
     const hours = Math.floor(minutes / 60);
-    return `hace ${hours} h`;
+    return t.elapsedHours.replace("{count}", String(hours));
   };
   return (
     <>
@@ -53,15 +57,16 @@ export const ActiveOrdersView = ({
         data={activeOrders}
         keyExtractor={(item) => item.id}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.content}
+        style={{ flex: 1 }}
+        contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
         ListEmptyComponent={
           <View style={styles.emptyOrders}>
             <Ionicons
               name="checkmark-circle-outline"
               size={60}
-              color="#CBD5E1"
+              color={colors.mutedText}
             />
-            <Text style={styles.emptyOrdersText}>
+            <Text style={[styles.emptyOrdersText, { color: colors.mutedText }]}>
               {t.ordersEmpty || "No tienes órdenes activas."}
             </Text>
           </View>
@@ -93,7 +98,7 @@ export const ActiveOrdersView = ({
             pendingItems.every((prod: any) => prod.status === "Pending");
 
           return (
-            <View style={styles.activeOrderCard}>
+            <View style={[styles.activeOrderCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
               <TouchableOpacity
                 style={styles.activeOrderHeader}
                 activeOpacity={0.8}
@@ -104,10 +109,25 @@ export const ActiveOrdersView = ({
                   setExpandedOrderId(isExpanded ? null : item.id);
                 }}
               >
-                <View>
-                  <Text style={styles.orderIdText}>{item.id}</Text>
-                  <Text style={styles.orderTableText}>{item.tableName}</Text>
-                  <Text style={styles.orderTimeText}>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text style={[styles.orderIdText, { color: colors.mutedText }]}>{item.id}</Text>
+                  <Text style={[styles.orderTableText, { color: colors.text }]}>{item.tableName}</Text>
+                  {item.orderType === OrderType.ToGo && (
+                    <Text
+                      style={[
+                        styles.badgeToGo,
+                        {
+                          backgroundColor: colors.accentSoft,
+                          color: colors.accent,
+                          alignSelf: 'flex-start',
+                          marginBottom: 4,
+                        },
+                      ]}
+                    >
+                      🛍️ {t.dashboardParaLlevar || 'Para Llevar'}
+                    </Text>
+                  )}
+                  <Text style={[styles.orderTimeText, { color: colors.mutedText }]}>
                     ⌚ {item.time} · {getElapsedLabel(item.createdAt)}
                   </Text>
                 </View>
@@ -116,14 +136,15 @@ export const ActiveOrdersView = ({
                     style={[
                       styles.badgeStatus,
                       isFullyReady ? styles.badgeReady : styles.badgePrep,
+                      { backgroundColor: isFullyReady ? `${colors.success}22` : `${colors.warning}22` },
                     ]}
                   >
                     <Text
                       style={[
                         styles.badgeStatusText,
                         isFullyReady
-                          ? styles.badgeReadyText
-                          : styles.badgePrepText,
+                          ? [styles.badgeReadyText, { color: colors.success }]
+                          : [styles.badgePrepText, { color: colors.warning }],
                       ]}
                     >
                       {isFullyReady
@@ -131,7 +152,7 @@ export const ActiveOrdersView = ({
                         : `👨‍🍳 ${t.ordersPreparing || "Preparando"}`}
                     </Text>
                   </View>
-                  <Text style={styles.expandText}>
+                  <Text style={[styles.expandText, { color: colors.accent }]}>
                     {isExpanded
                       ? t.ordersHide || "Ocultar"
                       : t.ordersShowProducts || "Ver productos"}
@@ -141,7 +162,7 @@ export const ActiveOrdersView = ({
 
               {isExpanded && (
                 <View style={styles.activeOrderDetails}>
-                  <View style={styles.divider} />
+                  <View style={[styles.divider, { backgroundColor: colors.divider }]} />
                   {item.items.map((prod: any, idx: number) => (
                     <View
                       key={idx}
@@ -157,13 +178,13 @@ export const ActiveOrdersView = ({
                             <Ionicons
                               name="checkmark-circle"
                               size={24}
-                              color="#10B981"
+                              color={colors.success}
                             />
                           ) : (
                             <Text
                               style={[
                                 styles.orderItemQty,
-                                { color: "#E61C24" },
+                                { color: colors.accent },
                               ]}
                             >
                               {prod.quantity}x
@@ -175,9 +196,10 @@ export const ActiveOrdersView = ({
                           <Text
                             style={[
                               styles.orderItemName,
+                              { color: colors.text },
                               prod.isDelivered && {
                                 textDecorationLine: "line-through",
-                                color: "#94A3B8",
+                                color: colors.mutedText,
                               },
                             ]}
                           >
@@ -187,7 +209,7 @@ export const ActiveOrdersView = ({
                             <Text
                               style={{
                                 fontSize: 12,
-                                color: "#0F766E",
+                                color: colors.success,
                                 fontWeight: "600",
                                 marginTop: 3,
                                 lineHeight: 16,
@@ -205,11 +227,11 @@ export const ActiveOrdersView = ({
                             }}
                           >
                             {prod.isToGo ? (
-                              <Text style={styles.badgeToGo}>
+                              <Text style={[styles.badgeToGo, { backgroundColor: colors.accentSoft, color: colors.accent }]}>
                                 🛍️ {t.dashboardParaLlevar || "Para Llevar"}
                               </Text>
                             ) : (
-                              <Text style={styles.badgeMesa}>
+                              <Text style={[styles.badgeMesa, { backgroundColor: colors.elevatedSurface, color: colors.mutedText }]}>
                                 🍽️ {t.dashboardTabTables || "Mesa"}
                               </Text>
                             )}
@@ -222,25 +244,23 @@ export const ActiveOrdersView = ({
                                   paddingVertical: 3,
                                   borderRadius: 8,
                                   overflow: "hidden",
-                                  color:
-                                    prod.status === "Ready"
-                                      ? "#065F46"
-                                      : prod.status === "InPreparation"
-                                        ? "#1D4ED8"
-                                        : "#92400E",
-                                  backgroundColor:
-                                    prod.status === "Ready"
-                                      ? "#D1FAE5"
-                                      : prod.status === "InPreparation"
-                                        ? "#DBEAFE"
-                                        : "#FEF3C7",
+                                  color: prod.status === "Ready"
+                                    ? colors.success
+                                    : prod.status === "InPreparation"
+                                      ? colors.accent
+                                      : colors.warning,
+                                  backgroundColor: prod.status === "Ready"
+                                    ? `${colors.success}22`
+                                    : prod.status === "InPreparation"
+                                      ? `${colors.accent}22`
+                                      : `${colors.warning}22`,
                                 }}
                               >
                                 {prod.status === "Ready"
-                                  ? "✅ Listo en cocina"
+                                  ? `✅ ${t.orderReadyInKitchen}`
                                   : prod.status === "InPreparation"
-                                    ? "🔥 Preparando"
-                                    : "⏳ En espera"}
+                                    ? `🔥 ${t.ordersPreparing}`
+                                    : `⏳ ${t.orderWaiting}`}
                               </Text>
                             )}
                           </View>
@@ -249,20 +269,44 @@ export const ActiveOrdersView = ({
                     </View>
                   ))}
 
-                  <View style={localStyles.actionsContainer}>
+<View style={{ marginTop: 10 }}>
+                    <BreakdownRows
+                      subTotal={item.subTotal}
+                      tax={item.tax}
+                      taxRate={item.taxRate}
+                      taxIncludedInPrice={item.taxIncludedInPrice}
+                      deliveryFee={0}
+                      lang={t.language}
+                      textColor={colors.text}
+                      mutedColor={colors.mutedText}
+                    />
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                      <Text style={{ color: colors.text, fontWeight: '800' }}>Total</Text>
+                      <Text style={{ color: colors.accent, fontWeight: '800' }}>
+                        ${Math.round(item.total).toLocaleString('es-CO')}
+                      </Text>
+                    </View>
+                  </View>
+
+                  <View
+                    style={[
+                      localStyles.actionsContainer,
+                      { borderTopColor: colors.border },
+                    ]}
+                  >
                     {!item.isFullyPaid && (
                       <TouchableOpacity
-                        style={localStyles.addMoreBtn}
+                      style={[localStyles.addMoreBtn, { backgroundColor: colors.elevatedSurface, borderColor: colors.border }]}
                         onPress={() => handleAddMoreToOrder(item)}
                         activeOpacity={0.8}
                       >
                         <Ionicons
                           name="add-circle-outline"
                           size={20}
-                          color="#475569"
+                          color={colors.mutedText}
                           style={{ marginRight: 8 }}
                         />
-                        <Text style={localStyles.addMoreBtnText}>
+                        <Text style={[localStyles.addMoreBtnText, { color: colors.text }]}>
                           {t.ordersAddMore || "Agregar productos a la mesa"}
                         </Text>
                       </TouchableOpacity>
@@ -273,17 +317,17 @@ export const ActiveOrdersView = ({
                       <View style={localStyles.decisionRow}>
                         {canCancel && (
                           <TouchableOpacity
-                            style={localStyles.cancelBtn}
+                            style={[localStyles.cancelBtn, { backgroundColor: colors.accentSoft, borderColor: colors.border }]}
                             onPress={() => openCancelModal(item)}
                             activeOpacity={0.8}
                           >
                             <Ionicons
                               name="close-circle-outline"
                               size={22}
-                              color="#EF4444"
+                              color={colors.danger}
                               style={{ marginRight: 6 }}
                             />
-                            <Text style={localStyles.cancelBtnText}>
+                            <Text style={[localStyles.cancelBtnText, { color: colors.danger }]}>
                               {t.ordersCancel || "Cancelar"}
                             </Text>
                           </TouchableOpacity>
@@ -292,8 +336,8 @@ export const ActiveOrdersView = ({
                         <TouchableOpacity
                           style={[
                             localStyles.confirmBtn,
+                            { flex: 1, minWidth: 0, backgroundColor: colors.success, shadowColor: colors.success },
                             !canDeliver && { opacity: 0.4 },
-                            !canCancel && { flex: 1 },
                           ]}
                           onPress={() => canDeliver && handleMarkOrderReady(item)}
                           activeOpacity={canDeliver ? 0.8 : 1}
@@ -305,10 +349,15 @@ export const ActiveOrdersView = ({
                             color="#FFFFFF"
                             style={{ marginRight: 6 }}
                           />
-                          <Text style={localStyles.confirmBtnText}>
+                          <Text
+                            style={[localStyles.confirmBtnText, { flexShrink: 1 }]}
+                            numberOfLines={1}
+                            adjustsFontSizeToFit
+                            minimumFontScale={0.75}
+                          >
                             {canDeliver
                               ? t.ordersDeliverYes || "Sí, Entregado"
-                              : "Esperando a cocina..."}
+                              : t.orderPreparingShort}
                           </Text>
                         </TouchableOpacity>
                       </View>
@@ -323,29 +372,29 @@ export const ActiveOrdersView = ({
 
       <Modal transparent visible={isCancelModalVisible} animationType="fade">
         <View style={modalStyles.overlay}>
-          <View style={modalStyles.modalBox}>
-            <View style={modalStyles.iconCircle}>
-              <Ionicons name="warning-outline" size={32} color="#EF4444" />
+          <View style={[modalStyles.modalBox, { backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1 }]}>
+              <View style={[modalStyles.iconCircle, { backgroundColor: colors.accentSoft }]}>
+              <Ionicons name="warning-outline" size={32} color={colors.danger} />
             </View>
 
-            <Text style={modalStyles.title}>
+            <Text style={[modalStyles.title, { color: colors.text }]}>
               {t.ordersCancelTitle || "¿Cancelar Pedido?"}
             </Text>
-            <Text style={modalStyles.message}>{cancelMessage}</Text>
+            <Text style={[modalStyles.message, { color: colors.mutedText }]}>{cancelMessage}</Text>
 
             <View style={modalStyles.buttonContainer}>
               <TouchableOpacity
-                style={modalStyles.cancelModalBtn}
+                style={[modalStyles.cancelModalBtn, { backgroundColor: colors.elevatedSurface }]}
                 onPress={() => setIsCancelModalVisible(false)}
                 activeOpacity={0.8}
               >
-                <Text style={modalStyles.cancelModalBtnText}>
+                <Text style={[modalStyles.cancelModalBtnText, { color: colors.text }]}>
                   {t.ordersCancelNo || "No, Volver"}
                 </Text>
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={modalStyles.confirmModalBtn}
+                style={[modalStyles.confirmModalBtn, { backgroundColor: colors.danger }]}
                 onPress={confirmCancelAction}
                 activeOpacity={0.8}
               >

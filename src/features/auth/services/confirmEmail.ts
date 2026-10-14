@@ -1,5 +1,6 @@
 import { handleResponse } from "./handleResponse";
 import { AUTH_ENDPOINTS } from "./authEndpoints";
+import { fetchWithNetworkHandling } from "@/features/shared/services/networkStatus";
 
 export interface ConfirmEmailPayload {
   token: string;
@@ -8,7 +9,7 @@ export interface ConfirmEmailPayload {
 export async function confirmEmail(
   payload: ConfirmEmailPayload,
 ): Promise<{ message: string }> {
-  const res = await fetch(AUTH_ENDPOINTS.confirmEmail, {
+  const res = await fetchWithNetworkHandling(AUTH_ENDPOINTS.confirmEmail, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

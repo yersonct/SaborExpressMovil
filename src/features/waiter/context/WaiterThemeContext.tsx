@@ -1,4 +1,6 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { waiterPreferenceStorageKey } from './waiterPreferenceStorage';
 
 type WaiterThemeMode = 'light' | 'dark';
 
@@ -62,23 +64,30 @@ const darkColors = {
   warning: '#FBBF24',
 };
 
-const STORAGE_KEY = 'saborexpress-theme';
-
 const WaiterThemeContext = createContext<WaiterTheme | null>(null);
 
-export const WaiterThemeProvider = ({ children }: { children: React.ReactNode }) => {
+export const WaiterThemeProvider = ({ children, storageScope }: { children: React.ReactNode; storageScope: string }) => {
   const [mode, setModeState] = useState<WaiterThemeMode>('light');
+  const [hydrated, setHydrated] = useState(false);
+  const storageKey = waiterPreferenceStorageKey('theme', storageScope);
 
   useEffect(() => {
-    const storedTheme = globalThis.localStorage?.getItem(STORAGE_KEY) as WaiterThemeMode | null;
-    if (storedTheme === 'light' || storedTheme === 'dark') {
-      setModeState(storedTheme);
-    }
-  }, []);
+    let active = true;
+    AsyncStorage.getItem(storageKey)
+      .then((storedTheme) => {
+        const value = (storedTheme ?? globalThis.localStorage?.getItem(storageKey)) as WaiterThemeMode | null;
+        if (active && (value === 'light' || value === 'dark')) setModeState(value);
+      })
+      .catch(() => undefined)
+      .finally(() => { if (active) setHydrated(true); });
+    return () => { active = false; };
+  }, [storageKey]);
 
   useEffect(() => {
-    globalThis.localStorage?.setItem(STORAGE_KEY, mode);
-  }, [mode]);
+    if (!hydrated) return;
+    AsyncStorage.setItem(storageKey, mode).catch(() => undefined);
+    globalThis.localStorage?.setItem(storageKey, mode);
+  }, [mode, hydrated, storageKey]);
 
   const value = useMemo<WaiterTheme>(() => {
     const isDark = mode === 'dark';

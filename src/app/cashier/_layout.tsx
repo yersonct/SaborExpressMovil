@@ -10,6 +10,8 @@ import { TRANSLATIONS, LanguageCode } from "../../locales/CashierTranslations";
 import { useAuth } from "../../features/auth/context/AuthContext";
 import { resolveEffectiveRole, resolvePrimaryRole } from "../../features/auth/services/roleMap";
 import { ROLE_NAMES } from "../../features/auth/types/role";
+import { getUserIdFromToken } from "@/features/auth/services/decodeToken";
+import { CashierPushNotificationRegistration } from "@/features/cashier/components/CashierPushNotificationRegistration";
 
 function CashierTabs() {
 
@@ -66,8 +68,30 @@ function CashierTabs() {
   );
 }
 
+function CashierReadyContent() {
+  const { hydrated, isDark } = useCashierContext();
+
+  if (!hydrated) {
+    return (
+      <View style={{ flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: isDark ? "#0B1220" : "#F8FAFC" }}>
+        <ActivityIndicator size="large" color="#E61C24" />
+      </View>
+    );
+  }
+
+  return (
+    <>
+      <CashierPushNotificationRegistration />
+      <CashierTabs />
+    </>
+  );
+}
+
 export default function CashierTabsLayout() {
   const { user, initializing } = useAuth();
+  const preferenceScope = user
+    ? String(getUserIdFromToken(user.token) ?? user.identifier.trim().toLowerCase())
+    : "anonymous";
 
   if (initializing) {
     return (
@@ -90,8 +114,8 @@ if (
 }
 
   return (
-    <CashierProvider>
-      <CashierTabs />
+    <CashierProvider key={preferenceScope}>
+      <CashierReadyContent />
     </CashierProvider>
   );
 }

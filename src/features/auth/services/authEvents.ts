@@ -1,4 +1,9 @@
-export type SessionEndReason = "expired" | "role_revoked";
+export type SessionEndReason =
+  | "expired"
+  | "role_revoked"
+  | "server_down"
+  | "shift_changed"
+  | "another_device";
 
 type SessionExpiredHandler = (reason: SessionEndReason) => void;
 

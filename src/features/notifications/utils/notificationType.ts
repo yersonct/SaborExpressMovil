@@ -13,6 +13,8 @@ const NOTIFICATION_TYPE_BY_ORDINAL: Record<number, string> = {
   7: "PaymentConfirmed",
   8: "Manual",
   9: "System",
+  10: "ReviewReceived",
+  11: "TableAvailable",
 };
 
 export function normalizeNotificationType(type: string | number): string {

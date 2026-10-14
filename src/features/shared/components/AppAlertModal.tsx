@@ -1,15 +1,37 @@
 import React, { useEffect, useState } from "react";
-import { Modal, View, Text, TouchableOpacity, StyleSheet } from "react-native";
+import {
+  Modal,
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  Platform,
+} from "react-native";
 import { setAlertListener, type AlertButton } from "../services/alertEvents";
 
-export const AppAlertModal = () => {
+type AppAlertColors = {
+  surface: string;
+  text: string;
+  mutedText: string;
+  accent: string;
+  accentSoft: string;
+  danger: string;
+  border: string;
+  elevatedSurface: string;
+};
+
+interface Props {
+  colors?: AppAlertColors;
+}
+
+export const AppAlertModal = ({ colors }: Props) => {
   const [visible, setVisible] = useState(false);
   const [title, setTitle] = useState("");
   const [message, setMessage] = useState<string | undefined>(undefined);
   const [buttons, setButtons] = useState<AlertButton[]>([]);
 
   useEffect(() => {
-    setAlertListener((payload) => {
+    return setAlertListener((payload) => {
       setTitle(payload.title);
       setMessage(payload.message);
       setButtons(
@@ -31,20 +53,42 @@ export const AppAlertModal = () => {
       transparent
       visible={visible}
       animationType="fade"
+      statusBarTranslucent={Platform.OS === "android"}
+      navigationBarTranslucent={Platform.OS === "android"}
       onRequestClose={() => setVisible(false)}
     >
       <View style={styles.overlay}>
-        <View style={styles.card}>
-          <Text style={styles.title}>{title}</Text>
-          {!!message && <Text style={styles.message}>{message}</Text>}
+        <View
+          style={[
+            styles.card,
+            colors && {
+              backgroundColor: colors.surface,
+              borderColor: colors.border,
+              borderWidth: 1,
+            },
+          ]}
+        >
+          <Text style={[styles.title, colors && { color: colors.text }]}>{title}</Text>
+          {!!message && (
+            <Text style={[styles.message, colors && { color: colors.mutedText }]}>
+              {message}
+            </Text>
+          )}
           <View style={styles.buttonRow}>
             {buttons.map((btn, idx) => (
               <TouchableOpacity
                 key={idx}
                 style={[
                   styles.button,
+                  colors && { backgroundColor: colors.accent },
                   btn.style === "destructive" && styles.destructiveButton,
+                  btn.style === "destructive" && colors && {
+                    backgroundColor: colors.accentSoft,
+                  },
                   btn.style === "cancel" && styles.cancelButton,
+                  btn.style === "cancel" && colors && {
+                    backgroundColor: colors.elevatedSurface,
+                  },
                 ]}
                 onPress={() => handlePress(btn)}
               >
@@ -52,7 +96,11 @@ export const AppAlertModal = () => {
                   style={[
                     styles.buttonText,
                     btn.style === "destructive" && styles.destructiveText,
+                    btn.style === "destructive" && colors && {
+                      color: colors.danger,
+                    },
                     btn.style === "cancel" && styles.cancelText,
+                    btn.style === "cancel" && colors && { color: colors.text },
                   ]}
                 >
                   {btn.text}
@@ -77,7 +125,6 @@ const styles = StyleSheet.create({
     // el orden de montaje en el DOM decide quién queda encima. Forzamos un
     // zIndex alto para que esta alerta SIEMPRE tape a cualquier otro modal.
     zIndex: 99999,
-    elevation: 24, // equivalente en Android para apilar por encima
   },
   card: {
     backgroundColor: "#FFFFFF",

@@ -1,4 +1,5 @@
-  import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { useRealtimeEvents } from "@/features/shared/hooks/useRealtimeEvents";
   import { orderService } from "@/features/orders/services/orderService";
   import { deliveryService } from "@/features/delivery/services/deliveryService";
   import { getToken } from "@/features/auth/services/tokenStorage";
@@ -20,9 +21,6 @@
     OrderStatus.Ready,
   ];
 
-  // Mismo patrón de useWompiPolling: refresco cada 15s mientras haya pedido activo.
-  const POLL_INTERVAL_MS = 15000;
-
   export interface ActiveClientOrder {
     order: OrderSummary;
     delivery: Delivery | null;
@@ -36,7 +34,6 @@
     );
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
     const fetchActiveOrder = useCallback(async () => {
       try {
@@ -80,12 +77,13 @@
     }, []);
 
     useEffect(() => {
-      fetchActiveOrder();
-      intervalRef.current = setInterval(fetchActiveOrder, POLL_INTERVAL_MS);
-      return () => {
-        if (intervalRef.current) clearInterval(intervalRef.current);
-      };
+      void fetchActiveOrder();
     }, [fetchActiveOrder]);
+
+    useRealtimeEvents(
+      ["OrdersChanged", "DeliveriesChanged", "PaymentsChanged", "RealtimeConnected"],
+      () => void fetchActiveOrder(),
+    );
 
     return { activeOrder, loading, error, refetch: fetchActiveOrder };
   }

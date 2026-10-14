@@ -9,22 +9,29 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { usePublicBranches } from "../hooks/usePublicBranches";
+import type { PublicBranch } from "../types/branch.types";
 import { useDeliveryRoute } from "../hooks/useDeliveryRoute";
 import { LeafletMap, type MapMarker } from "./LeafletMap";
+import { useClientPreferences } from "@/features/userPreferences/context/ClientPreferencesContext";
 
 type Props = {
   visible: boolean;
   onClose: () => void;
   nearestBranchId?: number | null;
+  selectedBranchId?: number | null;
   userLocation?: { latitude: number; longitude: number } | null;
+  onSelectBranch?: (branch: PublicBranch) => void;
 };
 
 export function BranchesMapModal({
   visible,
   onClose,
   nearestBranchId,
+  selectedBranchId,
   userLocation,
+  onSelectBranch,
 }: Props) {
+  const { colors, t } = useClientPreferences();
   const { branches, loading } = usePublicBranches();
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [focus, setFocus] = useState<{
@@ -45,10 +52,10 @@ export function BranchesMapModal({
     [branches],
   );
 
-  // Cada vez que se abre el modal, la sede seleccionada vuelve a ser la más cercana.
+  // Al abrir, conserva la sede activa; si aún no hay selección, usa la más cercana.
   useEffect(() => {
-    if (visible) setSelectedId(nearestBranchId ?? null);
-  }, [visible, nearestBranchId]);
+    if (visible) setSelectedId(selectedBranchId ?? nearestBranchId ?? null);
+  }, [visible, nearestBranchId, selectedBranchId]);
 
   const selectedBranch = useMemo(
     () => located.find((b) => b.id === selectedId) ?? null,
@@ -102,17 +109,16 @@ export function BranchesMapModal({
         id: "me",
         latitude: userLocation.latitude,
         longitude: userLocation.longitude,
-        title: "Tu dirección de entrega",
+        title: t("yourDeliveryAddress"),
         color: "#2563EB",
       });
     }
     return list;
-  }, [located, selectedId, userLocation?.latitude, userLocation?.longitude]);
+  }, [located, selectedId, userLocation?.latitude, userLocation?.longitude, t]);
 
-  // Solo depende de la sede más cercana (no de la seleccionada): así, al tocar
-  // otra sede, el mapa no se vuelve a encuadrar solo; se centra en esa sede.
+  // No cambia al tocar otra sede; así el mapa conserva el foco que eligió el usuario.
   const fitKey = visible
-    ? `open-${located.length}-${userLocation ? 1 : 0}-${nearestBranchId ?? 0}`
+    ? `open-${located.length}-${userLocation ? 1 : 0}-${selectedBranchId ?? nearestBranchId ?? 0}`
     : "closed";
 
   const focusBranch = (lat: number, lng: number) =>
@@ -124,7 +130,7 @@ export function BranchesMapModal({
 
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
-      <View style={{ flex: 1, backgroundColor: "#FFF" }}>
+      <View style={{ flex: 1, backgroundColor: colors.background }}>
         {/* Header */}
         <View
           style={{
@@ -133,25 +139,25 @@ export function BranchesMapModal({
             justifyContent: "space-between",
             padding: 16,
             paddingTop: 48,
-            backgroundColor: "#1E293B",
+            backgroundColor: colors.surface,
           }}
         >
-          <Text style={{ color: "#FFF", fontSize: 18, fontWeight: "bold" }}>
-            Nuestras sedes
+          <Text style={{ color: colors.text, fontSize: 18, fontWeight: "bold" }}>
+            {t("branchLocations")}
           </Text>
           <TouchableOpacity onPress={onClose}>
-            <Ionicons name="close" size={26} color="#FFF" />
+            <Ionicons name="close" size={26} color={colors.text} />
           </TouchableOpacity>
         </View>
 
         {loading ? (
           <View style={{ flex: 1, justifyContent: "center" }}>
-            <ActivityIndicator size="large" color="#E61C24" />
+            <ActivityIndicator size="large" color={colors.accent} />
           </View>
         ) : located.length === 0 ? (
           <View style={{ flex: 1, justifyContent: "center", padding: 32 }}>
-            <Text style={{ textAlign: "center", color: "#64748B" }}>
-              Las sedes todavía no tienen ubicación registrada.
+            <Text style={{ textAlign: "center", color: colors.muted }}>
+              {t("branchesNoLocation")}
             </Text>
           </View>
         ) : (
@@ -174,22 +180,22 @@ export function BranchesMapModal({
                   gap: 8,
                   paddingHorizontal: 16,
                   paddingVertical: 10,
-                  backgroundColor: "#EFF6FF",
+                  backgroundColor: colors.elevated,
                 }}
               >
-                <Ionicons name="navigate" size={18} color="#2563EB" />
-                <Text style={{ flex: 1, color: "#1E293B", fontSize: 13 }}>
+                <Ionicons name="navigate" size={18} color={colors.accent} />
+                <Text style={{ flex: 1, color: colors.text, fontSize: 13 }}>
                   {loadingRoute
-                    ? "Calculando ruta..."
+                    ? t("routeCalculating")
                     : distanceKm != null
                       ? `${selectedBranch.name}: ${distanceKm.toFixed(1)} km · ~${durationMin} min`
-                      : `${selectedBranch.name} (no se pudo calcular la ruta por calles)`}
+                      : `${selectedBranch.name} (${t("routeNoStreet")})`}
                 </Text>
               </View>
             )}
 
             {/* Lista de sedes */}
-            <View style={{ maxHeight: 190, backgroundColor: "#FFF" }}>
+            <View style={{ maxHeight: 190, backgroundColor: colors.surface }}>
               <ScrollView contentContainerStyle={{ padding: 12 }}>
                 {located.map((b) => (
                   <TouchableOpacity
@@ -205,21 +211,43 @@ export function BranchesMapModal({
                       borderWidth: 2,
                       borderColor:
                         b.id === selectedId ? "#10B981" : "transparent",
-                      backgroundColor:
-                        b.id === selectedId ? "#ECFDF5" : "#F8FAFC",
+                      backgroundColor: b.id === selectedId ? colors.elevated : colors.background,
                     }}
                   >
-                    <Text style={{ fontWeight: "700", color: "#1E293B" }}>
+                    <Text style={{ fontWeight: "700", color: colors.text }}>
                       {b.name}
-                      {b.id === nearestBranchId ? "  · Tu sede" : ""}
+                      {b.id === nearestBranchId ? `  · ${t("nearBranch")}` : ""}
                     </Text>
-                    <Text style={{ fontSize: 12, color: "#64748B" }}>
+                    <Text style={{ fontSize: 12, color: colors.muted }}>
                       {b.address}
                     </Text>
                   </TouchableOpacity>
                 ))}
               </ScrollView>
             </View>
+            {selectedBranch && onSelectBranch && (
+              <TouchableOpacity
+                onPress={() => {
+                  onSelectBranch(selectedBranch);
+                  onClose();
+                }}
+                style={{
+                  marginHorizontal: 16,
+                  marginTop: 10,
+                  marginBottom: 16,
+                  minHeight: 48,
+                  borderRadius: 12,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  backgroundColor: colors.accent,
+                }}
+                accessibilityRole="button"
+              >
+                <Text style={{ color: "#FFFFFF", fontWeight: "800" }}>
+                  {t("useThisBranch")}
+                </Text>
+              </TouchableOpacity>
+            )}
           </>
         )}
       </View>

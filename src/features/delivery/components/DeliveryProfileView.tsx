@@ -7,7 +7,6 @@ import {
   TouchableOpacity,
   TextInput,
   Alert,
-  Platform,
   ActivityIndicator,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -15,6 +14,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "expo-router";
 
 import { useDeliveryContext } from "./context/DeliveryContext";
+import { getDeliveryTheme } from "./context/deliveryTheme";
 import {
   TRANSLATIONS,
   LanguageCode,
@@ -27,37 +27,13 @@ export const DeliveryProfileView = () => {
   const t = TRANSLATIONS[language as LanguageCode] || TRANSLATIONS["es"];
   const { profile, loading, updateProfile } = useMyProfile();
 
-  const colors = isDark
-    ? {
-        background: "#0F172A",
-        card: "#1E293B",
-        text: "#F8FAFC",
-        mutedText: "#94A3B8",
-        border: "#334155",
-        accent: "#EA1D2C",
-        inputBg: "#0F172A",
-        inputDisabled: "#334155",
-        icon: "#CBD5E1",
-      }
-    : {
-        background: "#F8FAFC",
-        card: "#FFFFFF",
-        text: "#1E293B",
-        mutedText: "#64748B",
-        border: "#E2E8F0",
-        accent: "#E61C24",
-        inputBg: "#FFFFFF",
-        inputDisabled: "#F1F5F9",
-        icon: "#1E293B",
-      };
+  const colors = getDeliveryTheme(isDark);
 
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState({
     name: "",
     lastName: "",
     phone: "",
-    vehicle: "",
-    plate: "",
   });
   const [errors, setErrors] = useState({ name: "" });
 
@@ -68,8 +44,6 @@ export const DeliveryProfileView = () => {
         name: profile.name ?? "",
         lastName: profile.lastName ?? "",
         phone: profile.phone ?? "",
-        vehicle: profile.vehicle ?? "",
-        plate: profile.plate ?? "",
       });
     }
   }, [profile]);
@@ -98,8 +72,6 @@ export const DeliveryProfileView = () => {
         name: formData.name,
         lastName: formData.lastName || undefined,
         phone: formData.phone || undefined,
-        vehicle: formData.vehicle || undefined,
-        plate: formData.plate || undefined,
       });
       setIsEditing(false);
       Alert.alert(
@@ -109,7 +81,7 @@ export const DeliveryProfileView = () => {
     } catch {
       Alert.alert(
         t.errorTitle || "Error",
-        "No se pudo guardar tu perfil. Intenta de nuevo.",
+        t.profileSaveError,
       );
     }
   };
@@ -117,6 +89,7 @@ export const DeliveryProfileView = () => {
   if (loading) {
     return (
       <SafeAreaView
+        edges={["top"]}
         style={[
           styles.safeArea,
           {
@@ -134,6 +107,7 @@ export const DeliveryProfileView = () => {
   return (
     <SafeAreaView
       style={[styles.safeArea, { backgroundColor: colors.background }]}
+      edges={["top"]}
     >
       <View
         style={[
@@ -200,7 +174,7 @@ export const DeliveryProfileView = () => {
         <View style={styles.profileSection}>
           <View style={styles.profileHeaderRow}>
             <Text style={[styles.sectionTitle, { color: colors.text }]}>
-              Mis Datos
+              {t.profileDataTitle}
             </Text>
             <TouchableOpacity onPress={() => setIsEditing(!isEditing)}>
               <Text style={[styles.editButtonText, { color: colors.accent }]}>
@@ -321,59 +295,10 @@ export const DeliveryProfileView = () => {
                 editable={isEditing}
               />
             </View>
-            {/* Modelo Vehículo */}
-            <View style={styles.inputGroup}>
-              <Text style={[styles.inputLabel, { color: colors.mutedText }]}>
-                {t.vehicleModel || "Modelo del Vehículo"}
-              </Text>
-              <TextInput
-                style={[
-                  styles.input,
-                  {
-                    backgroundColor: colors.inputBg,
-                    borderColor: colors.border,
-                    color: colors.text,
-                  },
-                  !isEditing && {
-                    backgroundColor: colors.inputDisabled,
-                    color: colors.mutedText,
-                  },
-                ]}
-                value={formData.vehicle}
-                onChangeText={(text) => handleChangeText("vehicle", text)}
-                editable={isEditing}
-              />
-            </View>
-
-            {/* Placa */}
-            <View style={styles.inputGroup}>
-              <Text style={[styles.inputLabel, { color: colors.mutedText }]}>
-                {t.plate || "Placa"}
-              </Text>
-              <TextInput
-                style={[
-                  styles.input,
-                  {
-                    backgroundColor: colors.inputBg,
-                    borderColor: colors.border,
-                    color: colors.text,
-                  },
-                  !isEditing && {
-                    backgroundColor: colors.inputDisabled,
-                    color: colors.mutedText,
-                  },
-                ]}
-                value={formData.plate}
-                onChangeText={(text) => handleChangeText("plate", text)}
-                autoCapitalize="characters"
-                editable={isEditing}
-              />
-            </View>
-
             {/* Sede: siempre bloqueado, viene del backend */}
             <View style={styles.inputGroup}>
               <Text style={[styles.inputLabel, { color: colors.mutedText }]}>
-                Sede
+                {t.branchLabel}
               </Text>
               <TextInput
                 style={[
@@ -392,7 +317,7 @@ export const DeliveryProfileView = () => {
             {/* Rol: siempre bloqueado, viene del backend */}
             <View style={styles.inputGroup}>
               <Text style={[styles.inputLabel, { color: colors.mutedText }]}>
-                Rol
+                {t.roleLabel}
               </Text>
               <TextInput
                 style={[
@@ -408,9 +333,6 @@ export const DeliveryProfileView = () => {
               />
             </View>
 
-            {/* ⚠️ Vehículo, Placa y Foto de perfil removidos: EmployeeMe (backend)
-                no expone esos campos todavía. Ver Paso 5 del plan — pendiente
-                decisión de negocio sobre si son requisitos reales. */}
           </View>
 
           {isEditing && (
@@ -432,8 +354,8 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: "row",
     alignItems: "center",
-    padding: 20,
-    paddingTop: Platform.OS === "android" ? 40 : 20,
+    paddingHorizontal: 20,
+    paddingVertical: 14,
     borderBottomWidth: 1,
   },
   headerTitle: { fontSize: 20, fontWeight: "bold" },

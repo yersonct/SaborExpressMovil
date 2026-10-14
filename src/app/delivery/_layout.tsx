@@ -1,5 +1,5 @@
 ﻿import React from "react";
-import { StyleSheet, Platform, View, ActivityIndicator } from "react-native";
+import { StyleSheet, Platform, View, ActivityIndicator, StatusBar } from "react-native";
 import { Tabs, useRouter, Redirect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 
@@ -12,6 +12,9 @@ import { useAuth } from "../../features/auth/context/AuthContext";
 import { resolveEffectiveRole, resolvePrimaryRole } from "../../features/auth/services/roleMap";
 import { ROLE_NAMES } from "../../features/auth/types/role";
 import { UserNotificationsProvider } from "../../features/notifications/context/UserNotificationsContext";
+import { getUserIdFromToken } from "@/features/auth/services/decodeToken";
+import { DeliveryPushNotificationRegistration } from "@/features/delivery/components/DeliveryPushNotificationRegistration";
+import { getDeliveryTheme } from "../../features/delivery/components/context/deliveryTheme";
 
 function DeliveryTabs() {
   const router = useRouter();
@@ -20,9 +23,7 @@ function DeliveryTabs() {
 
   const t = TRANSLATIONS[language as LanguageCode] || TRANSLATIONS["es"];
 
-  const tabBarBg = isDark ? "#1E293B" : "#FFFFFF";
-  const tabBarBorder = isDark ? "#334155" : "#E2E8F0";
-  const inactiveColor = isDark ? "#64748B" : "#94A3B8";
+  const colors = getDeliveryTheme(isDark);
 
   return (
     <Tabs
@@ -30,10 +31,10 @@ function DeliveryTabs() {
         headerShown: false,
         tabBarStyle: [
           styles.tabBar,
-          { backgroundColor: tabBarBg, borderTopColor: tabBarBorder },
+          { backgroundColor: colors.surface, borderTopColor: colors.border },
         ],
-        tabBarActiveTintColor: "#E61C24",
-        tabBarInactiveTintColor: inactiveColor,
+        tabBarActiveTintColor: colors.accent,
+        tabBarInactiveTintColor: isDark ? colors.muted : "#94A3B8",
         tabBarLabelStyle: styles.tabLabel,
         tabBarItemStyle: { paddingVertical: Platform.OS === "ios" ? 0 : 5 },
       }}
@@ -89,8 +90,42 @@ function DeliveryTabs() {
   );
 }
 
+function DeliveryReadyContent() {
+  const { language, isDark, preferencesHydrated } = useDeliveryContext();
+  const colors = getDeliveryTheme(isDark);
+  if (!preferencesHydrated) {
+    return (
+      <>
+        <StatusBar
+          barStyle={isDark ? "light-content" : "dark-content"}
+          backgroundColor={colors.background}
+        />
+        <View style={{ flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: colors.background }}>
+          <ActivityIndicator size="large" color={colors.accent} />
+        </View>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <StatusBar
+        barStyle={isDark ? "light-content" : "dark-content"}
+        backgroundColor={colors.background}
+      />
+      <DeliveryPushNotificationRegistration />
+      <UserNotificationsProvider>
+        <DeliveryTabs />
+      </UserNotificationsProvider>
+    </>
+  );
+}
+
 export default function DeliveryTabsLayout() {
   const { user, initializing } = useAuth();
+  const preferenceScope = user
+    ? String(getUserIdFromToken(user.token) ?? user.identifier.trim().toLowerCase())
+    : "anonymous";
 
   if (initializing) {
     return (
@@ -109,10 +144,8 @@ if (
 }
 
   return (
-    <DeliveryProvider>
-      <UserNotificationsProvider>
-        <DeliveryTabs />
-      </UserNotificationsProvider>
+    <DeliveryProvider key={preferenceScope} storageScope={preferenceScope}>
+      <DeliveryReadyContent />
     </DeliveryProvider>
   );
 }

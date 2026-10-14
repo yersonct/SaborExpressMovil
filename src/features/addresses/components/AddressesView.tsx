@@ -16,11 +16,14 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import * as Location from "expo-location";
 import { useAuth } from "@/features/auth/context/AuthContext";
+import { useClientPreferences, useClientThemedStyles } from "@/features/userPreferences/context/ClientPreferencesContext";
 import { getCustomerIdFromToken } from "@/features/auth/services/decodeToken";
 import { useAddresses } from "../hooks/useAddresses";
 import type { Address } from "../types/address.types";
 
 export default function AddressesView() {
+  const styles = useClientThemedStyles(baseStyles);
+  const { colors, t } = useClientPreferences();
   const router = useRouter();
   const { user } = useAuth();
   const customerId = user?.token ? getCustomerIdFromToken(user.token) : null;
@@ -65,7 +68,7 @@ export default function AddressesView() {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== "granted") {
         setFormError(
-          "Necesitamos permiso de ubicación para capturar tu dirección exacta.",
+          t("locationPermission"),
         );
         return;
       }
@@ -87,7 +90,7 @@ export default function AddressesView() {
         setAddressLine(parts.join(", "));
       }
     } catch (err) {
-      setFormError("No se pudo obtener tu ubicación. Intenta de nuevo.");
+      setFormError(t("locationFetchError"));
     } finally {
       setLocatingGps(false);
     }
@@ -95,12 +98,12 @@ export default function AddressesView() {
 
   const handleSave = async () => {
     if (!addressLine.trim()) {
-      setFormError("La dirección es obligatoria.");
+      setFormError(t("addressRequired"));
       return;
     }
     if (latitude === null || longitude === null) {
       setFormError(
-        "Usa el botón de ubicación para capturar dónde queda esta dirección.",
+        t("captureAddressLocation"),
       );
       return;
     }
@@ -117,7 +120,7 @@ export default function AddressesView() {
       });
       setIsFormOpen(false);
     } catch (err: any) {
-      setFormError(err?.message ?? "No se pudo guardar la dirección.");
+      setFormError(err?.message ?? t("addressSaveError"));
     } finally {
       setSaving(false);
     }
@@ -127,24 +130,24 @@ export default function AddressesView() {
     try {
       await setDefaultAddress(address.id);
     } catch (err: any) {
-      Alert.alert("Error", err?.message ?? "No se pudo actualizar.");
+      Alert.alert(t("error"), err?.message ?? t("addressUpdateError"));
     }
   };
 
   const handleDelete = (address: Address) => {
     Alert.alert(
-      "Eliminar dirección",
-      `¿Seguro que deseas eliminar "${address.addressLine}"?`,
+      t("deleteAddressTitle"),
+      `${t("deleteAddressConfirm")}\n${address.addressLine}`,
       [
-        { text: "Cancelar", style: "cancel" },
+        { text: t("cancel"), style: "cancel" },
         {
-          text: "Eliminar",
+          text: t("delete"),
           style: "destructive",
           onPress: async () => {
             try {
               await deleteAddress(address.id);
             } catch (err: any) {
-              Alert.alert("Error", err?.message ?? "No se pudo eliminar.");
+              Alert.alert(t("error"), err?.message ?? t("addressDeleteError"));
             }
           },
         },
@@ -153,15 +156,15 @@ export default function AddressesView() {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <View style={styles.header}>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
+      <View style={[styles.header, { backgroundColor: colors.surface, borderColor: colors.border }]}>
         <TouchableOpacity
           style={styles.backButton}
           onPress={() => router.back()}
         >
-          <Ionicons name="arrow-back" size={24} color="#1E293B" />
+          <Ionicons name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Mis Direcciones</Text>
+        <Text style={styles.headerTitle}>{t("addressesTitle")}</Text>
         <TouchableOpacity style={styles.addButton} onPress={openForm}>
           <Ionicons name="add" size={26} color="#E61C24" />
         </TouchableOpacity>
@@ -178,13 +181,9 @@ export default function AddressesView() {
       ) : addresses.length === 0 ? (
         <View style={styles.centerBox}>
           <Ionicons name="location-outline" size={56} color="#CBD5E1" />
-          <Text style={styles.emptyText}>
-            Aún no tienes direcciones guardadas.
-          </Text>
+          <Text style={styles.emptyText}>{t("emptyAddresses")}</Text>
           <TouchableOpacity style={styles.emptyAddButton} onPress={openForm}>
-            <Text style={styles.emptyAddButtonText}>
-              Agregar mi primera dirección
-            </Text>
+            <Text style={styles.emptyAddButtonText}>{t("newAddress")}</Text>
           </TouchableOpacity>
         </View>
       ) : (
@@ -206,7 +205,7 @@ export default function AddressesView() {
                 </View>
                 {address.isDefault && (
                   <View style={styles.defaultBadge}>
-                    <Text style={styles.defaultBadgeText}>Predeterminada</Text>
+                    <Text style={styles.defaultBadgeText}>{t("defaultAddress")}</Text>
                   </View>
                 )}
               </View>
@@ -214,14 +213,12 @@ export default function AddressesView() {
               <View style={styles.addressActions}>
                 {!address.isDefault && (
                   <TouchableOpacity onPress={() => handleSetDefault(address)}>
-                    <Text style={styles.actionLink}>
-                      Usar como predeterminada
-                    </Text>
+                    <Text style={styles.actionLink}>{t("setDefault")}</Text>
                   </TouchableOpacity>
                 )}
                 <TouchableOpacity onPress={() => handleDelete(address)}>
                   <Text style={[styles.actionLink, styles.deleteLink]}>
-                    Eliminar
+                    {t("deleteAddress")}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -240,27 +237,27 @@ export default function AddressesView() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalBox}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Nueva Dirección</Text>
+              <Text style={styles.modalTitle}>{t("newAddress")}</Text>
               <TouchableOpacity onPress={() => setIsFormOpen(false)}>
                 <Ionicons name="close" size={26} color="#94A3B8" />
               </TouchableOpacity>
             </View>
 
             <ScrollView showsVerticalScrollIndicator={false}>
-              <Text style={styles.inputLabel}>Dirección</Text>
+              <Text style={styles.inputLabel}>{t("addressField")}</Text>
               <TextInput
                 style={styles.input}
                 value={addressLine}
                 onChangeText={setAddressLine}
-                placeholder="Calle 123 #45-67, Apto 802"
+                placeholder={t("streetPlaceholder")}
               />
 
-              <Text style={styles.inputLabel}>Referencia (opcional)</Text>
+              <Text style={styles.inputLabel}>{t("reference")}</Text>
               <TextInput
                 style={styles.input}
                 value={reference}
                 onChangeText={setReference}
-                placeholder="Portón azul, al lado del parque"
+                placeholder={t("referencePlaceholder")}
               />
 
               <TouchableOpacity
@@ -290,7 +287,7 @@ export default function AddressesView() {
                     ? "Obteniendo ubicación..."
                     : latitude !== null
                       ? "Ubicación capturada"
-                      : "Usar mi ubicación actual"}
+                      : t("useGps")}
                 </Text>
               </TouchableOpacity>
 
@@ -304,7 +301,7 @@ export default function AddressesView() {
                   color="#E61C24"
                 />
                 <Text style={styles.checkboxLabel}>
-                  Usar como predeterminada
+                  {t("setDefault")}
                 </Text>
               </TouchableOpacity>
 
@@ -318,7 +315,7 @@ export default function AddressesView() {
                 disabled={saving}
               >
                 <Text style={styles.saveButtonText}>
-                  {saving ? "Guardando..." : "Guardar Dirección"}
+                  {saving ? t("savingAddress") : t("saveAddress")}
                 </Text>
               </TouchableOpacity>
             </ScrollView>
@@ -329,7 +326,7 @@ export default function AddressesView() {
   );
 }
 
-const styles = StyleSheet.create({
+const baseStyles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: "#F8FAFC" },
   header: {
     flexDirection: "row",

@@ -1,11 +1,14 @@
 import React from "react";
-import { View, ActivityIndicator } from "react-native";
+import { View, ActivityIndicator, StatusBar } from "react-native";
 import { Tabs, Redirect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../../features/auth/context/AuthContext";
 import { resolveEffectiveRole } from "../../features/auth/services/roleMap";
 import { ROLE_NAMES } from "../../features/auth/types/role";
+import { getUserIdFromToken } from "../../features/auth/services/decodeToken";
 import { UserNotificationsProvider } from "../../features/notifications/context/UserNotificationsContext";
+import { ClientPreferencesProvider, useClientPreferences } from "../../features/userPreferences/context/ClientPreferencesContext";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export default function ClientTabsLayout() {
   const { user, initializing } = useAuth();
@@ -30,28 +33,51 @@ export default function ClientTabsLayout() {
   }
 
   return (
-    <UserNotificationsProvider>
+    <ClientPreferencesProvider
+      key={String(getUserIdFromToken(user.token) ?? user.identifier.trim().toLowerCase())}
+    >
+      <UserNotificationsProvider>
+        <ClientTabs />
+      </UserNotificationsProvider>
+    </ClientPreferencesProvider>
+  );
+}
+
+function ClientTabs() {
+  const { colors, isDark, hydrated, t } = useClientPreferences();
+  const insets = useSafeAreaInsets();
+  if (!hydrated) {
+    return (
+      <View style={{ flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: colors.background }}>
+        <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={colors.background} />
+        <ActivityIndicator size="large" color={colors.accent} />
+      </View>
+    );
+  }
+  return (
+    <>
+    <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
     <Tabs
       screenOptions={{
         headerShown: false,
         tabBarShowLabel: true,
         tabBarStyle: {
-          backgroundColor: "#1A1A1A",
+          backgroundColor: isDark ? colors.surface : "#FFFFFF",
           borderTopWidth: 1,
-          borderTopColor: "#333333",
-          height: 65,
-          paddingBottom: 10,
+          borderTopColor: colors.border,
+          height: 60 + insets.bottom,
+          paddingBottom: Math.max(insets.bottom, 6),
           paddingTop: 5,
         },
-        tabBarActiveTintColor: "#E61C24",
-        tabBarInactiveTintColor: "#94A3B8",
+        tabBarActiveTintColor: colors.accent,
+        tabBarInactiveTintColor: colors.muted,
         tabBarLabelStyle: { fontSize: 12, fontWeight: "bold" },
       }}
     >
       <Tabs.Screen
         name="index"
         options={{
-          title: "Menú",
+          title: t("menu"),
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="fast-food-outline" size={size} color={color} />
           ),
@@ -60,7 +86,7 @@ export default function ClientTabsLayout() {
       <Tabs.Screen
         name="profile"
         options={{
-          title: "Perfil",
+          title: t("profile"),
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="person-outline" size={size} color={color} />
           ),
@@ -69,7 +95,7 @@ export default function ClientTabsLayout() {
       <Tabs.Screen
         name="settings"
         options={{
-          title: "Ajustes",
+          title: t("settings"),
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="settings-outline" size={size} color={color} />
           ),
@@ -78,6 +104,6 @@ export default function ClientTabsLayout() {
       {/* Ruta que existe pero NO debe salir como pestaña */}
       <Tabs.Screen name="addresses" options={{ href: null }} />
     </Tabs>
-    </UserNotificationsProvider>
+    </>
   );
 }

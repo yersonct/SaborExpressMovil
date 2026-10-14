@@ -8,11 +8,10 @@ export interface EmployeeMe {
   branchName: string | null;
   roleNames: string[];
   tablesAttendedToday: number;
+  toGoOrdersToday: number;
   isAvailable: boolean;
   paymentsCollectedToday: number;
   amountCollectedToday: number;
-  vehicle: string | null;
-  plate: string | null;
   tripsCompleted: number;
   averageRating: number | null;
 }
@@ -21,6 +20,4 @@ export interface UpdateEmployeeMePayload {
   name: string;
   lastName?: string;
   phone?: string;
-  vehicle?: string;
-  plate?: string;
 }

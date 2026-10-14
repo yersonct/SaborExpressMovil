@@ -1,5 +1,6 @@
 import { handleResponse } from "./handleResponse";
 import { AUTH_ENDPOINTS } from "./authEndpoints";
+import { fetchWithNetworkHandling } from "@/features/shared/services/networkStatus";
 
 export interface ActivateAccountPayload {
   token: string;
@@ -9,7 +10,7 @@ export interface ActivateAccountPayload {
 export async function activateAccount(
   payload: ActivateAccountPayload,
 ): Promise<{ message: string }> {
-  const res = await fetch(AUTH_ENDPOINTS.activateAccount, {
+  const res = await fetchWithNetworkHandling(AUTH_ENDPOINTS.activateAccount, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

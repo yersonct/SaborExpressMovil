@@ -7,18 +7,10 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { AppState, StyleSheet, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import * as signalR from "@microsoft/signalr";
+import { Platform, StyleSheet, Vibration, View } from "react-native";
 import { useAudioPlayer, setAudioModeAsync } from "expo-audio";
-import { API_BASE_URL } from "@/config/api";
 import { useAuth } from "@/features/auth/context/AuthContext";
-import { getToken } from "@/features/auth/services/tokenStorage";
-import { refreshAccessToken } from "@/features/auth/services/apiClient";
-import {
-  decodeToken,
-  getUserIdFromToken,
-} from "@/features/auth/services/decodeToken";
+import { getUserIdFromToken } from "@/features/auth/services/decodeToken";
 import { normalizeNotificationType } from "../utils/notificationType";
 import { notificationService } from "../services/notificationService";
 import {
@@ -26,14 +18,25 @@ import {
   type ToastNotification,
 } from "@/features/shared/components/NotificationToast";
 import { AppAlertModal } from "@/features/shared/components/AppAlertModal";
+import { useOptionalClientPreferences } from "@/features/userPreferences/context/ClientPreferencesContext";
+import { useOptionalDeliveryNotificationPreferences } from "@/features/delivery/components/context/DeliveryContext";
+import { getDeliveryTheme } from "@/features/delivery/components/context/deliveryTheme";
+import { invokeRealtimeMethod } from "@/features/shared/services/realtimeEvents";
+import { useRealtimeEvents } from "@/features/shared/hooks/useRealtimeEvents";
 
-const notifySound = require("../../../assets/sounds/notify.wav");
+const notifySound = require("../../../../assets/sounds/notify.wav");
 
 setAudioModeAsync({ playsInSilentMode: true }).catch(() => {});
 
 // Tipos que hacen sonar el celular del cliente / repartidor.
 const SOUND_TYPES = new Set([
   "PaymentConfirmed",
+  "DeliveryAssigned",
+  "OrderStatusChanged",
+  "OrderReady",
+  "TableAvailable",
+]);
+const DELIVERY_ALERT_TYPES = new Set([
   "DeliveryAssigned",
   "OrderStatusChanged",
   "OrderReady",
@@ -47,6 +50,7 @@ interface UserNotificationsValue {
   markAllRead: () => void;
   clear: () => void;
   subscribe: (fn: Listener) => () => void;
+  reportDeliveryLocation: (latitude: number, longitude: number) => Promise<boolean>;
 }
 
 const Ctx = createContext<UserNotificationsValue | undefined>(undefined);
@@ -57,7 +61,15 @@ export function UserNotificationsProvider({
   children: React.ReactNode;
 }) {
   const { user } = useAuth();
-  const insets = useSafeAreaInsets();
+  const clientPreferences = useOptionalClientPreferences();
+  const deliveryPreferences = useOptionalDeliveryNotificationPreferences();
+  const deliveryTheme = deliveryPreferences
+    ? getDeliveryTheme(deliveryPreferences.isDark)
+    : undefined;
+  const clientSettingsRef = useRef(clientPreferences?.settings);
+  clientSettingsRef.current = clientPreferences?.settings;
+  const deliveryPreferencesRef = useRef(deliveryPreferences);
+  deliveryPreferencesRef.current = deliveryPreferences;
   const player = useAudioPlayer(notifySound);
   const playerRef = useRef(player);
   playerRef.current = player;
@@ -109,36 +121,10 @@ export function UserNotificationsProvider({
     loadHistory();
   }, [loadHistory]);
 
-  useEffect(() => {
-    if (!user?.token) return;
-
-    const connection = new signalR.HubConnectionBuilder()
-      .withUrl(`${API_BASE_URL}/hubs/notifications`, {
-        accessTokenFactory: async () => {
-          const token = await getToken();
-          if (!token) return "";
-          const decoded = decodeToken(token);
-          const expiring = !decoded || decoded.exp * 1000 < Date.now() + 10000;
-          if (expiring) {
-            const refreshed = await refreshAccessToken();
-            return refreshed ?? "";
-          }
-          return token;
-        },
-        withCredentials: false,
-        headers: { "X-Tunnel-Skip-AntiPhishing-Page": "true" },
-      })
-      .withAutomaticReconnect({
-        nextRetryDelayInMilliseconds: ({ previousRetryCount }) => {
-          if (previousRetryCount === 0) return 0;
-          if (previousRetryCount === 1) return 2000;
-          if (previousRetryCount === 2) return 10000;
-          return 30000;
-        },
-      })
-      .build();
-
-    connection.on("ReceiveNotification", (raw: any) => {
+  const handleRealtimeEvent = useCallback((eventName: string, ...args: unknown[]) => {
+    if (eventName === "ReceiveNotification") {
+      const raw = args[0] as any;
+      if (!raw) return;
       const n: ToastNotification = {
         ...raw,
         type: normalizeNotificationType(raw.type),
@@ -149,9 +135,19 @@ export function UserNotificationsProvider({
         setHistory((prev) => [n, ...prev].slice(0, 50));
         setUnreadCount((c) => c + 1);
       }
-      setToasts((prev) => [...prev, n]);
+      const notificationsEnabled = deliveryPreferencesRef.current
+        ? deliveryPreferencesRef.current.hydrated &&
+          deliveryPreferencesRef.current.pushNotifications
+        : clientSettingsRef.current?.pushNotifications !== false;
+      if (notificationsEnabled) {
+        setToasts((prev) => [...prev, n]);
+      }
 
-      if (SOUND_TYPES.has(n.type)) {
+      const courierPreferences = deliveryPreferencesRef.current;
+      const soundEnabled = courierPreferences
+        ? notificationsEnabled && courierPreferences.soundNotifications
+        : clientSettingsRef.current?.soundNotifications !== false;
+      if (soundEnabled && SOUND_TYPES.has(n.type)) {
         try {
           playerRef.current.seekTo(0);
           playerRef.current.play();
@@ -159,51 +155,69 @@ export function UserNotificationsProvider({
           // un fallo de audio no debe romper la notificación
         }
       }
-      emit(n);
-    });
-
-    // Al reconectar, se recupera lo que pudo perderse y se avisa a las
-    // pantallas para que refresquen sus datos ("Resync").
-    const resync = () => {
-      loadHistory();
-      emit({ id: 0, title: "", message: "", type: "Resync" });
-    };
-    connection.onreconnected(resync);
-
-    let disposed = false;
-    let retryTimer: ReturnType<typeof setTimeout> | null = null;
-
-    const startIfDown = () => {
-      if (disposed) return;
-      if (connection.state !== signalR.HubConnectionState.Disconnected) return;
-      connection
-        .start()
-        .then(resync)
-        .catch(() => {
-          // Falló el arranque (401, túnel caído...): reintenta en 5 s
-          if (!disposed) retryTimer = setTimeout(startIfDown, 5000);
-        });
-    };
-    startIfDown();
-
-    // Al volver a primer plano: reconecta si el SO mató el socket y refresca.
-    const appStateSub = AppState.addEventListener("change", (state) => {
-      if (state === "active") {
-        if (connection.state === signalR.HubConnectionState.Disconnected) {
-          startIfDown();
-        } else {
-          resync();
+      if (
+        notificationsEnabled &&
+        courierPreferences?.hydrated &&
+        courierPreferences.vibrationNotifications &&
+        DELIVERY_ALERT_TYPES.has(n.type) &&
+        Platform.OS !== "web"
+      ) {
+        try {
+          Vibration.cancel();
+          Vibration.vibrate([0, 300, 150, 300]);
+        } catch {
+          // Un fallo de vibración no debe interrumpir la recepción del pedido.
         }
       }
-    });
+      emit(n);
+      return;
+    }
 
-    return () => {
-      disposed = true;
-      if (retryTimer) clearTimeout(retryTimer);
-      appStateSub.remove();
-      connection.stop();
-    };
-  }, [user?.token, loadHistory, emit]);
+    if (eventName === "DeliveryLocationUpdated") {
+      const raw = args[0] as any;
+      const orderId = Number(raw?.orderId);
+      const deliveryId = Number(raw?.deliveryId);
+      const latitude = Number(raw?.latitude);
+      const longitude = Number(raw?.longitude);
+      if (
+        !Number.isInteger(orderId) ||
+        !Number.isInteger(deliveryId) ||
+        !Number.isFinite(latitude) ||
+        !Number.isFinite(longitude)
+      ) {
+        return;
+      }
+
+      // Es un evento efímero para la pantalla de seguimiento; no crea toast
+      // ni historial de notificación.
+      emit({
+        id: 0,
+        title: "",
+        message: "",
+        type: "DeliveryLocationUpdated",
+        relatedEntityType: "Order",
+        relatedEntityId: orderId,
+        deliveryId,
+        latitude,
+        longitude,
+        updatedAt: String(raw?.updatedAt ?? new Date().toISOString()),
+      });
+      return;
+    }
+
+    if (eventName === "RealtimeConnected") {
+      void loadHistory();
+      emit({ id: 0, title: "", message: "", type: "Resync" });
+      return;
+    }
+
+    if (eventName === "NotificationsChanged") void loadHistory();
+  }, [emit, loadHistory]);
+
+  useRealtimeEvents(
+    ["ReceiveNotification", "NotificationsChanged", "DeliveryLocationUpdated", "RealtimeConnected"],
+    handleRealtimeEvent,
+  );
 
   const subscribe = useCallback((fn: Listener) => {
     listenersRef.current.add(fn);
@@ -211,6 +225,12 @@ export function UserNotificationsProvider({
       listenersRef.current.delete(fn);
     };
   }, []);
+
+  const reportDeliveryLocation = useCallback(
+    (latitude: number, longitude: number) =>
+      invokeRealtimeMethod("UpdateDeliveryLocation", latitude, longitude),
+    [],
+  );
 
   const markAllRead = useCallback(() => {
     setUnreadCount(0);
@@ -229,8 +249,8 @@ export function UserNotificationsProvider({
   }, []);
 
   const value = useMemo(
-    () => ({ history, unreadCount, markAllRead, clear, subscribe }),
-    [history, unreadCount, markAllRead, clear, subscribe],
+    () => ({ history, unreadCount, markAllRead, clear, subscribe, reportDeliveryLocation }),
+    [history, unreadCount, markAllRead, clear, subscribe, reportDeliveryLocation],
   );
 
   return (
@@ -239,15 +259,41 @@ export function UserNotificationsProvider({
         {children}
         <View
           pointerEvents="box-none"
-          style={[StyleSheet.absoluteFill, { paddingTop: insets.top }]}
+          style={StyleSheet.absoluteFill}
         >
           <NotificationToastContainer
             notifications={toasts}
             onDismiss={dismissToast}
+            t={deliveryPreferences?.translate}
+            colors={
+              deliveryTheme
+                ? {
+                    surface: deliveryTheme.surface,
+                    text: deliveryTheme.text,
+                    mutedText: deliveryTheme.mutedText,
+                    border: deliveryTheme.border,
+                  }
+                : undefined
+            }
           />
         </View>
         {/* Necesario para el botón "Limpiar" de la campana (showAppAlert) */}
-        <AppAlertModal />
+        <AppAlertModal
+          colors={
+            deliveryTheme
+              ? {
+                  surface: deliveryTheme.surface,
+                  text: deliveryTheme.text,
+                  mutedText: deliveryTheme.mutedText,
+                  accent: deliveryTheme.accent,
+                  accentSoft: deliveryTheme.dangerBg,
+                  danger: deliveryTheme.dangerText,
+                  border: deliveryTheme.border,
+                  elevatedSurface: deliveryTheme.elevated,
+                }
+              : undefined
+          }
+        />
       </View>
     </Ctx.Provider>
   );

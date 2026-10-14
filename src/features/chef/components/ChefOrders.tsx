@@ -11,6 +11,7 @@ import { orderService } from "@/features/orders/services/orderService";
 import {
   OrderSummary,
   OrderDetailStatus,
+  OrderChannel,
   OrderStatus,
   OrderType,
   ACTIVE_ORDER_STATUSES,
@@ -18,12 +19,15 @@ import {
 import { useMyBranch } from "@/features/employees/hooks/useMyBranch";
 import { chefStyles, boardStyles } from "./style/ChefStyles";
 import { useChefTheme } from "../context/ChefThemeContext";
+import { useChefLanguage } from "../context/ChefLanguageContext";
 import PedidoCard from "./PedidoCard";
+import KitchenColumns from "./KitchenColumns";
 
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "@/features/auth/context/AuthContext";
 import { useKitchenNotifications } from "@/features/shared/hooks/useKitchenNotifications";
+import { isColombiaToday } from "@/features/shared/utils/colombia-date";
 
 // Un "lote" es la combinación de un pedido + un número de tanda enviada a cocina.
 // Cada vez que el mesero agrega productos a una mesa ya en curso, nace un lote nuevo.
@@ -35,6 +39,7 @@ export interface KitchenBatch {
   employeeName: string | null;
   customerName: string | null;
   assignedDeliveryPersonName: string | null;
+  awaitingCashierConfirmation: boolean;
   createdAt: string;
   status: OrderDetailStatus;
   items: OrderSummary["orderDetails"];
@@ -62,31 +67,31 @@ const COLUMNS: { status: OrderDetailStatus; label: string; color: string }[] = [
   { status: OrderDetailStatus.Ready, label: "Listos", color: "#22c55e" },
 ];
 
-const POLL_INTERVAL_MS = 15000;
-
 // Agrupa los items de todos los pedidos en "lotes" (orderId + batchNumber).
 // El estado del lote es el estado del primer item vivo (todos los items de
 // un mismo lote avanzan juntos, así que comparten el mismo estado).
 export function buildBatches(orders: OrderSummary[]): KitchenBatch[] {
   const batches = new Map<string, KitchenBatch>();
-  const todayISO = new Date().toDateString();
 
   for (const order of orders) {
     // Los pedidos de clientes (domicilio / recoger) que siguen abiertos se
     // mantienen aunque sean de ayer: el cliente los ve activos y cocina también.
     // Lo demás (mesas, entregados) solo se muestra si es de hoy.
-    const isToday = new Date(order.createdAt).toDateString() === todayISO;
+    const isToday = isColombiaToday(order.createdAt);
     const isOpenCustomerOrder =
       (order.orderType === OrderType.Delivery ||
         order.orderType === OrderType.Pickup) &&
       ACTIVE_ORDER_STATUSES.includes(order.status);
+    const awaitingCashierConfirmation =
+      order.channel === OrderChannel.App && order.status === OrderStatus.Pending;
 
     if (!isToday && !isOpenCustomerOrder) continue;
 
     // Domicilios sin confirmar: aún no los valida el cajero ni se ha pagado
     if (
       order.orderType === OrderType.Delivery &&
-      order.status === OrderStatus.Pending
+      order.status === OrderStatus.Pending &&
+      !awaitingCashierConfirmation
     )
       continue;
 
@@ -111,6 +116,7 @@ export function buildBatches(orders: OrderSummary[]): KitchenBatch[] {
           employeeName: order.employeeName,
           customerName: order.customerName,
           assignedDeliveryPersonName: order.assignedDeliveryPersonName,
+          awaitingCashierConfirmation,
           createdAt: order.createdAt,
           status: item.status,
           items: [],
@@ -125,6 +131,7 @@ export function buildBatches(orders: OrderSummary[]): KitchenBatch[] {
 
 export default function ChefOrders() {
   const { colors } = useChefTheme();
+  const { t } = useChefLanguage();
   const { branchId } = useMyBranch();
   const router = useRouter();
   const { handleLogout, user } = useAuth();
@@ -141,20 +148,29 @@ export default function ChefOrders() {
 
   const loadOrders = useCallback(async () => {
     if (!branchId) return;
-    const data = await orderService.getAll(branchId);
-    setOrders(data);
+    try {
+      const data = await orderService.getAll(branchId);
+      setOrders(data);
+    } catch {
+      // sin conexión momentánea: se conserva lo que ya se ve
+    }
   }, [branchId]);
 
-  // Conecta al Hub para recibir el sonido de "pedido nuevo" Y refrescar el
-  // tablero al instante. Antes solo sonaba y el pedido tardaba hasta 15s en
-  // aparecer (esperaba al polling), por eso el sonido "se adelantaba".
+  // Recibe el sonido de "pedido nuevo" y refresca el tablero al instante
+  // mediante el canal SignalR compartido.
   // Si el usuario conectado es Auxiliar, simplemente nunca le llegará esa
   // notificación (el backend no lo incluye como destinatario).
-  const { soundEnabled, enableSound } = useKitchenNotifications((notification) => {
-    if (notification.relatedEntityType === "Order") {
+  const { soundEnabled, enableSound } = useKitchenNotifications(
+    (notification) => {
+      if (notification.relatedEntityType === "Order") {
+        loadOrders();
+      }
+    },
+    () => {
+      // OrdersChanged / reconexión / volver a primer plano
       loadOrders();
-    }
-  });
+    },
+  );
 
   useEffect(() => {
     (async () => {
@@ -163,8 +179,6 @@ export default function ChefOrders() {
       setLoading(false);
     })();
 
-    const interval = setInterval(loadOrders, POLL_INTERVAL_MS);
-    return () => clearInterval(interval);
   }, [loadOrders]);
 
   const onRefresh = useCallback(async () => {
@@ -201,7 +215,7 @@ export default function ChefOrders() {
         ]}
       >
         <Text style={{ color: colors.text, marginBottom: 20 }}>
-          No se pudo determinar la sede de este dispositivo.
+          {t.noBranchAssigned}
         </Text>
         <TouchableOpacity
           onPress={onLogout}
@@ -220,7 +234,7 @@ export default function ChefOrders() {
           <Text
             style={{ color: colors.text, marginLeft: 8, fontWeight: "600" }}
           >
-            Cerrar sesión
+            {t.logout}
           </Text>
         </TouchableOpacity>
       </View>
@@ -265,7 +279,7 @@ export default function ChefOrders() {
             SABOREXPRESS
           </Text>
           <Text style={[chefStyles.roleBadge, { color: colors.mutedText }]}>
-            COCINA
+            {t.kitchenLabel}
           </Text>
         </View>
 
@@ -288,70 +302,24 @@ export default function ChefOrders() {
         >
           <Ionicons name="volume-mute-outline" size={18} color="#92400E" />
           <Text style={{ color: "#92400E", fontWeight: "700" }}>
-            Toca aquí para activar el sonido de pedidos
+            {t.soundPrompt}
           </Text>
         </TouchableOpacity>
       )}
 
-      <View style={boardStyles.board}>
-        {COLUMNS.map((col) => {
-          // La columna "Listos" también acoge los ya ENTREGADOS (no se
-          // crea una columna aparte, van junto a los Ready con su propio
-          // marcador visual).
-          const batchesColumna = batches.filter((b) =>
-            col.status === OrderDetailStatus.Ready
-              ? b.status === OrderDetailStatus.Ready ||
-                b.status === OrderDetailStatus.Delivered
-              : b.status === col.status,
-          );
-          return (
-            <View
-              key={col.status}
-              style={[
-                boardStyles.column,
-                { backgroundColor: colors.card, borderColor: colors.border },
-              ]}
-            >
-              <View
-                style={[
-                  boardStyles.columnHeader,
-                  { borderBottomColor: colors.border },
-                ]}
-              >
-                <Text style={[boardStyles.columnTitle, { color: col.color }]}>
-                  {col.label} · {batchesColumna.length}
-                </Text>
-              </View>
-              <ScrollView
-                contentContainerStyle={boardStyles.columnBody}
-                refreshControl={
-                  <RefreshControl
-                    refreshing={refreshing}
-                    onRefresh={onRefresh}
-                  />
-                }
-              >
-                {batchesColumna.length === 0 ? (
-                  <View style={boardStyles.emptyColumn}>
-                    <Text style={{ color: colors.mutedText, fontSize: 12 }}>
-                      Sin pedidos
-                    </Text>
-                  </View>
-                ) : (
-                  batchesColumna.map((batch) => (
-                    <PedidoCard
-                      key={`${batch.orderId}-${batch.batchNumber}`}
-                      batch={batch}
-                      onAvanzarEstado={avanzarEstado}
-                      canUpdateStatus={canUpdateStatus}
-                    />
-                  ))
-                )}
-              </ScrollView>
-            </View>
-          );
-        })}
-      </View>
+      <KitchenColumns
+        batches={batches}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+        renderCard={(batch) => (
+          <PedidoCard
+            batch={batch}
+            onAvanzarEstado={avanzarEstado}
+            canUpdateStatus={canUpdateStatus && !batch.awaitingCashierConfirmation}
+          />
+        )}
+      />
     </View>
   );
 }

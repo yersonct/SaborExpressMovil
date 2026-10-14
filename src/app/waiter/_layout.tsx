@@ -3,6 +3,7 @@ import { View, ActivityIndicator } from "react-native";
 import { Tabs, Redirect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { WaiterThemeProvider } from "@/features/waiter/context/WaiterThemeContext";
+import { WaiterNotificationPreferencesProvider } from "@/features/waiter/context/WaiterNotificationPreferencesContext";
 import {
   WaiterLanguageProvider,
   useWaiterLanguage,
@@ -10,12 +11,49 @@ import {
 import { useAuth } from "../../features/auth/context/AuthContext";
 import { resolveEffectiveRole, resolvePrimaryRole } from "../../features/auth/services/roleMap";
 import { ROLE_NAMES } from "../../features/auth/types/role";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useWaiterTheme } from "@/features/waiter/context/WaiterThemeContext";
+import { WaiterPushNotificationRegistration } from "@/features/waiter/components/WaiterPushNotificationRegistration";
+import { AppAlertModal } from "@/features/shared/components/AppAlertModal";
+import { getUserIdFromToken } from "@/features/auth/services/decodeToken";
+
+function WaiterAppAlertModal() {
+  const { colors } = useWaiterTheme();
+
+  return (
+    <AppAlertModal
+      colors={{
+        surface: colors.surface,
+        text: colors.text,
+        mutedText: colors.mutedText,
+        accent: colors.accent,
+        accentSoft: colors.accentSoft,
+        danger: colors.danger,
+        border: colors.border,
+        elevatedSurface: colors.elevatedSurface,
+      }}
+    />
+  );
+}
 
 export default function WaiterTabsLayout() {
   const { user, initializing } = useAuth();
+  const preferenceScope = user
+    ? String(getUserIdFromToken(user.token) ?? user.identifier.trim().toLowerCase())
+    : "anonymous";
 
   const WrappedTabs = () => {
-    const { t } = useWaiterLanguage();
+    const { t, hydrated } = useWaiterLanguage();
+    const { colors } = useWaiterTheme();
+    const insets = useSafeAreaInsets();
+
+    if (!hydrated) {
+      return (
+        <View style={{ flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: colors.background }}>
+          <ActivityIndicator size="large" color={colors.accent} />
+        </View>
+      );
+    }
 
     return (
       <Tabs
@@ -23,15 +61,15 @@ export default function WaiterTabsLayout() {
           headerShown: false,
           tabBarShowLabel: true,
           tabBarStyle: {
-            backgroundColor: "#1A1A1A",
+            backgroundColor: colors.surface,
             borderTopWidth: 1,
-            borderTopColor: "#333333",
-            height: 65,
-            paddingBottom: 10,
+            borderTopColor: colors.border,
+            height: 60 + insets.bottom,
+            paddingBottom: Math.max(insets.bottom, 6),
             paddingTop: 5,
           },
-          tabBarActiveTintColor: "#E61C24",
-          tabBarInactiveTintColor: "#94A3B8",
+          tabBarActiveTintColor: colors.accent,
+          tabBarInactiveTintColor: colors.mutedText,
           tabBarLabelStyle: {
             fontSize: 12,
             fontWeight: "bold",
@@ -89,9 +127,13 @@ if (
 }
 
   return (
-    <WaiterThemeProvider>
-      <WaiterLanguageProvider>
-        <WrappedTabs />
+    <WaiterThemeProvider key={preferenceScope} storageScope={preferenceScope}>
+      <WaiterLanguageProvider storageScope={preferenceScope}>
+        <WaiterNotificationPreferencesProvider storageScope={preferenceScope}>
+          <WaiterPushNotificationRegistration />
+          <WaiterAppAlertModal />
+          <WrappedTabs />
+        </WaiterNotificationPreferencesProvider>
       </WaiterLanguageProvider>
     </WaiterThemeProvider>
   );

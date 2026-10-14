@@ -7,7 +7,14 @@ import {
 } from "./tokenStorage";
 import { AUTH_ENDPOINTS } from "./authEndpoints";
 import { notifySessionExpired } from "./authEvents";
+import { isServerAlive, isServerDownStatus } from "./serverHealth";
 import { ROLE_NAMES } from "../types/role";
+import { getApiLanguage } from "./apiLanguage";
+import {
+  isNetworkFailure,
+  reportNetworkAvailable,
+  toUserFacingNetworkError,
+} from "@/features/shared/services/networkStatus";
 
 const OPERATIVE_ROLES: string[] = [
   ROLE_NAMES.Mesero,
@@ -19,27 +26,80 @@ const OPERATIVE_ROLES: string[] = [
 
 // Todos los que pidan renovar el token (fetchAuthed, SignalR) comparten UNA sola llamada.
 let refreshPromise: Promise<string | null> | null = null;
+// Evita pedir dos veces el mismo GET si varias pantallas/hooks se actualizan juntos.
+// Las respuestas no se guardan: cada nueva carga posterior consulta al servidor.
+const inFlightGetRequests = new Map<string, Promise<Response>>();
+let serverDownLogout: Promise<void> | null = null;
+
+async function closeSessionForServerDown(): Promise<void> {
+  if (serverDownLogout) return serverDownLogout;
+
+  serverDownLogout = (async () => {
+    if (!(await loadSession())) return;
+    await clearSession();
+    notifySessionExpired("server_down");
+  })();
+
+  try {
+    await serverDownLogout;
+  } finally {
+    serverDownLogout = null;
+  }
+}
+
+function isServerUnavailableError(error: unknown): boolean {
+  if (isNetworkFailure(error)) return true;
+  if (!error || typeof error !== "object") return false;
+  const candidate = error as { name?: unknown; code?: unknown; statusCode?: unknown };
+  return (
+    candidate.name === "NetworkUnavailableError" ||
+    candidate.code === "NETWORK_UNAVAILABLE" ||
+    (typeof candidate.statusCode === "number" && isServerDownStatus(candidate.statusCode))
+  );
+}
+
+async function handleServerUnavailableError(error: unknown): Promise<void> {
+  if (!isServerUnavailableError(error)) return;
+
+  const candidate = error as { statusCode?: unknown } | null;
+  const explicitServerDown =
+    typeof candidate?.statusCode === "number" &&
+    isServerDownStatus(candidate.statusCode);
+
+  // Un corte breve de red no invalida la sesión si el backend sigue vivo.
+  // Cuando no hay una respuesta HTTP explícita de caída, confirmamos con /health.
+  if (!explicitServerDown && (await isServerAlive(3000))) return;
+
+  await closeSessionForServerDown();
+}
 
 // Reintenta solo ante fallas de red reales (tunnel no listo, wifi cortado, etc.)
 // No reintenta ante 401/500/etc., esos ya son respuestas válidas del servidor.
 async function fetchWithRetry(
   input: RequestInfo,
   init: RequestInit,
-  retries = 2,
-  delayMs = 1000,
 ): Promise<Response> {
-  try {
-    return await fetch(input, init);
-  } catch (err) {
-    const isNetworkError =
-      err instanceof TypeError &&
-      /failed to fetch|network request failed/i.test(err.message);
+  const method = (init.method ?? "GET").toUpperCase();
+  const canRetry = ["GET", "HEAD", "OPTIONS"].includes(method);
 
-    if (retries > 0 && isNetworkError) {
-      await new Promise((res) => setTimeout(res, delayMs));
-      return fetchWithRetry(input, init, retries - 1, delayMs * 2);
+  try {
+    const response = await fetch(input, init);
+    reportNetworkAvailable();
+    return response;
+  } catch (err) {
+    if (init.signal?.aborted) throw err;
+    if (canRetry && isNetworkFailure(err) && !init.signal?.aborted) {
+      await new Promise((res) => setTimeout(res, 300));
+      try {
+        const response = await fetch(input, init);
+        reportNetworkAvailable();
+        return response;
+      } catch (retryError) {
+        if (init.signal?.aborted) throw retryError;
+        throw toUserFacingNetworkError(retryError);
+      }
     }
-    throw err;
+    throw toUserFacingNetworkError(err);
   }
 }
 
@@ -55,6 +115,7 @@ export function refreshAccessToken(): Promise<string | null> {
 async function doRefresh(): Promise<string | null> {
   const refreshToken = await getRefreshToken();
   if (!refreshToken) return null;
+  const refreshTokenIsCurrent = async () => (await getRefreshToken()) === refreshToken;
 
   try {
     const res = await fetchWithRetry(AUTH_ENDPOINTS.refreshToken, {
@@ -62,17 +123,41 @@ async function doRefresh(): Promise<string | null> {
       headers: {
         "Content-Type": "application/json",
         Accept: "*/*",
+        "Accept-Language": getApiLanguage(),
         "X-Tunnel-Skip-AntiPhishing-Page": "true",
       },
       body: JSON.stringify({ refreshToken }),
     });
 
-    if (!res.ok) return null;
+    if (!res.ok) {
+      if (isServerDownStatus(res.status)) {
+        const error = new Error("El servicio no está disponible.");
+        Object.assign(error, { statusCode: res.status });
+        throw error;
+      }
+      if (res.status >= 500) {
+        const error = new Error("El servidor no pudo renovar la sesión.");
+        Object.assign(error, { statusCode: res.status });
+        throw error;
+      }
+      // El servidor rechazó las credenciales de renovación. Por ejemplo,
+      // otro inicio de sesión revocó este refresh token. No dejes la sesión
+      // local activa: al iniciar o renovar en segundo plano no pasa por
+      // executeAuthedRequest, así que el cierre debe ocurrir aquí también.
+      if ((res.status === 401 || res.status === 403) && (await refreshTokenIsCurrent())) {
+        await clearSession();
+        notifySessionExpired(res.status === 403 ? "role_revoked" : "expired");
+      }
+      return null;
+    }
 
     const data = await res.json();
 
     // Si antes tenía un rol operativo y el backend ya no lo devuelve,
     // el rol fue revocado: cerramos sesión (el usuario debe volver al login).
+    // No sobrescribir una sesión nueva si este refresh respondió tarde.
+    if (!(await refreshTokenIsCurrent())) return await getToken();
+
     const previous = await loadSession();
     const newRoles: string[] = data.roles ?? [];
     const lostRole = (previous?.roles ?? []).some(
@@ -85,6 +170,7 @@ async function doRefresh(): Promise<string | null> {
     }
 
     // Guardamos la sesión completa renovada (nuevo token + nuevo refreshToken rotado)
+    if (!(await refreshTokenIsCurrent())) return await getToken();
     await saveSession({
       token: data.token,
       refreshToken: data.refreshToken,
@@ -95,7 +181,15 @@ async function doRefresh(): Promise<string | null> {
     });
 
     return data.token;
-  } catch {
+  } catch (error) {
+    await handleServerUnavailableError(error);
+    const statusCode = (error as { statusCode?: unknown })?.statusCode;
+    if (
+      isServerUnavailableError(error) ||
+      (typeof statusCode === "number" && statusCode >= 500)
+    ) {
+      throw error;
+    }
     return null;
   }
 }
@@ -115,35 +209,101 @@ export async function fetchAuthed(
   const finalHeaders = {
     "Content-Type": "application/json",
     Accept: "*/*",
+    "Accept-Language": getApiLanguage(),
     // Evita la página de advertencia ("Continue anyway") de Dev Tunnels
     "X-Tunnel-Skip-AntiPhishing-Page": "true",
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...headers,
   };
 
-  let res = await fetchWithRetry(url, { ...rest, headers: finalHeaders });
+  const method = (rest.method ?? "GET").toUpperCase();
+  const canShareRead =
+    method === "GET" &&
+    rest.body == null &&
+    !rest.signal &&
+    !headers &&
+    !rest.cache;
+  const requestKey = `${token ?? "anonymous"}\n${getApiLanguage()}\n${url}`;
 
-  // 401 = token vencido. 403 = token válido pero con permisos/rol viejos
-  // (por ejemplo, le revocaron un rol). En ambos casos renovamos UNA vez.
+  if (canShareRead) {
+    const inFlight = inFlightGetRequests.get(requestKey);
+    if (inFlight) return (await inFlight).clone();
+  }
+
+  const request = executeAuthedRequest(url, rest, finalHeaders, !!skipAuth);
+  if (canShareRead) inFlightGetRequests.set(requestKey, request);
+
+  try {
+    return await request;
+  } finally {
+    if (canShareRead && inFlightGetRequests.get(requestKey) === request) {
+      inFlightGetRequests.delete(requestKey);
+    }
+  }
+}
+
+async function executeAuthedRequest(
+  url: string,
+  rest: RequestInit,
+  finalHeaders: HeadersInit,
+  skipAuth: boolean,
+): Promise<Response> {
+  let res: Response;
+  try {
+    res = await fetchWithRetry(url, { ...rest, headers: finalHeaders });
+  } catch (err) {
+    if (!skipAuth) await handleServerUnavailableError(err);
+    throw err;
+  }
+
+  if (!skipAuth && isServerDownStatus(res.status)) {
+    await closeSessionForServerDown();
+    return res;
+  }
+
+  // Renueva ante 401 y 403 para actualizar claims de rol si cambiaron.
+  // El propio recurso puede devolver 403 por permisos insuficientes; eso no
+  // significa que la sesión completa deba cerrarse.
   if ((res.status === 401 || res.status === 403) && !skipAuth) {
-    const newToken = await refreshAccessToken();
+    let newToken: string | null;
+    try {
+      newToken = await refreshAccessToken();
+    } catch (error) {
+      await handleServerUnavailableError(error);
+      throw error;
+    }
 
     if (newToken) {
-      res = await fetchWithRetry(url, {
-        ...rest,
-        headers: { ...finalHeaders, Authorization: `Bearer ${newToken}` },
-      });
+      try {
+        res = await fetchWithRetry(url, {
+          ...rest,
+          headers: { ...finalHeaders, Authorization: `Bearer ${newToken}` },
+        });
+      } catch (error) {
+        await handleServerUnavailableError(error);
+        throw error;
+      }
 
-      // Con el token renovado sigue sin permiso: la sesión quedó
-      // desactualizada respecto al backend → login.
-      if (res.status === 403) {
+      if (isServerDownStatus(res.status)) {
+        await closeSessionForServerDown();
+        return res;
+      }
+
+      // Si el backend rechaza también el token renovado con 401, la sesión ya
+      // no es válida. Un 403 puede ser una denegación propia del endpoint; los
+      // roles revocados ya se detectan al comparar la respuesta de renovación.
+      if (res.status === 401) {
         await clearSession();
-        notifySessionExpired("role_revoked");
+        notifySessionExpired("expired");
       }
     } else {
-      // El refresh falló (o detectó rol revocado y ya cerró la sesión)
-      await clearSession();
-      notifySessionExpired(res.status === 403 ? "role_revoked" : "expired");
+      // doRefresh ya cierra y notifica si el refresh token fue rechazado.
+      // Si no hay refresh token, solo un 401 confirma que la sesión venció;
+      // un 403 por permisos no debe expulsar al usuario.
+      if (res.status === 401 && (await loadSession())) {
+        await clearSession();
+        notifySessionExpired("expired");
+      }
     }
   }
 

@@ -1,5 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
-import React, { useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { BreakdownRows } from "@/features/orders/components/BreakdownRows";
 import {
   ActivityIndicator,
   Alert,
@@ -12,6 +13,7 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { Order } from "./CashierData";
@@ -29,6 +31,8 @@ import { useWompiPolling } from "@/features/payments/hooks/useWompiPolling";
 import { buildWompiCheckoutUrl } from "@/features/payments/utils/wompiUrl";
 import QRCode from "react-native-qrcode-svg";
 import { invoiceService } from "@/features/invoices/services/invoiceService";
+import { generateAndShareInvoicePdf } from "@/features/invoices/services/invoicePdfService";
+import type { Invoice } from "@/features/invoices/types/invoice.types";
 import { orderService } from "@/features/orders/services/orderService";
 import { useProducts } from "@/features/products/hooks/useProducts";
 import type { Product } from "@/features/products/types/product.types";
@@ -44,17 +48,20 @@ export const OrdersFeature = ({
   setActiveTab,
   lang = "es",
   isDark = false,
+  autoPrint = true,
 }: any) => {
+  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
+  const isNarrowScreen = screenWidth < 390;
   const t = TRANSLATIONS[lang as LanguageCode] || TRANSLATIONS["es"];
 
   // 🔥 PALETA DE COLORES DINÁMICA COMPLETA PARA EL CAJERO 🔥
   const colors = {
-    background: isDark ? "#0F172A" : "#F8FAFC",
-    card: isDark ? "#1E293B" : "#FFFFFF",
+    background: isDark ? "#0B1220" : "#F8FAFC",
+    card: isDark ? "#111827" : "#FFFFFF",
     text: isDark ? "#F8FAFC" : "#1E293B",
-    muted: isDark ? "#94A3B8" : "#64748B",
+    muted: isDark ? "#CBD5E1" : "#64748B",
     border: isDark ? "#334155" : "#E2E8F0",
-    inputBg: isDark ? "#0F172A" : "#F1F5F9",
+    inputBg: isDark ? "#1F2937" : "#F1F5F9",
     warningBg: isDark ? "#451a03" : "#FEF3C7",
     warningText: isDark ? "#fde68a" : "#92400E",
     warningBorder: isDark ? "#78350f" : "#FDE68A",
@@ -88,13 +95,15 @@ export const OrdersFeature = ({
   };
 
   const [orderType, setOrderType] = useState<"mesa" | "llevar">("mesa");
-  const [printReceipt, setPrintReceipt] = useState(false);
+  const [showAllOrders, setShowAllOrders] = useState(false);
   const [isSubmittingPayment, setIsSubmittingPayment] = useState(false);
   // Saldo real pendiente (total del pedido menos lo ya pagado antes).
   // null mientras se consulta; evita cobrar el total completo si el
   // pedido ya tuvo un pago parcial/previo registrado en el backend.
   const [remainingBalance, setRemainingBalance] = useState<number | null>(null);
   const [loadingBalance, setLoadingBalance] = useState(false);
+
+  useEffect(() => setShowAllOrders(false), [filterType]);
 
   // Catálogo REAL del backend (antes era MENU_ITEMS, una lista inventada
   // sin relación con los productos reales — por eso "Agregar extra" nunca
@@ -113,7 +122,6 @@ export const OrdersFeature = ({
 
   const openPaymentModal = async (order: Order) => {
     setSelectedOrder(order);
-    setPrintReceipt(false);
     stopPolling();
     setWompiQrUrl(null);
     wompiPaymentIdRef.current = null;
@@ -179,6 +187,11 @@ export const OrdersFeature = ({
         ...selectedOrder,
         items: itemsText,
         total: fresh.total,
+        subTotal: fresh.subTotal,
+        tax: fresh.tax,
+        taxRate: fresh.taxRate,
+        taxIncludedInPrice: fresh.taxIncludedInPrice,
+        deliveryFee: fresh.deliveryFee,
       };
       setSelectedOrder(updatedOrder);
       setOrders((prev: Order[]) =>
@@ -188,7 +201,7 @@ export const OrdersFeature = ({
       // El saldo pendiente por cobrar sube en la misma cantidad, sin tener
       // que volver a consultar todos los pagos ya hechos.
       setRemainingBalance((prev) =>
-        prev === null ? fresh.total : prev + item.price * quantity,
+        prev === null ? fresh.total : prev + (fresh.total - selectedOrder.total),
       );
 
       setCatalogModalVisible(false);
@@ -199,8 +212,8 @@ export const OrdersFeature = ({
       );
     } catch (err: any) {
       Alert.alert(
-        "Error",
-        err?.message ?? "No se pudo agregar el producto al pedido.",
+        t.errorTitle,
+        err?.message ?? t.extraProductAddError,
       );
     } finally {
       setAddingExtra(false);
@@ -220,6 +233,55 @@ export const OrdersFeature = ({
     datafono: PaymentMethod.Card,
   } as const;
 
+  const createInvoiceForPaidPayment = (
+    paymentId: number,
+    order: Order,
+    methodLabel: string,
+    failureMessage: string,
+  ) => {
+    void (async () => {
+      let invoice: Invoice;
+      try {
+        invoice = await invoiceService.create({ paymentId });
+      } catch (invoiceErr: any) {
+        showToast(
+          failureMessage.replace("{error}", invoiceErr?.message ?? ""),
+        );
+        return;
+      }
+
+      if (!autoPrint) return;
+
+      try {
+        await generateAndShareInvoicePdf(invoice, order, methodLabel, {
+          title: t.invoicePdfTitle,
+          invoiceNumber: t.invoicePdfNumberLabel,
+          date: t.invoicePdfDateLabel,
+          order: t.invoicePdfOrderLabel,
+          customer: t.customer,
+          orderType: t.orderTypeLabel,
+          orderTypeValue:
+            order.type === "mesa"
+              ? t.orderTable.replace("{table}", String(order.table ?? ""))
+              : t.catalogTakeaway,
+          payment: t.paymentMethod,
+          items: t.consumptionDetail,
+          subtotal: t.invoicePdfSubtotalLabel,
+          tax: t.invoicePdfTaxLabel,
+          taxLegacy: t.invoicePdfLegacyTaxLabel,
+          deliveryFee: t.deliveryFee.replace(/:\s*$/, ""),
+          total: t.invoicePdfTotalLabel,
+        });
+      } catch (pdfErr: any) {
+        const pdfErrorMessage =
+          pdfErr?.code === "NATIVE_PDF_MODULES_UNAVAILABLE"
+            ? t.invoicePdfModuleUnavailable
+            : t.invoicePdfOpenError.replace("{error}", pdfErr?.message ?? "");
+        showToast(pdfErrorMessage);
+      }
+    })();
+  };
+
   const processPaymentAndCloseMesa = async () => {
     if (
       !selectedOrder ||
@@ -230,7 +292,7 @@ export const OrdersFeature = ({
 
     const amountToCharge = remainingBalance ?? selectedOrder.total;
     if (amountToCharge <= 0) {
-      Alert.alert("Aviso", "Este pedido ya está pagado en su totalidad.");
+      Alert.alert(t.warningTitle, t.orderAlreadyPaid);
       return;
     }
 
@@ -248,16 +310,14 @@ export const OrdersFeature = ({
       // pedido quedó 100% pagado (ReleaseTableIfFullyPaidAsync) — no hace
       // falta hacer nada más aquí para eso.
 
-      // Facturación automática. El pago YA quedó registrado arriba, así
-      // que un fallo aquí no debe deshacer el cobro ni bloquear al cajero
-      // — se aísla en su propio try/catch y solo se avisa aparte.
-      try {
-        await invoiceService.create({ paymentId: payment.id });
-      } catch (invoiceErr: any) {
-        showToast(
-          `⚠️ Pago registrado, pero no se pudo generar la factura (${invoiceErr?.message ?? "error desconocido"}).`,
-        );
-      }
+      // El pago ya quedó guardado: crear la factura y, si Configuración lo
+      // permite, generar y compartir su PDF en segundo plano.
+      createInvoiceForPaidPayment(
+        payment.id,
+        selectedOrder,
+        cashierPaymentMethod === "efectivo" ? t.payCash : t.payCard,
+        t.invoiceFailedAfterPayment,
+      );
 
       LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
       markAsPaid(selectedOrder.id);
@@ -280,16 +340,12 @@ export const OrdersFeature = ({
         `✅ ${t.toastPaymentSuccess.replace("{method}", translatedMethod.toUpperCase())}`,
       );
 
-      if (printReceipt) {
-        setTimeout(() => showToast(t.toastPrinting), 1000);
-      }
-
       setSelectedOrder(null);
       setCashierPaymentMethod("");
     } catch (err: any) {
       Alert.alert(
-        "Error al registrar el pago",
-        err?.message ?? "No se pudo registrar el pago. Intenta de nuevo.",
+        t.paymentErrorTitle,
+        err?.message ?? t.paymentCreateError,
       );
     } finally {
       setIsSubmittingPayment(false);
@@ -301,6 +357,7 @@ export const OrdersFeature = ({
     stopPolling();
     setWompiQrUrl(null);
     setOrderModalVisible(false);
+    setSelectedOrder(null);
   };
 
   const cancelWompiQr = () => {
@@ -310,14 +367,13 @@ export const OrdersFeature = ({
   };
 
   const finishWompiPaid = async (order: Order, paymentId: number) => {
-    // Facturación automática: si falla, el pago ya quedó confirmado por Wompi
-    try {
-      await invoiceService.create({ paymentId });
-    } catch (invoiceErr: any) {
-      showToast(
-        `⚠️ Pago confirmado, pero no se pudo generar la factura (${invoiceErr?.message ?? "error desconocido"}).`,
-      );
-    }
+    // Wompi ya confirmó el pago; no esperamos a que el cajero cierre el PDF.
+    createInvoiceForPaidPayment(
+      paymentId,
+      order,
+      "Wompi",
+      t.invoiceFailedAfterWompi,
+    );
 
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     markAsPaid(order.id);
@@ -335,7 +391,7 @@ export const OrdersFeature = ({
     setOrderModalVisible(false);
     setSelectedOrder(null);
     setCashierPaymentMethod("");
-    showToast("✅ Pago confirmado por Wompi");
+    showToast(t.wompiPaidToast);
   };
 
   const watchWompiPayment = (paymentId: number, order: Order) => {
@@ -345,8 +401,8 @@ export const OrdersFeature = ({
       } else {
         setWompiQrUrl(null);
         Alert.alert(
-          "Pago rechazado",
-          "Wompi no aprobó el pago. Puedes generar otro QR o cobrar por otro método.",
+          t.wompiRejectedTitle,
+          t.wompiRejectedMessage,
         );
       }
     });
@@ -365,8 +421,8 @@ export const OrdersFeature = ({
       watchWompiPayment(data.paymentId, selectedOrder);
     } catch (err: any) {
       Alert.alert(
-        "No se pudo generar el QR",
-        err?.message ?? "Intenta de nuevo.",
+        t.wompiQrErrorTitle,
+        err?.message ?? t.tryAgain,
       );
     } finally {
       setIsSubmittingPayment(false);
@@ -389,15 +445,33 @@ export const OrdersFeature = ({
           isMesa ? styles.cardMesa : styles.cardLlevar,
         ]}
       >
+        <TouchableOpacity
+          accessibilityRole="button"
+          accessibilityLabel={t.viewOrderDetails}
+          activeOpacity={0.75}
+          onPress={() => void openPaymentModal(item)}
+        >
         <View style={styles.cardHeader}>
-          <Text style={[styles.orderId, { color: colors.muted }]}>
+          <Text
+            style={[styles.orderId, { color: colors.muted }]}
+            numberOfLines={1}
+            ellipsizeMode="tail"
+          >
             {item.id} • {item.time}
           </Text>
-          <Text style={[styles.orderTotal, { color: colors.text }]}>
+          <Text
+            style={[styles.orderTotal, { color: colors.text }]}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+          >
             ${item.total.toLocaleString("es-CO")}
           </Text>
         </View>
-        <Text style={[styles.orderTitle, { color: colors.text }]}>
+        <Text
+          style={[styles.orderTitle, { color: colors.text }]}
+          numberOfLines={2}
+          ellipsizeMode="tail"
+        >
           {orderTitle}
           {!isMesa && item.customerName ? ` — ${item.customerName}` : ""}
         </Text>
@@ -410,7 +484,7 @@ export const OrdersFeature = ({
               marginBottom: 4,
             }}
           >
-            Tomado por: {item.employeeName}
+            {t.takenBy.replace("{name}", item.employeeName)}
           </Text>
         )}
 
@@ -439,11 +513,12 @@ export const OrdersFeature = ({
                   { color: colors.muted, fontStyle: "italic" },
                 ]}
               >
-                + {remaining} producto{remaining > 1 ? "s" : ""} más
+                {t.moreProducts.replace("{count}", String(remaining))}
               </Text>
             );
           })()}
         </View>
+        </TouchableOpacity>
         <TouchableOpacity
           style={styles.payButton}
           onPress={() => openPaymentModal(item)}
@@ -457,15 +532,38 @@ export const OrdersFeature = ({
   const displayData = orders.filter(
     (o: Order) => o.type === filterType && o.status !== "pagado",
   );
+  const ORDERS_PAGE_SIZE = 8;
+  const visibleOrders = showAllOrders
+    ? displayData
+    : displayData.slice(0, ORDERS_PAGE_SIZE);
   const emptyText = filterType === "mesa" ? t.emptyTables : t.emptyOthers;
 
   return (
     <View style={styles.content}>
       <FlatList
-        data={displayData}
+        data={visibleOrders}
         keyExtractor={(item) => item.id}
         renderItem={renderOrder}
         contentContainerStyle={styles.listPadding}
+        ListFooterComponent={
+          displayData.length > ORDERS_PAGE_SIZE ? (
+            <TouchableOpacity
+              style={styles.showOrdersButton}
+              activeOpacity={0.75}
+              onPress={() => setShowAllOrders((current) => !current)}
+              accessibilityRole="button"
+            >
+              <Text style={styles.showOrdersButtonText}>
+                {showAllOrders ? t.showLessOrders : t.showMoreOrders}
+              </Text>
+              <Ionicons
+                name={showAllOrders ? "chevron-up" : "chevron-down"}
+                size={18}
+                color="#FFFFFF"
+              />
+            </TouchableOpacity>
+          ) : null
+        }
         ListEmptyComponent={
           <Text style={[styles.emptyText, { color: colors.muted }]}>
             {emptyText}
@@ -481,7 +579,18 @@ export const OrdersFeature = ({
       >
         <View style={styles.modalOverlay}>
           {/* 🔥 MODAL DE COBRO DINÁMICO 🔥 */}
-          <View style={[styles.modalBox, { backgroundColor: colors.card }]}>
+          <View
+            style={[
+              styles.modalBox,
+              {
+                backgroundColor: colors.card,
+                maxHeight: screenHeight * 0.92,
+                maxWidth: 640,
+                paddingHorizontal:
+                  screenWidth < 360 ? 14 : screenWidth < 420 ? 18 : 24,
+              },
+            ]}
+          >
             <View style={styles.modalHeader}>
               <Text style={[styles.modalTitle, { color: colors.text }]}>
                 {t.modalChargeOrder}
@@ -493,6 +602,12 @@ export const OrdersFeature = ({
               </TouchableOpacity>
             </View>
 
+            <ScrollView
+              style={{ flexShrink: 1 }}
+              contentContainerStyle={{ paddingBottom: 8 }}
+              showsVerticalScrollIndicator={false}
+              nestedScrollEnabled
+            >
             {selectedOrder && (
               <View
                 style={[
@@ -519,30 +634,29 @@ export const OrdersFeature = ({
                           : t.catalogTakeaway}
                       </Text>
                     </View>
-                    {selectedOrder.type !== "mesa" &&
-                      selectedOrder.customerName && (
-                        <View style={styles.ticketRow}>
+                    {Boolean(selectedOrder.customerName?.trim()) && (
+                      <View style={styles.ticketRow}>
                           <Text
                             style={[
                               styles.ticketLabel,
                               { color: colors.muted },
                             ]}
                           >
-                            Cliente:
+                            {t.customer}:
                           </Text>
                           <Text
                             style={[styles.ticketValue, { color: colors.text }]}
                           >
-                            {selectedOrder.customerName}
+                            {selectedOrder.customerName?.trim()}
                           </Text>
-                        </View>
-                      )}
+                      </View>
+                    )}
                     {!!selectedOrder.employeeName && (
                       <View style={styles.ticketRow}>
                         <Text
                           style={[styles.ticketLabel, { color: colors.muted }]}
                         >
-                          Atendido por:
+                          {t.attendedBy}:
                         </Text>
                         <Text
                           style={[styles.ticketValue, { color: colors.text }]}
@@ -588,13 +702,14 @@ export const OrdersFeature = ({
                     </ScrollView>
 
                     <View
-                      style={{ flexDirection: "row", gap: 10, marginTop: 10 }}
+                      style={{ marginTop: 10 }}
                     >
                       <TouchableOpacity
                         style={[
                           styles.addMissingBtn,
                           {
-                            flex: 1,
+                            width: "100%",
+                            marginTop: 0,
                             borderColor: "#3B82F6",
                             backgroundColor: isDark ? "#1e3a8a" : "#EFF6FF",
                           },
@@ -607,44 +722,16 @@ export const OrdersFeature = ({
                           color="#3B82F6"
                           style={{ marginRight: 5 }}
                         />
-                        <Text style={styles.addMissingBtnText}>
+                        <Text
+                          style={[
+                            styles.addMissingBtnText,
+                            { color: colors.text, flexShrink: 1, textAlign: "center" },
+                          ]}
+                        >
                           {t.btnAddExtra}
                         </Text>
                       </TouchableOpacity>
 
-                      <TouchableOpacity
-                        style={[
-                          styles.addMissingBtn,
-                          {
-                            flex: 1,
-                            borderColor: printReceipt
-                              ? "#10B981"
-                              : colors.border,
-                            backgroundColor: isDark ? "transparent" : "#FFFFFF",
-                          },
-                        ]}
-                        onPress={() => {
-                          LayoutAnimation.configureNext(
-                            LayoutAnimation.Presets.easeInEaseOut,
-                          );
-                          setPrintReceipt(!printReceipt);
-                        }}
-                      >
-                        <Ionicons
-                          name={printReceipt ? "print" : "print-outline"}
-                          size={16}
-                          color={printReceipt ? "#10B981" : colors.muted}
-                          style={{ marginRight: 5 }}
-                        />
-                        <Text
-                          style={[
-                            styles.addMissingBtnText,
-                            { color: printReceipt ? "#10B981" : colors.muted },
-                          ]}
-                        >
-                          {printReceipt ? t.btnReceiptYes : t.btnReceiptAsk}
-                        </Text>
-                      </TouchableOpacity>
                     </View>
 
                     <View
@@ -654,13 +741,25 @@ export const OrdersFeature = ({
                       ]}
                     />
 
+                {selectedOrder.tax != null && (
+                      <BreakdownRows
+                        subTotal={selectedOrder.subTotal ?? 0}
+                        tax={selectedOrder.tax}
+                        taxRate={selectedOrder.taxRate ?? 0}
+                        taxIncludedInPrice={selectedOrder.taxIncludedInPrice}
+                        deliveryFee={selectedOrder.deliveryFee ?? 0}
+                        lang={lang}
+                        textColor={colors.text}
+                        mutedColor={colors.muted}
+                      />
+                    )}
                     <View style={styles.totalRow}>
                       <Text style={[styles.totalLabel, { color: colors.text }]}>
                         {t.totalToCharge}
                       </Text>
                       <Text style={styles.totalValue}>
                         {loadingBalance
-                          ? "Calculando..."
+                          ? t.calculating
                           : `$${(remainingBalance ?? selectedOrder.total).toLocaleString("es-CO")}`}
                       </Text>
                     </View>
@@ -812,7 +911,10 @@ export const OrdersFeature = ({
                                 borderRadius: 8,
                               }}
                             >
-                              <QRCode value={wompiQrUrl} size={220} />
+                              <QRCode
+                                value={wompiQrUrl}
+                                size={Math.min(220, screenWidth - 100)}
+                              />
                             </View>
                             <Text
                               style={{
@@ -821,7 +923,7 @@ export const OrdersFeature = ({
                                 marginTop: 10,
                               }}
                             >
-                              Monto: ${wompiQrAmount.toLocaleString("es-CO")}
+                              {t.amountLabel}: ${wompiQrAmount.toLocaleString("es-CO")}
                             </Text>
                             <Text
                               style={{
@@ -831,22 +933,21 @@ export const OrdersFeature = ({
                                 textAlign: "center",
                               }}
                             >
-                              Escanear con la cámara del celular, no con la app
-                              del banco.
+                              {t.scanQrInstruction}
                             </Text>
                             <TouchableOpacity
                               style={{ marginTop: 6, padding: 6 }}
                               onPress={() => Linking.openURL(wompiQrUrl)}
                             >
                               <Text style={{ color: "#3B82F6", fontWeight: "600" }}>
-                                Abrir enlace de pago (prueba)
+                                {t.openPaymentLink}
                               </Text>
                             </TouchableOpacity>
                             {polling ? (
                               <View style={{ alignItems: "center", marginTop: 8 }}>
                                 <ActivityIndicator size="small" color="#E61C24" />
                                 <Text style={{ color: colors.muted, marginTop: 6 }}>
-                                  Esperando que el cliente pague...
+                                  {t.waitingForCustomer}
                                 </Text>
                               </View>
                             ) : (
@@ -862,7 +963,7 @@ export const OrdersFeature = ({
                                 }
                               >
                                 <Text style={{ color: "#E61C24", fontWeight: "600" }}>
-                                  Tiempo agotado. Toca para verificar de nuevo
+                                  {t.paymentTimeoutRetry}
                                 </Text>
                               </TouchableOpacity>
                             )}
@@ -871,17 +972,13 @@ export const OrdersFeature = ({
                               onPress={cancelWompiQr}
                             >
                               <Text style={{ color: colors.muted }}>
-                                Cancelar cobro por QR
+                                {t.cancelQrCharge}
                               </Text>
                             </TouchableOpacity>
                           </>
                         ) : (
                           <Text style={{ color: colors.muted, textAlign: "center" }}>
-                            Se generará un QR con el monto. El cliente debe
-                            escanearlo con la CÁMARA de su celular (no con la
-                            app del banco ni de Nequi). Se abrirá la página de
-                            Wompi y ahí paga con Nequi, tarjeta o PSE. Aquí
-                            verás la confirmación.
+                            {t.wompiQrInstructions}
                           </Text>
                         )}
                       </View>
@@ -916,24 +1013,7 @@ export const OrdersFeature = ({
               </View>
             )}
 
-            {selectedOrder?.status === "pagando_transferencia" ? (
-              <View style={styles.validationButtonsRow}>
-                <TouchableOpacity
-                  style={styles.btnReject}
-                  onPress={() => handleValidateTransfer(false)}
-                >
-                  <Text style={styles.modalAcceptText}>{t.btnReject}</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.btnApprove}
-                  onPress={() => handleValidateTransfer(true)}
-                >
-                  <Text style={styles.modalAcceptText}>
-                    {t.btnApproveTransfer}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            ) : (
+            {(
               <TouchableOpacity
                 style={[
                   styles.modalAcceptBtn,
@@ -941,7 +1021,7 @@ export const OrdersFeature = ({
                     isSubmittingPayment ||
                     loadingBalance ||
                     !!wompiQrUrl) && {
-                    backgroundColor: isDark ? "#475569" : "#FDA4AF",
+                    backgroundColor: isDark ? "#475569" : "#94A3B8",
                   },
                 ]}
                 onPress={confirmOrderPayment}
@@ -954,17 +1034,18 @@ export const OrdersFeature = ({
               >
                 <Text style={styles.modalAcceptText}>
                   {isSubmittingPayment
-                    ? "Registrando pago..."
+                    ? t.processingPayment
                     : cashierPaymentMethod === "wompi"
                       ? wompiQrUrl
-                        ? "Esperando pago del cliente..."
-                        : "Generar QR de cobro"
+                        ? t.waitingPayment
+                        : t.generateQrCharge
                       : cashierPaymentMethod
                         ? t.btnConfirmAndClose
                         : t.btnSelectMethod}
                 </Text>
               </TouchableOpacity>
             )}
+            </ScrollView>
           </View>
         </View>
       </Modal>
@@ -1164,7 +1245,7 @@ export const OrdersFeature = ({
                 ]}
               >
                 <View style={styles.confirmIconWrap}>
-                  <Ionicons name="cart" size={28} color="#EA1D2C" />
+                  <Ionicons name="cart" size={28} color="#E61C24" />
                 </View>
 
                 <Text style={[styles.confirmTitle, { color: colors.text }]}>

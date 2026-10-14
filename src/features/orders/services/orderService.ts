@@ -1,17 +1,51 @@
-  import { fetchAuthed } from "../../auth/services/apiClient";
-  import { handleResponse } from "../../auth/services/handleResponse";
-  import { API_BASE_URL } from "@/config/api";
+import { fetchAuthed } from "../../auth/services/apiClient";
+import { handleResponse } from "../../auth/services/handleResponse";
+import { API_BASE_URL } from "@/config/api";
+import { OrderStatus } from "../types/order.types";
 import { ORDERS_ENDPOINTS, PUBLIC_KITCHEN_BOARD_URL } from "./orderEndpoints";
-  import type {
-    CreateOrderPayload,
-    CreateOrderDetailPayload,
-    Order,
-    OrderSummary,
-    OrderStatus,
-    OrderDetailStatus,
-  } from "../types/order.types";
+import type {
+  CreateOrderPayload,
+  CreateOrderDetailPayload,
+  Order,
+  OrderSummary,
+  OrderDetailStatus,
+  OccupiedTableWaiter,
+} from "../types/order.types";
 
-  export const orderService = {
+let occupiedTableWaiterEndpointUnavailable = false;
+
+async function getOccupiedTableWaitersFromBranchOrders(
+  branchId: number,
+): Promise<OccupiedTableWaiter[]> {
+  const response = await fetchAuthed(ORDERS_ENDPOINTS.byBranch(branchId));
+  const orders = await handleResponse<OrderSummary[]>(response);
+  const assignments = new Map<number, OccupiedTableWaiter>();
+
+  [...orders]
+    .sort(
+      (first, second) =>
+        new Date(second.createdAt).getTime() -
+        new Date(first.createdAt).getTime(),
+    )
+    .forEach((order) => {
+      if (
+        order.tableId === null ||
+        order.status === OrderStatus.Cancelled ||
+        assignments.has(order.tableId)
+      ) {
+        return;
+      }
+      assignments.set(order.tableId, {
+        tableId: order.tableId,
+        employeeId: order.employeeId,
+        employeeName: order.employeeName,
+      });
+    });
+
+  return Array.from(assignments.values());
+}
+
+export const orderService = {
     create: async (payload: CreateOrderPayload): Promise<Order> => {
       const res = await fetchAuthed(ORDERS_ENDPOINTS.create(), {
         method: "POST",
@@ -28,6 +62,28 @@ import { ORDERS_ENDPOINTS, PUBLIC_KITCHEN_BOARD_URL } from "./orderEndpoints";
     getAll: async (branchId?: number): Promise<OrderSummary[]> => {
       const res = await fetchAuthed(ORDERS_ENDPOINTS.getAll(branchId));
       return handleResponse<OrderSummary[]>(res);
+    },
+
+    getOccupiedTableWaiters: async (
+      branchId: number,
+    ): Promise<OccupiedTableWaiter[]> => {
+      if (occupiedTableWaiterEndpointUnavailable) {
+        return getOccupiedTableWaitersFromBranchOrders(branchId);
+      }
+
+      try {
+        const res = await fetchAuthed(
+          ORDERS_ENDPOINTS.occupiedTableWaiters(branchId),
+        );
+        return await handleResponse<OccupiedTableWaiter[]>(res);
+      } catch (error: any) {
+        if (error?.statusCode !== 404) throw error;
+
+        // Compatible with a backend process that has not yet loaded the new,
+        // minimal endpoint. The existing branch endpoint is also branch-scoped.
+        occupiedTableWaiterEndpointUnavailable = true;
+        return getOccupiedTableWaitersFromBranchOrders(branchId);
+      }
     },
 
     getByCustomer: async (customerId: number): Promise<OrderSummary[]> => {
@@ -70,6 +126,14 @@ import { ORDERS_ENDPOINTS, PUBLIC_KITCHEN_BOARD_URL } from "./orderEndpoints";
         body: JSON.stringify({ reason: reason ?? "Cancelado por el cliente" }),
       });
       return handleResponse<Order>(res);
+    },
+
+    // El cliente avisa que pagará en efectivo: el personal recibe aviso con sonido
+    confirmCash: async (id: number): Promise<void> => {
+      const res = await fetchAuthed(ORDERS_ENDPOINTS.confirmCash(id), {
+        method: "POST",
+      });
+      await handleResponse(res);
     },
 
     addDetail: async (
@@ -116,6 +180,34 @@ import { ORDERS_ENDPOINTS, PUBLIC_KITCHEN_BOARD_URL } from "./orderEndpoints";
         {
           method: "PATCH",
           body: JSON.stringify({ reason }),
+        },
+      );
+      await handleResponse(res);
+    },
+
+    updateDetail: async (
+      orderDetailId: number,
+      payload: { quantity: number; notes: string | null },
+    ): Promise<void> => {
+      const res = await fetchAuthed(
+        `${API_BASE_URL}/api/order-details/${orderDetailId}`,
+        {
+          method: "PUT",
+          body: JSON.stringify(payload),
+        },
+      );
+      await handleResponse(res);
+    },
+
+    updateDetailToGo: async (
+      orderDetailId: number,
+      isToGo: boolean,
+    ): Promise<void> => {
+      const res = await fetchAuthed(
+        `${API_BASE_URL}/api/order-details/${orderDetailId}/to-go`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({ isToGo }),
         },
       );
       await handleResponse(res);

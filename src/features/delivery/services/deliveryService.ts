@@ -1,7 +1,11 @@
 import { fetchAuthed } from "../../auth/services/apiClient";
 import { handleResponse } from "../../auth/services/handleResponse";
 import { DELIVERIES_ENDPOINTS } from "./deliveryEndpoints";
-import type { Delivery, DeliveryStatus } from "../types/delivery.types";
+import type {
+  CustomerDeliveryTracking,
+  Delivery,
+  DeliveryStatus,
+} from "../types/delivery.types";
 
 export const deliveryService = {
   getByEmployee: async (deliveryPersonId: number): Promise<Delivery[]> => {
@@ -14,6 +18,11 @@ export const deliveryService = {
   getByOrder: async (orderId: number): Promise<Delivery[]> => {
     const res = await fetchAuthed(DELIVERIES_ENDPOINTS.byOrder(orderId));
     return handleResponse<Delivery[]>(res);
+  },
+
+  getCustomerTracking: async (orderId: number): Promise<CustomerDeliveryTracking> => {
+    const res = await fetchAuthed(DELIVERIES_ENDPOINTS.customerTracking(orderId));
+    return handleResponse<CustomerDeliveryTracking>(res);
   },
 
   updateStatus: async (

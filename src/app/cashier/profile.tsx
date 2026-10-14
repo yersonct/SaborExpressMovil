@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, ActivityIndicator, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from '@expo/vector-icons';
 
@@ -11,6 +11,8 @@ import { useMyProfile } from '@/features/employees/hooks/useMyProfile';
 import { InitialsAvatar } from '@/features/shared/components/InitialsAvatar';
 
 export default function CashierProfile() {
+  const { width: screenWidth } = useWindowDimensions();
+  const isNarrowScreen = screenWidth < 380;
   // 🔥 Consumimos el contexto global
   const { language, isDark } = useCashierContext();
   const t = TRANSLATIONS[language as LanguageCode] || TRANSLATIONS['es'];
@@ -24,7 +26,7 @@ export default function CashierProfile() {
     border: isDark ? '#334155' : '#E2E8F0',
     inputBg: isDark ? '#0F172A' : '#F8FAFC',
     inputDisabled: isDark ? '#334155' : '#F1F5F9',
-    accent: '#EA1D2C', // Rojo de la marca SaborExpress
+    accent: '#E61C24', // Rojo de la marca SaborExpress
   };
 
   const { profile, loading, error, updateProfile } = useMyProfile();
@@ -60,11 +62,11 @@ export default function CashierProfile() {
 
   const handleSaveProfile = async () => {
     if (!formData.name.trim()) {
-      setErrors({ name: 'El nombre es obligatorio.' });
+      setErrors({ name: t.nameRequired });
       return;
     }
     if (formData.name.trim().length < 3) {
-      setErrors({ name: 'El nombre debe tener al menos 3 caracteres.' });
+      setErrors({ name: t.nameMinChars });
       return;
     }
     setErrors({ name: '' });
@@ -76,9 +78,9 @@ export default function CashierProfile() {
         phone: formData.phone.trim() || undefined,
       });
       setIsEditing(false);
-      Alert.alert('¡Perfil Actualizado!', 'Tus datos han sido guardados correctamente.');
+      Alert.alert(t.profileUpdatedTitle, t.profileUpdatedMessage);
     } catch (err: any) {
-      Alert.alert('Error', err?.message ?? 'No se pudo guardar tu perfil.');
+      Alert.alert(t.errorTitle, err?.message ?? t.profileSaveError);
     } finally {
       setSaving(false);
     }
@@ -119,12 +121,18 @@ export default function CashierProfile() {
         {/* MÉTRICAS */}
         <View style={styles.metricsSection}>
           <Text style={[styles.sectionTitle, { color: colors.muted }]}>
-            Rendimiento de Hoy
+            {t.cashierPerformanceToday}
           </Text>
-          <View style={styles.metricsRow}>
+          <View
+            style={[
+              styles.metricsRow,
+              isNarrowScreen && { flexDirection: 'column', gap: 12 },
+            ]}
+          >
             <View
               style={[
                 styles.metricCard,
+                isNarrowScreen && { width: '100%', padding: 16 },
                 {
                   backgroundColor: colors.card,
                   shadowColor: isDark ? "#000" : "#E2E8F0",
@@ -136,12 +144,13 @@ export default function CashierProfile() {
                 {profile?.paymentsCollectedToday ?? 0}
               </Text>
               <Text style={[styles.metricLabel, { color: colors.muted }]}>
-                Cobros Realizados
+                {t.cashierPaymentsCollected}
               </Text>
             </View>
             <View
               style={[
                 styles.metricCard,
+                isNarrowScreen && { width: '100%', padding: 16 },
                 {
                   backgroundColor: colors.card,
                   shadowColor: isDark ? "#000" : "#E2E8F0",
@@ -153,7 +162,7 @@ export default function CashierProfile() {
                 ${(profile?.amountCollectedToday ?? 0).toLocaleString("es-CO")}
               </Text>
               <Text style={[styles.metricLabel, { color: colors.muted }]}>
-                Recaudado
+                {t.cashierAmountCollected}
               </Text>
             </View>
           </View>
@@ -181,7 +190,7 @@ export default function CashierProfile() {
             {profile?.name} {profile?.lastName ?? ""}
           </Text>
           <View style={styles.roleBadge}>
-            <Text style={styles.roleText}>CAJA REGISTRADORA</Text>
+            <Text style={styles.roleText}>{t.cashierBadge}</Text>
           </View>
         </View>
 
@@ -189,11 +198,11 @@ export default function CashierProfile() {
         <View style={styles.profileSection}>
           <View style={styles.profileHeaderRow}>
             <Text style={[styles.sectionTitle, { color: colors.muted }]}>
-              Mis Datos
+              {t.myData}
             </Text>
             <TouchableOpacity onPress={() => setIsEditing(!isEditing)}>
               <Text style={styles.editButtonText}>
-                {isEditing ? "Cancelar" : "Editar"}
+                {isEditing ? t.cancel : t.edit}
               </Text>
             </TouchableOpacity>
           </View>
@@ -209,7 +218,7 @@ export default function CashierProfile() {
           >
             <View style={styles.inputGroup}>
               <Text style={[styles.inputLabel, { color: colors.muted }]}>
-                Nombre completo
+                {t.fullName}
               </Text>
               <TextInput
                 style={[
@@ -236,7 +245,7 @@ export default function CashierProfile() {
 
             <View style={styles.inputGroup}>
               <Text style={[styles.inputLabel, { color: colors.muted }]}>
-                Apellido
+                {t.lastName}
               </Text>
               <TextInput
                 style={[
@@ -259,7 +268,7 @@ export default function CashierProfile() {
 
             <View style={styles.inputGroup}>
               <Text style={[styles.inputLabel, { color: colors.muted }]}>
-                Correo Electrónico
+                {t.email}
               </Text>
               <TextInput
                 style={[
@@ -270,14 +279,14 @@ export default function CashierProfile() {
                     color: colors.muted,
                   },
                 ]}
-                value={profile?.email ?? "No disponible"}
+                value={profile?.email ?? t.profileNotAvailable}
                 editable={false}
               />
             </View>
 
             <View style={styles.inputGroup}>
               <Text style={[styles.inputLabel, { color: colors.muted }]}>
-                Teléfono móvil
+                {t.mobilePhone}
               </Text>
               <TextInput
                 style={[
@@ -301,7 +310,7 @@ export default function CashierProfile() {
 
             <View style={styles.inputGroup}>
               <Text style={[styles.inputLabel, { color: colors.muted }]}>
-                Sede
+                {t.branch}
               </Text>
               <TextInput
                 style={[
@@ -312,14 +321,14 @@ export default function CashierProfile() {
                     color: colors.muted,
                   },
                 ]}
-                value={profile?.branchName ?? "Sin sede asignada"}
+                value={profile?.branchName ?? t.noBranch}
                 editable={false}
               />
             </View>
 
             <View style={styles.inputGroup}>
               <Text style={[styles.inputLabel, { color: colors.muted }]}>
-                Rol
+                {t.cashierRole}
               </Text>
               <TextInput
                 style={[
@@ -330,7 +339,7 @@ export default function CashierProfile() {
                     color: colors.muted,
                   },
                 ]}
-                value="Cajero"
+                value={t.cashierRole}
                 editable={false}
               />
             </View>
@@ -343,7 +352,7 @@ export default function CashierProfile() {
               disabled={saving}
             >
               <Text style={styles.saveButtonText}>
-                {saving ? "Guardando..." : "Guardar"}
+                {saving ? t.saving : t.save}
               </Text>
             </TouchableOpacity>
           )}
@@ -362,21 +371,21 @@ const styles = StyleSheet.create({
   headerCard: { alignItems: 'center', padding: 25, borderRadius: 20, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 10, elevation: 5, marginBottom: 25 },
   avatarContainer: { marginBottom: 15 },
   name: { fontSize: 24, fontWeight: '900', marginBottom: 5 },
-  roleBadge: { backgroundColor: 'rgba(234, 29, 44, 0.1)', paddingHorizontal: 15, paddingVertical: 5, borderRadius: 20, borderWidth: 1, borderColor: '#EA1D2C' },
-  roleText: { color: '#EA1D2C', fontSize: 12, fontWeight: 'bold', letterSpacing: 1 },
+  roleBadge: { backgroundColor: 'rgba(230, 28, 36, 0.1)', paddingHorizontal: 15, paddingVertical: 5, borderRadius: 20, borderWidth: 1, borderColor: '#E61C24' },
+  roleText: { color: '#E61C24', fontSize: 12, fontWeight: 'bold', letterSpacing: 1 },
   
   sectionTitle: { fontSize: 16, fontWeight: 'bold', marginBottom: 12, textTransform: 'uppercase', letterSpacing: 0.5 },
   
   profileSection: { marginBottom: 25 },
   profileHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  editButtonText: { color: '#EA1D2C', fontSize: 16, fontWeight: 'bold' },
+  editButtonText: { color: '#E61C24', fontSize: 16, fontWeight: 'bold' },
   profileCard: { padding: 20, borderRadius: 20, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 5, elevation: 2 },
   
   inputGroup: { marginBottom: 15 },
   inputLabel: { fontSize: 13, fontWeight: '600', marginBottom: 5 },
   input: { borderWidth: 1, borderRadius: 10, paddingHorizontal: 15, paddingVertical: 12, fontSize: 16 },
-  inputError: { borderColor: '#EF4444' },
-  errorText: { color: '#EF4444', fontSize: 12, marginTop: 5, fontWeight: '600' },
+  inputError: { borderColor: '#E61C24' },
+  errorText: { color: '#E61C24', fontSize: 12, marginTop: 5, fontWeight: '600' },
 
   saveButton: {
     marginTop: 16,

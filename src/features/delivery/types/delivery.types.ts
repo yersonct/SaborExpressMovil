@@ -25,6 +25,11 @@ export interface Delivery {
   paymentStatus: string | null;
   kitchenReady: boolean;
   orderNotes: string | null;
+  subTotal: number;
+  tax: number;
+  taxRate: number;
+  taxIncludedInPrice: boolean;
+  deliveryFee: number;
   total: number;
   amountPaid: number;
   amountPending: number;
@@ -32,6 +37,15 @@ export interface Delivery {
   customerRating: number | null;
   customerRatingComment: string | null;
   items: DeliveryItem[];
+}
+
+export interface CustomerDeliveryTracking {
+  orderId: number;
+  deliveryId: number;
+  status: DeliveryStatus;
+  courierLatitude: number | null;
+  courierLongitude: number | null;
+  locationUpdatedAt: string | null;
 }
 
 export interface DeliveryItem {

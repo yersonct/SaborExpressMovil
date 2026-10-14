@@ -10,7 +10,6 @@
     ScrollView,
     Alert,
     LayoutAnimation,
-    Image,
     Linking,
     ActivityIndicator,
   } from "react-native";
@@ -24,15 +23,24 @@
   import { buildWompiCheckoutUrl } from "@/features/payments/utils/wompiUrl";
 
   import { Ionicons } from "@expo/vector-icons";
+import { Image as ExpoImage } from "expo-image";
   import { useRouter } from "expo-router";
   import { orderService } from "@/features/orders/services/orderService";
   import { paymentService } from "@/features/payments/services/paymentService";
   import { OrderType } from "@/features/orders/types/order.types";
   // 🔥 Importaciones modulares
   import * as Location from "expo-location";
-  import { styles } from "./style/ClientStyles";
+  import { styles as baseStyles } from "./style/ClientStyles";
+  import { getClientLocale, useClientPreferences, useClientThemedStyles } from "@/features/userPreferences/context/ClientPreferencesContext";
   import { useCatalog } from "@/features/catalog/hooks/useCatalog";
   import { useNearestBranch } from "@/features/branches/hooks/useNearestBranch";
+import type { PublicBranch } from "@/features/branches/types/branch.types";
+  import { useBranchSettings } from "@/features/branches/hooks/useBranchSettings";
+  import {
+    calcBreakdown,
+    haversineKm,
+    getRadiusMessages,
+  } from "@/features/orders/utils/orderBreakdown";
   import { useAuth } from "@/features/auth/context/AuthContext";
   import { getCustomerIdFromToken } from "@/features/auth/services/decodeToken";
   import { useAddresses } from "@/features/addresses/hooks/useAddresses";
@@ -45,18 +53,30 @@ import { useActiveClientOrder } from "@/features/orders/hooks/useActiveClientOrd
 import { CancelOrderButton } from "@/features/orders/components/CancelOrderButton";
 import { NotificationBell } from "@/features/notifications/components/NotificationBell";
 import { useNotificationListener } from "@/features/notifications/context/UserNotificationsContext";
+import { DeliveryStatus } from "@/features/delivery/types/delivery.types";
+import { OrderTrackingModal } from "@/features/orders/components/OrderTrackingModal";
 
 
   export default function ClientDashboard() {
+    const styles = useClientThemedStyles(baseStyles);
+    const { colors, t, isDark, language } = useClientPreferences();
     const router = useRouter();
     const { activeOrder, refetch: refetchActiveOrder } = useActiveClientOrder();
     const { customer } = useCompleteProfile();
-    const firstName = customer?.name?.trim().split(" ")[0];
-
-    // Saludo según la hora del día
-    const hour = new Date().getHours();
-    const greetingText =
-      hour < 12 ? "Buenos días" : hour < 19 ? "Buenas tardes" : "Buenas noches";
+    const customerDisplayName = [customer?.name, customer?.lastName]
+      .map((part) =>
+        part
+          ?.trim()
+          .split(/\s+/)
+          .filter(Boolean)
+          .map(
+            (word) =>
+              `${word.charAt(0).toLocaleUpperCase(language)}${word.slice(1).toLocaleLowerCase(language)}`,
+          )
+          .join(" "),
+      )
+      .filter(Boolean)
+      .join(" ");
     const { user } = useAuth();
     const customerId = user?.token ? getCustomerIdFromToken(user.token) : null;
     const {
@@ -73,6 +93,9 @@ import { useNotificationListener } from "@/features/notifications/context/UserNo
 
     const [showBranchesMap, setShowBranchesMap] = useState(false);
     const [showLocationPicker, setShowLocationPicker] = useState(false);
+    const [showDeliveryOptions, setShowDeliveryOptions] = useState(false);
+    const [trackingOrderId, setTrackingOrderId] = useState<number | null>(null);
+    const [manualBranch, setManualBranch] = useState<PublicBranch | null>(null);
     useEffect(() => {
       if (loadingAddresses) return;
       if (
@@ -123,19 +146,23 @@ import { useNotificationListener } from "@/features/notifications/context/UserNo
       loading: loadingBranch,
       error: branchError,
     } = useNearestBranch(coordsForBranch?.latitude, coordsForBranch?.longitude);
+    const deliveryBranch = manualBranch ?? nearestBranch;
 
+    const { settings: branchSettings, loading: loadingSettings } =
+      useBranchSettings(deliveryBranch?.id);
+    const radiusMsgs = getRadiusMessages(language);
     const {
       categories,
       products,
       loading: loadingCatalog,
-    } = useCatalog(nearestBranch?.id);
+    } = useCatalog(deliveryBranch?.id);
 
     // Incluye el instante entre "direcciones cargadas" y "dirección seleccionada",
     // donde las coordenadas aún son null y se vería un falso "sin sede".
     const resolvingLocation =
       loadingAddresses ||
       locatingGps ||
-      loadingBranch ||
+      (!manualBranch && loadingBranch) ||
       (addresses.length > 0 && !coordsForBranch);
     // Convierte unas coordenadas en dirección guardada y la deja seleccionada
     // como dirección de entrega del pedido.
@@ -163,16 +190,21 @@ import { useNotificationListener } from "@/features/notifications/context/UserNo
           longitude: coords.longitude,
           isDefault,
         });
+        setManualBranch(null);
         setSelectedAddressId(created.id);
         setLiveLocation(null);
       } catch (err: any) {
         Alert.alert(
-          "Error",
-          err?.message ?? "No se pudo guardar la dirección.",
+          t("error"),
+          err?.message ?? t("addressSaveError"),
         );
       }
     };
     const handleUseCurrentLocationForBranch = async () => {
+      if (cart.length > 0) {
+        Alert.alert(t("cartMustBeEmptyTitle"), t("cartMustBeEmptyForLocation"));
+        return;
+      }
       setLocatingGps(true);
       try {
         const { status } = await Location.requestForegroundPermissionsAsync();
@@ -188,6 +220,7 @@ import { useNotificationListener } from "@/features/notifications/context/UserNo
           latitude: position.coords.latitude,
           longitude: position.coords.longitude,
         };
+        setManualBranch(null);
         setLiveLocation(here);
 
         // Cliente sin direcciones: se guarda como su primera dirección.
@@ -196,8 +229,8 @@ import { useNotificationListener } from "@/features/notifications/context/UserNo
         }
       } catch (err) {
         Alert.alert(
-          "Error",
-          "No se pudo obtener tu ubicación actual. Intenta de nuevo.",
+          t("error"),
+          t("locationError"),
         );
       } finally {
         setLocatingGps(false);
@@ -207,6 +240,15 @@ import { useNotificationListener } from "@/features/notifications/context/UserNo
     // Si el cliente elige explícitamente otra dirección guardada, volvemos
     // a calcular la sede a partir de esa dirección (se cancela el modo GPS).
     const handleSelectAddress = async (addressId: number) => {
+      if (addressId === selectedAddressId) {
+        setShowAddressPicker(false);
+        return;
+      }
+      if (addressId !== selectedAddressId && cart.length > 0) {
+        Alert.alert(t("cartMustBeEmptyTitle"), t("cartMustBeEmptyForLocation"));
+        return;
+      }
+      setManualBranch(null);
       setLiveLocation(null);
       setSelectedAddressId(addressId);
       setShowAddressPicker(false);
@@ -235,8 +277,34 @@ import { useNotificationListener } from "@/features/notifications/context/UserNo
       handleUseCurrentLocationForBranch();
     }, [loadingAddresses, addresses]);
     // Estados Generales
-    const [activeCategory, setActiveCategory] = useState("Todos");
+    const [activeCategory, setActiveCategory] = useState("__all__");
     const { cart, addItem, removeItem, clearCart } = useCart();
+
+    const handleOpenBranchPicker = () => {
+      if (cart.length > 0) {
+        Alert.alert(t("cartMustBeEmptyTitle"), t("cartMustBeEmptyForLocation"));
+        return;
+      }
+      setShowBranchesMap(true);
+    };
+    const handleOpenLocationPicker = () => {
+      if (cart.length > 0) {
+        Alert.alert(t("cartMustBeEmptyTitle"), t("cartMustBeEmptyForLocation"));
+        return;
+      }
+      setShowLocationPicker(true);
+    };
+    const handleOpenDeliveryOptions = () => {
+      if (cart.length > 0) {
+        Alert.alert(t("cartMustBeEmptyTitle"), t("cartMustBeEmptyForLocation"));
+        return;
+      }
+      setShowDeliveryOptions(true);
+    };
+    const switchDeliveryOptionsTo = (openModal: () => void) => {
+      setShowDeliveryOptions(false);
+      setTimeout(openModal, 200);
+    };
 
     // Modales
     const [cartModalVisible, setCartModalVisible] = useState(false);
@@ -257,17 +325,17 @@ import { useNotificationListener } from "@/features/notifications/context/UserNo
     const [toastMessage, setToastMessage] = useState("");
 
     const categoryNames = [
-      "Todos",
+      "__all__",
       ...categories
         .map((c) => c.name)
         .filter((name) => products.some((p) => p.categoryName === name)),
     ];
 
     useEffect(() => {
-      if (!categoryNames.includes(activeCategory)) setActiveCategory("Todos");
+      if (!categoryNames.includes(activeCategory)) setActiveCategory("__all__");
     }, [products, categories]);
     const filteredMenu = (
-      activeCategory === "Todos"
+      activeCategory === "__all__"
         ? products
         : products.filter((p) => p.categoryName === activeCategory)
     ).map((p) => ({
@@ -278,8 +346,41 @@ import { useNotificationListener } from "@/features/notifications/context/UserNo
       desc: p.description,
       image: p.photo ? `${SERVER_BASE_URL}${p.photo}` : null,
     }));
-    const totalCart = cart.reduce((sum, item) => sum + item.price, 0);
+     const subtotalCart = cart.reduce((sum, item) => sum + item.price, 0);
+    const breakdown = calcBreakdown(
+      subtotalCart,
+      branchSettings?.taxRate ?? 0,
+      branchSettings?.deliveryFee ?? 0,
+    );
+    // El desglose calcula el Impoconsumo sobre productos; el domicilio se suma aparte.
+    const totalCart = breakdown.total;
 
+    // Distancia sede ↔ ubicación elegida, para avisar ANTES de pagar.
+    // El backend vuelve a validar al crear el pedido.
+    const distanceKm =
+      coordsForBranch &&
+      deliveryBranch?.latitude != null &&
+      deliveryBranch?.longitude != null
+        ? haversineKm(
+            coordsForBranch.latitude,
+            coordsForBranch.longitude,
+            Number(deliveryBranch.latitude),
+            Number(deliveryBranch.longitude),
+          )
+        : null;
+    const outOfRadius =
+      distanceKm != null &&
+      !!branchSettings &&
+      !branchSettings.isDefault &&
+      distanceKm > branchSettings.deliveryRadiusKm;
+    const radiusText =
+      outOfRadius && branchSettings && deliveryBranch
+        ? radiusMsgs.radiusBody(
+            distanceKm!.toFixed(1),
+            String(branchSettings.deliveryRadiusKm),
+            deliveryBranch.name,
+          )
+        : "";
     const showToast = (message: string) => {
       setToastMessage(message);
       Animated.sequence([
@@ -305,7 +406,7 @@ import { useNotificationListener } from "@/features/notifications/context/UserNo
     const confirmAddToCart = () => {
       if (itemToConfirm) {
         addItem(itemToConfirm);
-        showToast(`🛒 ${itemToConfirm.name} agregado`);
+        showToast(`🛒 ${itemToConfirm.name} ${t("added")}`);
         setConfirmItemModalVisible(false);
         setItemToConfirm(null);
       }
@@ -324,17 +425,37 @@ import { useNotificationListener } from "@/features/notifications/context/UserNo
       setReceiptUploaded(false);
     };
 
+    const validateDeliveryCoverage = () => {
+      if (!branchSettings || branchSettings.isDefault) {
+        Alert.alert(radiusMsgs.notConfiguredTitle, radiusMsgs.notConfiguredBody);
+        return false;
+      }
+      // La advertencia roja visible explica el motivo y también aparece dentro
+      // del carrito; no se abre un segundo cuadro de alerta.
+      if (outOfRadius) return false;
+      if (liveLocation) {
+        Alert.alert(
+          t("saveLocationBeforeOrderTitle"),
+          t("saveLocationBeforeOrderMessage"),
+        );
+        return false;
+      }
+      return true;
+    };
+
     const proceedToCheckout = () => {
-      if (cart.length === 0) return;
+      if (cart.length === 0 || loadingSettings) return;
+      if (!validateDeliveryCoverage()) return;
       LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
       setIsCheckingOut(true);
     };
 
     const handlePaymentNextStep = () => {
+      if (!validateDeliveryCoverage()) return;
       if (!paymentMethod)
         return Alert.alert(
-          "Selecciona un método de pago",
-          "Debes elegir cómo deseas pagar antes de continuar.",
+          t("selectPaymentTitle"),
+          t("selectPaymentMessage"),
         );
 
       LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -344,7 +465,7 @@ import { useNotificationListener } from "@/features/notifications/context/UserNo
 
     const handleFakeUploadReceipt = () => {
       setReceiptUploaded(true);
-      showToast("✅ Evidencia cargada correctamente");
+      showToast(`✅ ${t("receiptUploaded")}`);
     };
 
     const [submitting, setSubmitting] = useState(false);
@@ -404,8 +525,8 @@ import { useNotificationListener } from "@/features/notifications/context/UserNo
       );
       if (!paid) {
         Alert.alert(
-          "Pedido cancelado",
-          "No completaste el pago, así que el pedido no se envió.",
+          t("orderCancelledTitle"),
+          t("orderCancelledMessage"),
         );
       }
     };
@@ -419,24 +540,14 @@ import { useNotificationListener } from "@/features/notifications/context/UserNo
         stopPolling();
         finishOrderSuccess(true);
       }
-      if (
-        [
-          "PaymentConfirmed",
-          "DeliveryAssigned",
-          "OrderStatusChanged",
-          "OrderReady",
-          "Resync",
-        ].includes(n.type)
-      ) {
-        refetchActiveOrder();
-      }
     });
     const submitFinalOrder = async () => {
       if (submitting || polling) return;
+      if (!validateDeliveryCoverage()) return;
       if (!selectedAddressId) {
         Alert.alert(
-          "Selecciona una dirección",
-          "Elige o agrega una dirección de entrega antes de continuar.",
+          t("selectAddressTitle"),
+          t("selectAddressMessage"),
         );
         return;
       }
@@ -449,6 +560,7 @@ import { useNotificationListener } from "@/features/notifications/context/UserNo
         const order = await orderService.create({
           customerId,
           addressId: selectedAddressId,
+          branchId: deliveryBranch?.id,
           tableId: null,
           orderType: OrderType.Delivery,
           notes: null,
@@ -488,8 +600,8 @@ import { useNotificationListener } from "@/features/notifications/context/UserNo
                   "Cancelado automáticamente: el pago fue rechazado",
                 );
                 Alert.alert(
-                  "Pago no aprobado",
-                  "Wompi no aprobó el pago y el pedido fue cancelado. Puedes intentarlo de nuevo.",
+                  t("paymentRejectedTitle"),
+                  t("paymentRejectedMessage"),
                 );
               }
             },
@@ -497,8 +609,8 @@ import { useNotificationListener } from "@/features/notifications/context/UserNo
               // Tiempo agotado: NO se cancela (Nequi puede aprobar tarde).
               // El cajero no lo verá hasta que el pago quede Completed.
               Alert.alert(
-                "No recibimos confirmación",
-                "Si ya pagaste, tu pedido llegará en unos minutos. Si no, cancélalo desde 'Pedido en curso'.",
+                t("paymentUnconfirmedTitle"),
+                t("paymentUnconfirmedMessage"),
               );
             },
           );
@@ -512,6 +624,12 @@ import { useNotificationListener } from "@/features/notifications/context/UserNo
 
         // Efectivo: queda Pending hasta que el cajero lo confirme
         handedOff = true;
+        try {
+          // Avisa al cajero/admin con sonido (no debe bloquear al cliente si falla)
+          await orderService.confirmCash(order.id);
+        } catch {
+          // El pedido ya existe; el cajero lo verá igual en su lista.
+        }
         finishOrderSuccess();
       } catch (err: any) {
         // Si algo falló antes de entregar el flujo (crear detalles o iniciar
@@ -527,8 +645,8 @@ import { useNotificationListener } from "@/features/notifications/context/UserNo
           }
         }
         Alert.alert(
-          "Error",
-          err?.message ?? "No se pudo crear el pedido. Intenta de nuevo.",
+          t("error"),
+          err?.message ?? t("createOrderError"),
         );
       } finally {
         setSubmitting(false);
@@ -550,11 +668,10 @@ import { useNotificationListener } from "@/features/notifications/context/UserNo
         {/* HEADER */}
         <View style={styles.header}>
           <View style={styles.headerLeft}>
-            <View>
-              <Text style={styles.greeting}>
-                {`${greetingText}${firstName ? `, ${firstName}` : ""} 👋`}
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={styles.greeting} numberOfLines={1}>
+                {customerDisplayName}
               </Text>
-              <Text style={styles.subtitle}>¿Qué vas a pedir hoy?</Text>
             </View>
           </View>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
@@ -563,7 +680,7 @@ import { useNotificationListener } from "@/features/notifications/context/UserNo
               style={styles.cartButtonHeader}
               onPress={() => setCartModalVisible(true)}
             >
-              <Ionicons name="cart" size={24} color="#1E293B" />
+              <Ionicons name="cart" size={24} color={colors.text} />
               {cart.length > 0 && (
                 <View style={styles.cartBadge}>
                   <Text style={styles.cartBadgeText}>{cart.length}</Text>
@@ -581,7 +698,7 @@ import { useNotificationListener } from "@/features/notifications/context/UserNo
               alignItems: "center",
               paddingHorizontal: 16,
               paddingVertical: 10,
-              backgroundColor: "#FEF2F2",
+              backgroundColor: isDark ? "#3B2024" : "#FEF2F2",
               gap: 8,
             }}
             onPress={() => {
@@ -589,91 +706,62 @@ import { useNotificationListener } from "@/features/notifications/context/UserNo
               setShowAddressPicker(true);
             }}
           >
-            <Ionicons name="location" size={18} color="#E61C24" />
+            <Ionicons name="location" size={18} color={colors.accent} />
             <Text
               style={{
                 fontSize: 13,
                 fontWeight: "600",
-                color: "#1E293B",
+                color: colors.text,
                 flex: 1,
               }}
               numberOfLines={1}
             >
-              <Text>Entregar en: </Text>
-              <Text style={{ color: "#E61C24" }}>
+              <Text>{t("deliverTo")} </Text>
+              <Text style={{ color: colors.accent }}>
                 {addresses.find((a) => a.id === selectedAddressId)
-                  ?.addressLine ?? "Agrega una dirección"}
+                  ?.addressLine ?? t("addAddress")}
               </Text>
             </Text>
-            <Ionicons name="chevron-down" size={16} color="#64748B" />
+            <Ionicons name="chevron-down" size={16} color={colors.muted} />
           </TouchableOpacity>
         )}
 
         <View
           style={{
-            flexDirection: "row",
-            alignItems: "center",
-            justifyContent: "space-between",
             paddingHorizontal: 16,
-            paddingVertical: 8,
-            backgroundColor: "#F8FAFC",
+            paddingVertical: 10,
+            backgroundColor: colors.background,
+            gap: 8,
           }}
         >
-          <TouchableOpacity
-            onPress={() => setShowBranchesMap(true)}
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              gap: 6,
-              flex: 1,
-            }}
-          >
-            <Ionicons name="map-outline" size={16} color="#E61C24" />
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+            <Ionicons name="map-outline" size={16} color={colors.accent} />
             <Text
-              style={{ fontSize: 12, color: "#64748B", flex: 1 }}
+              style={{ fontSize: 12, color: colors.muted, flex: 1 }}
               numberOfLines={1}
             >
-              {loadingBranch
-                ? "Buscando la sede más cercana..."
-                : nearestBranch
-                  ? `Pedido desde: ${nearestBranch.name}${liveLocation ? " (tu ubicación actual)" : ""}`
-                  : "No se pudo calcular la sede"}
-              {"  "}
-              <Text style={{ color: "#E61C24", fontWeight: "700" }}>
-                Ver mapa
-              </Text>
+              {(loadingBranch && !manualBranch)
+                ? t("nearestBranch")
+                : deliveryBranch
+                  ? `${t("orderFrom")} ${deliveryBranch.name}${liveLocation ? ` (${t("currentLocation")})` : ""}`
+                  : t("noBranch")}
             </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            onPress={() => setShowLocationPicker(true)}
-            disabled={locatingGps}
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              gap: 4,
-              paddingLeft: 8,
-            }}
-          >
-            {locatingGps ? (
-              <ActivityIndicator size="small" color="#E61C24" />
-            ) : (
-              <Ionicons
-                name={liveLocation ? "checkmark-circle" : "locate"}
-                size={16}
-                color={liveLocation ? "#10B981" : "#E61C24"}
-              />
-            )}
-            <Text
+            <TouchableOpacity
+              onPress={handleOpenDeliveryOptions}
               style={{
-                fontSize: 11,
-                fontWeight: "700",
-                color: liveLocation ? "#10B981" : "#E61C24",
+                paddingHorizontal: 10,
+                paddingVertical: 7,
+                borderRadius: 8,
+                borderWidth: 1,
+                borderColor: colors.accent,
               }}
+              accessibilityRole="button"
             >
-              {liveLocation ? "Ubicación elegida" : "Cambiar ubicación"}
-            </Text>
-          </TouchableOpacity>
+              <Text style={{ color: colors.accent, fontSize: 11, fontWeight: "700" }}>
+                {t("changeDelivery")}
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         <Modal
@@ -692,7 +780,7 @@ import { useNotificationListener } from "@/features/notifications/context/UserNo
           >
             <View
               style={{
-                backgroundColor: "#FFF",
+                backgroundColor: colors.surface,
                 borderRadius: 16,
                 padding: 20,
                 maxHeight: "60%",
@@ -703,15 +791,15 @@ import { useNotificationListener } from "@/features/notifications/context/UserNo
                   fontSize: 18,
                   fontWeight: "bold",
                   marginBottom: 12,
-                  color: "#1E293B",
+                  color: colors.text,
                 }}
               >
-                ¿Dónde te entregamos?
+                {t("whereDeliver")}
               </Text>
 
               {addresses.length === 0 ? (
-                <Text style={{ color: "#64748B", marginBottom: 12 }}>
-                  Todavía no tienes direcciones guardadas.
+                <Text style={{ color: colors.muted, marginBottom: 12 }}>
+                  {t("noAddresses")}
                 </Text>
               ) : (
                 <>
@@ -723,19 +811,23 @@ import { useNotificationListener } from "@/features/notifications/context/UserNo
                           padding: 14,
                           borderRadius: 10,
                           backgroundColor:
-                            selectedAddressId === a.id ? "#FEF2F2" : "#F8FAFC",
+                            selectedAddressId === a.id
+                              ? isDark
+                                ? "#312020"
+                                : "#FEF2F2"
+                              : colors.background,
                           marginBottom: 8,
                         }}
                         onPress={() => handleSelectAddress(a.id)}
                       >
-                        <Text style={{ fontWeight: "700", color: "#1E293B" }}>
+                        <Text style={{ fontWeight: "700", color: colors.text }}>
                           {a.addressLine}
                         </Text>
                         {a.reference ? (
                           <Text
                             style={{
                               fontSize: 12,
-                              color: "#64748B",
+                              color: colors.muted,
                               marginTop: 2,
                             }}
                           >
@@ -751,10 +843,15 @@ import { useNotificationListener } from "@/features/notifications/context/UserNo
                       style={{ alignItems: "center", padding: 10 }}
                       onPress={() => setShowAllAddresses((v) => !v)}
                     >
-                      <Text style={{ color: "#3B82F6", fontWeight: "700" }}>
+                      <Text
+                        style={{
+                          color: isDark ? "#93C5FD" : "#3B82F6",
+                          fontWeight: "700",
+                        }}
+                      >
                         {showAllAddresses
-                          ? "Ver menos"
-                          : `Ver todas (${hiddenCount} más)`}
+                          ? t("seeLess")
+                          : `${t("all")} (${hiddenCount})`}
                       </Text>
                     </TouchableOpacity>
                   )}
@@ -766,7 +863,7 @@ import { useNotificationListener } from "@/features/notifications/context/UserNo
                   marginTop: 8,
                   alignItems: "center",
                   padding: 12,
-                  backgroundColor: "#FEF2F2",
+                  backgroundColor: isDark ? "#312020" : "#FEF2F2",
                   borderRadius: 10,
                 }}
                 onPress={() => {
@@ -774,8 +871,8 @@ import { useNotificationListener } from "@/features/notifications/context/UserNo
                   router.push("/client/addresses");
                 }}
               >
-                <Text style={{ color: "#E61C24", fontWeight: "700" }}>
-                  + Agregar nueva dirección
+                <Text style={{ color: colors.accent, fontWeight: "700" }}>
+                  {t("addNewAddress")}
                 </Text>
               </TouchableOpacity>
 
@@ -783,17 +880,138 @@ import { useNotificationListener } from "@/features/notifications/context/UserNo
                 style={{ marginTop: 8, alignItems: "center", padding: 10 }}
                 onPress={() => setShowAddressPicker(false)}
               >
-                <Text style={{ color: "#64748B", fontWeight: "600" }}>
-                  Cerrar
+                <Text style={{ color: colors.muted, fontWeight: "600" }}>
+                  {t("close")}
                 </Text>
               </TouchableOpacity>
             </View>
           </View>
         </Modal>
+        <Modal
+          transparent
+          visible={showDeliveryOptions}
+          animationType="fade"
+          onRequestClose={() => setShowDeliveryOptions(false)}
+        >
+          <View
+            style={{
+              flex: 1,
+              justifyContent: "center",
+              padding: 24,
+              backgroundColor: "rgba(0,0,0,0.5)",
+            }}
+          >
+            <View
+              style={{
+                backgroundColor: colors.surface,
+                borderRadius: 20,
+                padding: 20,
+                gap: 12,
+              }}
+            >
+              <Text style={{ color: colors.text, fontSize: 18, fontWeight: "800" }}>
+                {t("deliveryOptionsTitle")}
+              </Text>
+              <TouchableOpacity
+                onPress={() => {
+                  switchDeliveryOptionsTo(handleOpenLocationPicker);
+                }}
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 12,
+                  padding: 14,
+                  borderRadius: 12,
+                  backgroundColor: colors.background,
+                  borderWidth: 1,
+                  borderColor: colors.border,
+                }}
+              >
+                <Ionicons name="location-outline" size={22} color={colors.accent} />
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: colors.text, fontWeight: "700" }}>
+                    {t("changeLocation")}
+                  </Text>
+                  <Text style={{ color: colors.muted, fontSize: 12, marginTop: 3 }}>
+                    {t("deliveryAddressOptionDesc")}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => {
+                  switchDeliveryOptionsTo(handleOpenBranchPicker);
+                }}
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 12,
+                  padding: 14,
+                  borderRadius: 12,
+                  backgroundColor: colors.background,
+                  borderWidth: 1,
+                  borderColor: colors.border,
+                }}
+              >
+                <Ionicons name="storefront-outline" size={22} color={colors.accent} />
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: colors.text, fontWeight: "700" }}>
+                    {t("changeBranch")}
+                  </Text>
+                  <Text style={{ color: colors.muted, fontSize: 12, marginTop: 3 }}>
+                    {t("deliveryBranchOptionDesc")}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => setShowDeliveryOptions(false)}
+                style={{ alignSelf: "flex-end", paddingHorizontal: 12, paddingVertical: 8 }}
+              >
+                <Text style={{ color: colors.accent, fontWeight: "700" }}>
+                  {t("cancel")}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
+        {outOfRadius && !cartModalVisible && (
+          <View
+            style={{
+              marginHorizontal: 16,
+              marginBottom: 8,
+              padding: 12,
+              borderRadius: 10,
+              backgroundColor: "#FEE2E2",
+              borderWidth: 1,
+              borderColor: "#FCA5A5",
+            }}
+          >
+            <Text
+              style={{ color: "#991B1B", fontWeight: "700", marginBottom: 2 }}
+            >
+              {radiusMsgs.radiusTitle}
+            </Text>
+            <Text style={{ color: "#991B1B", fontSize: 12 }}>{radiusText}</Text>
+            <TouchableOpacity
+              onPress={handleOpenDeliveryOptions}
+              style={{ alignSelf: "flex-start", marginTop: 8, paddingVertical: 4 }}
+              accessibilityRole="button"
+            >
+              <Text style={{ color: "#7F1D1D", fontSize: 12, fontWeight: "800" }}>
+                {t("changeDelivery")}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
         <BranchesMapModal
           visible={showBranchesMap}
           onClose={() => setShowBranchesMap(false)}
           nearestBranchId={nearestBranch?.id}
+          selectedBranchId={deliveryBranch?.id}
+          onSelectBranch={(branch) => {
+            setManualBranch(
+              branch.id === nearestBranch?.id ? null : branch,
+            );
+          }}
           userLocation={
             coordsForBranch
               ? {
@@ -816,19 +1034,16 @@ import { useNotificationListener } from "@/features/notifications/context/UserNo
               : null
           }
           onConfirm={(coords) => {
+            setManualBranch(null);
             setLiveLocation(coords);
             setShowLocationPicker(false);
-            Alert.alert(
-              "¿Usar esta ubicación?",
-              "Puedes guardarla como tu dirección de entrega para hacer el pedido ahí.",
-              [
-                { text: "Solo ver la sede", style: "cancel" },
-                {
-                  text: "Guardar y usar",
-                  onPress: () => saveLocationAsAddress(coords, true),
-                },
-              ],
-            );
+            Alert.alert(t("useLocationTitle"), t("useLocationMessage"), [
+              { text: t("onlyViewBranch"), style: "cancel" },
+              {
+                text: t("saveAndUse"),
+                onPress: () => saveLocationAsAddress(coords, true),
+              },
+            ]);
           }}
         />
         {/* PEDIDO EN CURSO */}
@@ -839,24 +1054,46 @@ import { useNotificationListener } from "@/features/notifications/context/UserNo
               marginVertical: 8,
               padding: 12,
               borderRadius: 12,
-              backgroundColor: "#FFF",
+              backgroundColor: colors.surface,
               borderWidth: 1,
-              borderColor: "#E2E8F0",
+              borderColor: colors.border,
               gap: 8,
             }}
           >
-            <Text style={{ fontWeight: "700", color: "#1E293B" }}>
-              Pedido #{activeOrder.order.id} ·{" "}
+            <Text style={{ fontWeight: "700", color: colors.text }}>
+              {t("orderNumber")} #{activeOrder.order.id} ·{" "}
               {activeOrder.step === 1
-                ? "Preparando"
+                ? t("preparing")
                 : activeOrder.step === 2
-                  ? "En camino"
-                  : "Entregado"}
+                  ? t("onTheWay")
+                  : t("delivered")}
             </Text>
             <CancelOrderButton
               order={activeOrder.order}
               onCancelled={refetchActiveOrder}
             />
+            {activeOrder.delivery?.status === DeliveryStatus.InTransit && (
+              <TouchableOpacity
+                accessibilityRole="button"
+                onPress={() => setTrackingOrderId(activeOrder.order.id)}
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 8,
+                  marginTop: 4,
+                  paddingVertical: 12,
+                  paddingHorizontal: 16,
+                  borderRadius: 12,
+                  backgroundColor: "#2563EB",
+                }}
+              >
+                <Ionicons name="map-outline" size={18} color="#FFFFFF" />
+                <Text style={{ color: "#FFFFFF", fontWeight: "800" }}>
+                  {t("trackDriverMap")}
+                </Text>
+              </TouchableOpacity>
+            )}
           </View>
         )}
         {/* CATEGORÍAS: solo si la sede tiene productos */}
@@ -887,7 +1124,7 @@ import { useNotificationListener } from "@/features/notifications/context/UserNo
                       activeCategory === cat && styles.categoryTextActive,
                     ]}
                   >
-                    {cat}
+                    {cat === "__all__" ? t("all") : cat}
                   </Text>
                 </TouchableOpacity>
               ))}
@@ -903,29 +1140,25 @@ import { useNotificationListener } from "@/features/notifications/context/UserNo
           ListEmptyComponent={
             resolvingLocation || loadingCatalog ? (
               <View style={{ alignItems: "center", padding: 40, gap: 12 }}>
-                <ActivityIndicator size="large" color="#E61C24" />
-                <Text style={{ color: "#64748B" }}>
-                  {resolvingLocation
-                    ? "Buscando la sede más cercana..."
-                    : "Cargando menú..."}
+                <ActivityIndicator size="large" color={colors.accent} />
+                <Text style={{ color: colors.muted }}>
+                  {resolvingLocation ? t("nearestBranch") : t("loadingMenu")}
                 </Text>
               </View>
-            ) : !nearestBranch ? (
+            ) : !deliveryBranch ? (
               <View style={{ alignItems: "center", padding: 32, gap: 12 }}>
                 <Ionicons name="location-outline" size={48} color="#94A3B8" />
                 <Text
                   style={{
-                    color: "#1E293B",
+                    color: colors.text,
                     fontWeight: "700",
                     textAlign: "center",
                   }}
                 >
-                  {branchError
-                    ? "No tenemos cobertura en esta ubicación"
-                    : "Elige una dirección o usa tu ubicación para ver el menú"}
+                  {branchError ? t("noCoverage") : t("chooseAddress")}
                 </Text>
                 <TouchableOpacity
-                  onPress={() => setShowLocationPicker(true)}
+                  onPress={handleOpenLocationPicker}
                   style={{
                     backgroundColor: "#E61C24",
                     paddingHorizontal: 20,
@@ -934,15 +1167,19 @@ import { useNotificationListener } from "@/features/notifications/context/UserNo
                   }}
                 >
                   <Text style={{ color: "#FFF", fontWeight: "700" }}>
-                    Usar mi ubicación
+                    {t("useLocation")}
                   </Text>
                 </TouchableOpacity>
               </View>
             ) : (
               <Text
-                style={{ textAlign: "center", color: "#64748B", padding: 32 }}
+                style={{
+                  textAlign: "center",
+                  color: colors.muted,
+                  padding: 32,
+                }}
               >
-                No hay productos disponibles en esta sede.
+                {t("noProducts")}
               </Text>
             )
           }
@@ -954,10 +1191,13 @@ import { useNotificationListener } from "@/features/notifications/context/UserNo
             >
               <View style={styles.menuCardImagePlaceholder}>
                 {item.image ? (
-                  <Image
+                  <ExpoImage
                     source={{ uri: item.image }}
                     style={{ width: "100%", height: "100%", borderRadius: 12 }}
-                    resizeMode="cover"
+                    contentFit="cover"
+                    cachePolicy="memory-disk"
+                    transition={120}
+                    recyclingKey={item.image}
                   />
                 ) : (
                   <Text style={{ fontSize: 40 }}>🍽️</Text>
@@ -970,7 +1210,7 @@ import { useNotificationListener } from "@/features/notifications/context/UserNo
                 </Text>
                 <View style={styles.menuCardFooter}>
                   <Text style={styles.menuCardPrice}>
-                    ${item.price.toLocaleString("es-CO")}
+                    ${item.price.toLocaleString(getClientLocale(language))}
                   </Text>
                   <View style={styles.addButton}>
                     <Ionicons name="add" size={20} color="#FFF" />
@@ -991,10 +1231,10 @@ import { useNotificationListener } from "@/features/notifications/context/UserNo
               <View style={styles.floatingCartCount}>
                 <Text style={styles.floatingCartCountText}>{cart.length}</Text>
               </View>
-              <Text style={styles.floatingCartText}>Ver carrito</Text>
+              <Text style={styles.floatingCartText}>{t("cart")}</Text>
             </View>
             <Text style={styles.floatingCartTotal}>
-              ${totalCart.toLocaleString("es-CO")}
+              ${totalCart.toLocaleString(getClientLocale(language))}
             </Text>
           </TouchableOpacity>
         )}
@@ -1010,19 +1250,22 @@ import { useNotificationListener } from "@/features/notifications/context/UserNo
             <View style={styles.confirmBox}>
               <View style={styles.confirmImageCircle}>
                 {itemToConfirm?.image ? (
-                  <Image
+                  <ExpoImage
                     source={{ uri: itemToConfirm.image }}
                     style={{ width: "100%", height: "100%", borderRadius: 999 }}
-                    resizeMode="cover"
+                    contentFit="cover"
+                    cachePolicy="memory-disk"
+                    transition={120}
                   />
                 ) : (
                   <Text style={{ fontSize: 50 }}>🍽️</Text>
                 )}
               </View>
-              <Text style={styles.confirmTitle}>¿Agregar al carrito?</Text>
+              <Text style={styles.confirmTitle}>{t("addToCart")}</Text>
               <Text style={styles.confirmItemName}>{itemToConfirm?.name}</Text>
               <Text style={styles.confirmItemPrice}>
-                ${itemToConfirm?.price.toLocaleString("es-CO")}
+                $
+                {itemToConfirm?.price.toLocaleString(getClientLocale(language))}
               </Text>
               <Text style={styles.confirmDesc}>{itemToConfirm?.desc}</Text>
               <View style={styles.confirmActionsRow}>
@@ -1030,7 +1273,7 @@ import { useNotificationListener } from "@/features/notifications/context/UserNo
                   style={styles.confirmCancelBtn}
                   onPress={() => setConfirmItemModalVisible(false)}
                 >
-                  <Text style={styles.confirmCancelText}>Cancelar</Text>
+                  <Text style={styles.confirmCancelText}>{t("cancel")}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.confirmAcceptBtn}
@@ -1042,7 +1285,7 @@ import { useNotificationListener } from "@/features/notifications/context/UserNo
                     color="#FFF"
                     style={{ marginRight: 8 }}
                   />
-                  <Text style={styles.confirmAcceptText}>Agregar</Text>
+                  <Text style={styles.confirmAcceptText}>{t("add")}</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -1058,7 +1301,8 @@ import { useNotificationListener } from "@/features/notifications/context/UserNo
           isCheckingOut={isCheckingOut}
           cart={cart}
           removeFromCart={removeFromCart}
-          totalCart={totalCart}
+        totalCart={totalCart}
+          breakdown={breakdown}
           proceedToCheckout={proceedToCheckout}
           paymentMethod={paymentMethod}
           setPaymentMethod={setPaymentMethod}
@@ -1073,6 +1317,18 @@ import { useNotificationListener } from "@/features/notifications/context/UserNo
           waitingPayment={polling}
           orderPaid={orderPaid}
           stopWaiting={handleStopWaiting}
+          outOfRadius={outOfRadius}
+          radiusTitle={radiusMsgs.radiusTitle}
+          radiusText={radiusText}
+        />
+        <OrderTrackingModal
+          visible={trackingOrderId === activeOrder?.order.id}
+          order={trackingOrderId === activeOrder?.order.id ? activeOrder.order : null}
+          onClose={() => setTrackingOrderId(null)}
+          onRate={() => {
+            setTrackingOrderId(null);
+            router.push("/client/profile");
+          }}
         />
       </SafeAreaView>
     );

@@ -120,7 +120,7 @@ export const styles = StyleSheet.create({
     elevation: 2,
   },
   activeDark: {
-    backgroundColor: '#0F172A',
+    backgroundColor: '#0B1220',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
@@ -133,7 +133,7 @@ export const styles = StyleSheet.create({
   themeTextLight: {
     fontSize: 14,
     fontWeight: 'bold',
-    color: '#0F172A',
+    color: '#1E293B',
     marginLeft: 6,
   },
   themeTextDark: {

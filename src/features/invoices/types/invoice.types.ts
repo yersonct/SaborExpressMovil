@@ -6,8 +6,11 @@ export interface Invoice {
   branchId: number;
   branchName: string | null;
   customerName: string | null;
-  subTotal: number;
+    subTotal: number;
   tax: number;
+  taxRate: number;
+  taxIncludedInPrice: boolean;
+  deliveryFee: number;
   total: number;
   isVoided: boolean;
   issuedAt: string;

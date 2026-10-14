@@ -10,6 +10,8 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { ToastNotification } from "./NotificationToast";
 import { showAppAlert } from "../services/alertEvents";
+import { localizeClientNotification } from "@/features/notifications/utils/localizeClientNotification";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 interface Props {
   notifications: ToastNotification[];
@@ -17,6 +19,8 @@ interface Props {
   onOpen: () => void;
   onClear: () => void;
   onSelect?: (notification: ToastNotification) => void;
+  colors?: { background: string; surface: string; elevated: string; text: string; muted: string; border: string; accent: string };
+  t?: (key: string) => string;
 }
 
 const ICONS: Record<
@@ -26,6 +30,7 @@ const ICONS: Record<
   OrderReady: { name: "checkmark-circle", color: "#22C55E" },
   OrderInPreparation: { name: "flame", color: "#F59E0B" },
   PaymentConfirmed: { name: "card", color: "#10B981" },
+  TableAvailable: { name: "checkmark-circle", color: "#22C55E" },
   DeliveryAssigned: { name: "bicycle", color: "#3B82F6" },
   OrderStatusChanged: { name: "refresh-circle", color: "#F59E0B" },
   Default: { name: "notifications", color: "#3B82F6" },
@@ -37,8 +42,11 @@ export function NotificationCenter({
   onOpen,
   onClear,
   onSelect,
+  colors,
+  t,
 }: Props) {
   const [visible, setVisible] = useState(false);
+  const insets = useSafeAreaInsets();
 
   const handleRowPress = (item: ToastNotification) => {
     setVisible(false);
@@ -53,11 +61,11 @@ export function NotificationCenter({
     setVisible(false);
     setTimeout(() => {
       showAppAlert(
-        "¿Eliminar notificaciones?",
-        "Se eliminarán todas las notificaciones de esta lista. Esta acción no se puede deshacer.",
+        t?.("clearNotificationsTitle") ?? "¿Eliminar notificaciones?",
+        t?.("clearNotificationsMessage") ?? "Se eliminarán todas las notificaciones de esta lista. Esta acción no se puede deshacer.",
         [
-          { text: "Cancelar", style: "cancel" },
-          { text: "Sí, eliminar", style: "destructive", onPress: onClear },
+          { text: t?.("cancel") ?? "Cancelar", style: "cancel" },
+          { text: t?.("yesDelete") ?? "Sí, eliminar", style: "destructive", onPress: onClear },
         ],
       );
     }, 200);
@@ -66,13 +74,13 @@ export function NotificationCenter({
   return (
     <>
       <TouchableOpacity
-        style={styles.bellButton}
+        style={[styles.bellButton, colors && { backgroundColor: colors.elevated }]}
         onPress={() => {
           setVisible(true);
           onOpen();
         }}
       >
-        <Ionicons name="notifications-outline" size={24} color="#1E293B" />
+        <Ionicons name="notifications-outline" size={24} color={colors?.text ?? "#1E293B"} />
         {unreadCount > 0 && (
           <View style={styles.badge}>
             <Text style={styles.badgeText}>
@@ -93,17 +101,17 @@ export function NotificationCenter({
           activeOpacity={1}
           onPress={() => setVisible(false)}
         >
-          <TouchableOpacity activeOpacity={1} style={styles.sheet}>
+          <TouchableOpacity activeOpacity={1} style={[styles.sheet, { paddingBottom: Math.max(16, insets.bottom) }, colors && { backgroundColor: colors.surface }]}>
             <View style={styles.sheetHeader}>
-              <Text style={styles.sheetTitle}>Notificaciones</Text>
+              <Text style={[styles.sheetTitle, colors && { color: colors.text }]}>{t?.("notificationTitle") ?? "Notificaciones"}</Text>
               <View style={{ flexDirection: "row", gap: 16 }}>
                 {notifications.length > 0 && (
                   <TouchableOpacity onPress={handleClearPress}>
-                    <Text style={styles.clearText}>Limpiar</Text>
+                    <Text style={[styles.clearText, colors && { color: colors.accent }]}>{t?.("clear") ?? "Limpiar"}</Text>
                   </TouchableOpacity>
                 )}
                 <TouchableOpacity onPress={() => setVisible(false)}>
-                  <Ionicons name="close" size={22} color="#64748B" />
+                  <Ionicons name="close" size={22} color={colors?.muted ?? "#64748B"} />
                 </TouchableOpacity>
               </View>
             </View>
@@ -115,23 +123,24 @@ export function NotificationCenter({
                   size={32}
                   color="#CBD5E1"
                 />
-                <Text style={styles.emptyText}>
-                  Sin notificaciones por ahora
+                    <Text style={[styles.emptyText, colors && { color: colors.muted }]}>
+                  {t?.("noNotifications") ?? "Sin notificaciones por ahora"}
                 </Text>
               </View>
             ) : (
               <FlatList
                 data={[...notifications].sort((a, b) => Number(b.id) - Number(a.id))}
                 keyExtractor={(item) => String(item.id)}
-                style={{ maxHeight: 420 }}
+                style={{ flexShrink: 1, maxHeight: 420 }}
                 renderItem={({ item }) => {
                   const icon = ICONS[item.type] || ICONS.Default;
+                  const displayItem = localizeClientNotification(item, t);
                   const isTappable =
                     item.relatedEntityType === "Order" &&
                     !!item.relatedEntityId;
                   return (
                     <TouchableOpacity
-                      style={styles.row}
+                      style={[styles.row, colors && { borderBottomColor: colors.border }]}
                       activeOpacity={isTappable ? 0.6 : 1}
                       disabled={!isTappable}
                       onPress={() => handleRowPress(item)}
@@ -149,8 +158,8 @@ export function NotificationCenter({
                         />
                       </View>
                       <View style={{ flex: 1 }}>
-                        <Text style={styles.rowTitle}>{item.title}</Text>
-                        <Text style={styles.rowMessage}>{item.message}</Text>
+                        <Text style={[styles.rowTitle, colors && { color: colors.text }]}>{displayItem.title}</Text>
+                        <Text style={[styles.rowMessage, colors && { color: colors.muted }]}>{displayItem.message}</Text>
                       </View>
                       {isTappable && (
                         <Ionicons
@@ -207,7 +216,7 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
     padding: 16,
-    maxHeight: "70%",
+    maxHeight: "82%",
   },
   sheetHeader: {
     flexDirection: "row",

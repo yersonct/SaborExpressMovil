@@ -1,37 +1,49 @@
-import React, { useState, useEffect } from "react";
-import { 
-  SafeAreaView, 
-  View, 
-  Text, 
-  StyleSheet, 
-  ScrollView, 
-  Switch, 
+import React, { useEffect, useState } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Switch,
+  Text,
   TouchableOpacity,
-  Platform 
-} from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { useNavigation, useRouter } from 'expo-router';
-import { useAuth } from '@/features/auth/context/AuthContext';
-
-import { Alert } from "react-native"; // agrégalo al import existente de react-native
+  Vibration,
+  View,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
+import { useAuth } from "@/features/auth/context/AuthContext";
 import { useMyProfile } from "@/features/employees/hooks/useMyProfile";
 import { employeeService } from "@/features/employees/services/employeeService";
-
-// 🔥 IMPORTAMOS EL COMPONENTE DROPDOWN
-import { LanguageDropdown } from '@/components/LanguageDropdown';
-// 🔥 IMPORTAMOS EL CONTEXTO Y TRADUCCIONES
-import { useDeliveryContext } from './context/DeliveryContext';
-import { TRANSLATIONS, LanguageCode } from '../../../locales/DeliveryTranslations';
+import { LanguageDropdown } from "@/components/LanguageDropdown";
+import { showAppAlert } from "@/features/shared/services/alertEvents";
+import { useDeliveryContext } from "./context/DeliveryContext";
+import { getDeliveryTheme } from "./context/deliveryTheme";
+import {
+  TRANSLATIONS,
+  LanguageCode,
+} from "../../../locales/DeliveryTranslations";
 
 export const DeliverySettingsView = () => {
-  const navigation = useNavigation();
   const router = useRouter();
-
-  // 🔥 Leemos el contexto global del Repartidor
-  const { language, setLanguage, isDark, setIsDark } = useDeliveryContext();
-  const t = TRANSLATIONS[language] || TRANSLATIONS['es'];
-  const { profile } = useMyProfile();
-  const [isOnline, setIsOnline] = useState(true);
+  const {
+    language,
+    setLanguage,
+    isDark,
+    setIsDark,
+    soundNotifications,
+    setSoundNotifications,
+    pushNotifications,
+    setPushNotifications,
+    vibrationNotifications,
+    setVibrationNotifications,
+    preferencesHydrated,
+  } = useDeliveryContext();
+  const t = TRANSLATIONS[language] || TRANSLATIONS.es;
+  const { profile, refetch: refetchProfile } = useMyProfile();
+  const [isOnline, setIsOnline] = useState(false);
   const [savingAvailability, setSavingAvailability] = useState(false);
 
   useEffect(() => {
@@ -39,57 +51,74 @@ export const DeliverySettingsView = () => {
   }, [profile]);
 
   const handleToggleOnline = async (value: boolean) => {
-    setIsOnline(value); // optimista
+    if (!profile || savingAvailability) return;
+    const previousValue = isOnline;
+    setIsOnline(value);
     setSavingAvailability(true);
     try {
       await employeeService.setAvailability(value);
+      await refetchProfile();
     } catch (err: any) {
-      setIsOnline(!value); // revierte si falla
+      setIsOnline(previousValue);
       Alert.alert(
-        "Error",
-        err?.message ?? "No se pudo actualizar tu disponibilidad.",
+        t.errorTitle || "Error",
+        err?.message ?? t.availabilitySaveError,
       );
     } finally {
       setSavingAvailability(false);
     }
   };
 
-  // Opciones para el Dropdown
+  const handleToggleVibration = (enabled: boolean) => {
+    setVibrationNotifications(enabled);
+    if (enabled && Platform.OS !== "web") Vibration.vibrate([0, 100]);
+  };
+
   const languageOptions = [
-    { label: 'Español', value: 'es' },
-    { label: 'English', value: 'en' },
-    { label: 'Português', value: 'pt' },
-    { label: 'Français', value: 'fr' }
+    { label: "Español", value: "es" },
+    { label: "English", value: "en" },
+    { label: "Português", value: "pt" },
+    { label: "Français", value: "fr" },
   ];
 
-  // 🔥 PALETA DE COLORES DINÁMICA
-  const colors = isDark ? {
-    background: '#0F172A', card: '#1E293B', text: '#F8FAFC',
-    mutedText: '#94A3B8', border: '#334155', accent: '#EA1D2C', icon: '#CBD5E1'
-  } : {
-    background: '#F8FAFC', card: '#FFFFFF', text: '#1E293B',
-    mutedText: '#64748B', border: '#E2E8F0', accent: '#EA1D2C', icon: '#1E293B'
-  };
+  const colors = getDeliveryTheme(isDark);
 
   const { handleLogout } = useAuth();
 
-  const onLogoutPress = async () => {
+  const executeLogout = async () => {
     try {
-      await handleLogout(); // revoca el token en backend + borra la sesión local
+      await handleLogout();
     } finally {
-      router.replace('/');
+      router.replace("/");
     }
+  };
+
+  const onLogoutPress = () => {
+    showAppAlert(t.logoutBtn, t.logoutConfirmation, [
+      { text: t.cancelBtn, style: "cancel" },
+      { text: t.logoutBtn, style: "destructive", onPress: executeLogout },
+    ]);
   };
 
   return (
     <SafeAreaView
       style={[styles.safeArea, { backgroundColor: colors.background }]}
+      edges={["top"]}
     >
+      <View
+        style={[
+          styles.header,
+          { backgroundColor: colors.card, borderBottomColor: colors.border },
+        ]}
+      >
+        <Text style={[styles.headerTitle, { color: colors.text }]}>
+          {t.settingsTitle || "Configuración"}
+        </Text>
+      </View>
       <ScrollView
         contentContainerStyle={styles.container}
         showsVerticalScrollIndicator={false}
       >
-        {/* SECCIÓN: ESTADO DE TRABAJO */}
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: colors.mutedText }]}>
             {t.workStatus}
@@ -114,22 +143,129 @@ export const DeliverySettingsView = () => {
                   <Text
                     style={[styles.settingDesc, { color: colors.mutedText }]}
                   >
-                    {isOnline ? t.onlineDesc : t.offlineDesc}
+                    {!profile
+                      ? t.loadingProfile
+                      : isOnline
+                        ? t.onlineDesc
+                        : t.offlineDesc}
                   </Text>
                 </View>
               </View>
               <Switch
                 value={isOnline}
                 onValueChange={handleToggleOnline}
-                disabled={savingAvailability}
-                trackColor={{ false: colors.border, true: "#EA1D2C" }}
+                disabled={savingAvailability || !profile}
+                trackColor={{ false: colors.border, true: colors.successText }}
+                thumbColor="#FFFFFF"
+              />
+            </View>
+            {savingAvailability && (
+              <ActivityIndicator
+                style={{ marginBottom: 14 }}
+                size="small"
+                color={colors.accent}
+              />
+            )}
+          </View>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: colors.mutedText }]}>
+            {t.notificationsTitle}
+          </Text>
+          <View
+            style={[
+              styles.card,
+              { backgroundColor: colors.card, borderColor: colors.border },
+            ]}
+          >
+            <View style={styles.settingRow}>
+              <View style={styles.settingInfo}>
+                <Ionicons
+                  name="notifications-outline"
+                  size={23}
+                  color={colors.text}
+                />
+                <View style={styles.textGroup}>
+                  <Text style={[styles.settingTitle, { color: colors.text }]}>
+                    {t.orderAlertsTitle}
+                  </Text>
+                  <Text style={[styles.settingDesc, { color: colors.mutedText }]}>
+                    {t.orderAlertsDesc}
+                  </Text>
+                </View>
+              </View>
+              <Switch
+                value={pushNotifications}
+                onValueChange={setPushNotifications}
+                disabled={!preferencesHydrated}
+                trackColor={{ false: colors.border, true: colors.successText }}
+                thumbColor="#FFFFFF"
+              />
+            </View>
+            <View style={[styles.divider, { backgroundColor: colors.border }]} />
+            <View style={styles.settingRow}>
+              <View style={styles.settingInfo}>
+                <Ionicons name="volume-high-outline" size={23} color={colors.text} />
+                <View style={styles.textGroup}>
+                  <Text style={[styles.settingTitle, { color: colors.text }]}>
+                    {t.soundNotifications}
+                  </Text>
+                  <Text style={[styles.settingDesc, { color: colors.mutedText }]}>
+                    {t.soundNotificationsDesc}
+                  </Text>
+                </View>
+              </View>
+              <Switch
+                value={soundNotifications}
+                onValueChange={setSoundNotifications}
+                disabled={!preferencesHydrated}
+                trackColor={{ false: colors.border, true: colors.successText }}
+                thumbColor="#FFFFFF"
+              />
+            </View>
+            <View style={[styles.divider, { backgroundColor: colors.border }]} />
+            <View style={styles.settingRow}>
+              <View style={styles.settingInfo}>
+                <Ionicons name="phone-portrait-outline" size={23} color={colors.text} />
+                <View style={styles.textGroup}>
+                  <Text style={[styles.settingTitle, { color: colors.text }]}>
+                    {t.vibrationNotifications}
+                  </Text>
+                  <Text style={[styles.settingDesc, { color: colors.mutedText }]}>
+                    {t.vibrationNotificationsDesc}
+                  </Text>
+                </View>
+              </View>
+              <Switch
+                value={vibrationNotifications}
+                onValueChange={handleToggleVibration}
+                disabled={!preferencesHydrated}
+                trackColor={{ false: colors.border, true: colors.successText }}
                 thumbColor="#FFFFFF"
               />
             </View>
           </View>
         </View>
 
-        {/* SECCIÓN: NAVEGACIÓN Y APP */}
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: colors.mutedText }]}>
+            {t.orderSyncTitle}
+          </Text>
+          <View
+            style={[
+              styles.card,
+              styles.syncCard,
+              { backgroundColor: colors.card, borderColor: colors.border },
+            ]}
+          >
+            <Ionicons name="cloud-done-outline" size={24} color={colors.accent} />
+            <Text style={[styles.settingDesc, styles.syncDescription, { color: colors.mutedText }]}>
+              {t.orderSyncDescription}
+            </Text>
+          </View>
+        </View>
+
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: colors.mutedText }]}>
             {t.navigationApp}
@@ -140,7 +276,6 @@ export const DeliverySettingsView = () => {
               { backgroundColor: colors.card, borderColor: colors.border },
             ]}
           >
-            {/* 🔥 SELECCIÓN DE IDIOMA */}
             <View style={styles.settingRow}>
               <View style={styles.settingInfo}>
                 <Ionicons
@@ -166,6 +301,7 @@ export const DeliverySettingsView = () => {
                   value={language}
                   options={languageOptions}
                   onChange={(value) => setLanguage(value as LanguageCode)}
+                  colors={colors}
                 />
               </View>
             </View>
@@ -174,7 +310,6 @@ export const DeliverySettingsView = () => {
               style={[styles.divider, { backgroundColor: colors.border }]}
             />
 
-            {/* 🔥 MODO OSCURO */}
             <View style={styles.settingRow}>
               <View style={styles.settingInfo}>
                 <Ionicons name="moon-outline" size={24} color={colors.text} />
@@ -182,19 +317,25 @@ export const DeliverySettingsView = () => {
                   <Text style={[styles.settingTitle, { color: colors.text }]}>
                     {t.darkMode}
                   </Text>
+                  <Text style={[styles.settingDesc, { color: colors.mutedText }]}>
+                    {t.darkModeDesc}
+                  </Text>
                 </View>
               </View>
               <Switch
                 value={isDark}
                 onValueChange={setIsDark}
-                trackColor={{ false: colors.border, true: colors.accent }}
+                trackColor={{ false: colors.border, true: colors.successText }}
                 thumbColor="#FFFFFF"
               />
             </View>
           </View>
         </View>
 
-        <TouchableOpacity style={styles.logoutButton} onPress={onLogoutPress}>
+        <TouchableOpacity
+          style={[styles.logoutButton, { backgroundColor: colors.accent, shadowColor: colors.accent }]}
+          onPress={onLogoutPress}
+        >
           <Ionicons name="log-out-outline" size={22} color="#FFFFFF" />
           <Text style={styles.logoutButtonText}>{t.logoutBtn}</Text>
         </TouchableOpacity>
@@ -204,17 +345,21 @@ export const DeliverySettingsView = () => {
 };
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1 }, // Color dinámico
-  container: { padding: 20, paddingBottom: 40 },
-  section: { marginBottom: 25 },
-  sectionTitle: { fontSize: 14, fontWeight: 'bold', marginBottom: 12, textTransform: 'uppercase', letterSpacing: 1 }, // Color dinámico
-  card: { borderRadius: 20, paddingHorizontal: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 5, elevation: 2, borderWidth: 1 }, // Color dinámico
-  settingRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 18 },
+  safeArea: { flex: 1 },
+  header: { paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1 },
+  headerTitle: { fontSize: 20, fontWeight: 'bold' },
+  container: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 24 },
+  section: { marginBottom: 16 },
+  sectionTitle: { fontSize: 14, fontWeight: 'bold', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 },
+  card: { borderRadius: 18, paddingHorizontal: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 5, elevation: 2, borderWidth: 1 },
+  syncCard: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12 },
+  syncDescription: { flex: 1, lineHeight: 19 },
+  settingRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12 },
   settingInfo: { flexDirection: 'row', alignItems: 'center', flex: 1 },
   textGroup: { marginLeft: 15, flex: 1 },
-  settingTitle: { fontSize: 16, fontWeight: 'bold', marginBottom: 2 }, // Color dinámico
-  settingDesc: { fontSize: 13 }, // Color dinámico
-  divider: { height: 1 }, // Color dinámico
-  logoutButton: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', backgroundColor: '#E61C24', paddingVertical: 16, borderRadius: 16, marginTop: 10, shadowColor: '#E61C24', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 5 },
+  settingTitle: { fontSize: 16, fontWeight: 'bold', marginBottom: 2 },
+  settingDesc: { fontSize: 13 },
+  divider: { height: 1 },
+  logoutButton: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', backgroundColor: '#E61C24', paddingVertical: 14, borderRadius: 16, marginTop: 4, shadowColor: '#E61C24', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 5 },
   logoutButtonText: { color: '#FFFFFF', fontSize: 16, fontWeight: 'bold', marginLeft: 10 }
 });

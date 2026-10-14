@@ -5,6 +5,11 @@ export enum OrderType {
   Pickup = "Pickup",
 }
 
+export enum OrderChannel {
+  App = "App",
+  Counter = "Mostrador",
+}
+
 export enum OrderStatus {
   Pending = "Pending",
   Confirmed = "Confirmed",
@@ -33,7 +38,7 @@ export const ACTIVE_ORDER_STATUSES: OrderStatus[] = [
 export interface CreateOrderPayload {
   customerId?: number | null;
   tableId?: number | null;
-  branchId?: number | null; // ahora opcional: solo obligatorio si NO es Delivery
+  branchId?: number | null; // Delivery permite elegir sede; si se omite, el backend usa la más cercana.
   addressId?: number | null; // NUEVO
   orderType: OrderType;
   notes?: string | null;
@@ -54,16 +59,29 @@ export interface OrderSummary {
   employeeId: number | null;
   employeeName: string | null;
   tableId: number | null;
-  tableNumber: number | null;
+ tableNumber: number | null;
   branchId: number;
+  channel: OrderChannel;
   orderType: OrderType;
   status: OrderStatus;
+  subTotal: number;
+  tax: number;
+  taxRate: number;
+  deliveryFee: number;
   total: number;
   isFullyPaid: boolean;
+  taxIncludedInPrice: boolean;
   createdAt: string;
+  paidAt?: string | null;
   orderDetails: OrderDetail[]; // 👈 nuevo
   assignedDeliveryPersonId: number | null;
   assignedDeliveryPersonName: string | null;
+}
+
+export interface OccupiedTableWaiter {
+  tableId: number;
+  employeeId: number | null;
+  employeeName: string | null;
 }
 
 export interface OrderDetail {
@@ -96,6 +114,9 @@ export interface Order {
   status: OrderStatus;
   subTotal: number;
   tax: number;
+  taxRate: number;
+  taxIncludedInPrice: boolean;
+  deliveryFee: number;
   total: number;
   notes: string | null;
   createdAt: string;

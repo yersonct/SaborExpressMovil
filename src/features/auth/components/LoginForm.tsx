@@ -11,11 +11,13 @@ import {
   Platform,
   ScrollView,
   Animated,
+  Modal,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../context/AuthContext";
+import { setApiLanguage } from "../services/apiLanguage";
 import { ForgotPasswordFlow } from "./ForgotPasswordFlow";
 import { ClientRegistrationFlow } from "./ClientRegistrationFlow";
 import { LanguageDropdown } from "../../../components/LanguageDropdown";
@@ -30,6 +32,7 @@ import {
   resolveEffectiveRole,
 } from "../services/roleMap";
 import { styles } from "./style/LoginForm.styles";
+import { setNetworkErrorLanguage } from "@/features/shared/services/networkStatus";
 
 const translations = require("../../../locales/translations.json") as Record<
   string,
@@ -49,6 +52,7 @@ export const LoginForm = () => {
   >("login");
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [showClientSuccess, setShowClientSuccess] = useState(false);
+  const [showServerDownAlert, setShowServerDownAlert] = useState(false);
   const [isNavigating, setIsNavigating] = useState(false);
   const [noMobileAccess, setNoMobileAccess] = useState(false);
 
@@ -85,10 +89,10 @@ export const LoginForm = () => {
 
   useEffect(() => {
     const storedLanguage = globalThis.localStorage?.getItem(
-      "saborexpress-language",
+      "saborexpress-login-language",
     ) as LanguageCode | null;
     const storedTheme = globalThis.localStorage?.getItem(
-      "saborexpress-theme",
+      "saborexpress-login-theme",
     ) as "light" | "dark" | null;
     if (storedLanguage && translations[storedLanguage])
       setSelectedLanguage(storedLanguage);
@@ -97,11 +101,17 @@ export const LoginForm = () => {
   }, []);
 
   useEffect(() => {
-    globalThis.localStorage?.setItem("saborexpress-language", selectedLanguage);
+    setNetworkErrorLanguage(selectedLanguage);
+    setApiLanguage(selectedLanguage);
+    globalThis.localStorage?.setItem("saborexpress-login-language", selectedLanguage);
   }, [selectedLanguage]);
 
   useEffect(() => {
-    globalThis.localStorage?.setItem("saborexpress-theme", themeMode);
+    if (errorCode === "SERVER_DOWN") setShowServerDownAlert(true);
+  }, [errorCode]);
+
+  useEffect(() => {
+    globalThis.localStorage?.setItem("saborexpress-login-theme", themeMode);
   }, [themeMode]);
 
   useEffect(() => {
@@ -134,15 +144,15 @@ export const LoginForm = () => {
 
   const isDark = themeMode === "dark";
   const themeColors = {
-    background: isDark ? "#09090B" : "#F8FAFC",
-    surface: isDark ? "#18181B" : "#FFFFFF",
-    text: isDark ? "#FAFAFA" : "#0F172A",
-    mutedText: isDark ? "#A1A1AA" : "#64748B",
-    border: isDark ? "#27272A" : "#E2E8F0",
-    inputBackground: isDark ? "#09090B" : "#F8FAFC",
+    background: isDark ? "#0B1220" : "#F8FAFC",
+    surface: isDark ? "#111827" : "#FFFFFF",
+    text: isDark ? "#F8FAFC" : "#1E293B",
+    mutedText: isDark ? "#CBD5E1" : "#64748B",
+    border: isDark ? "#334155" : "#E2E8F0",
+    inputBackground: isDark ? "#111827" : "#F8FAFC",
     buttonBackground: "#E61C24",
     buttonText: "#FFFFFF",
-    toggleBg: isDark ? "#27272A" : "#E2E8F0",
+    toggleBg: isDark ? "#1F2937" : "#E2E8F0",
   };
 
   if (isNavigating) {
@@ -240,7 +250,9 @@ export const LoginForm = () => {
           ]}
         >
           <Image
-            source={require("../../../assets/images/image.png")}
+            source={isDark
+              ? require("../../../../assets/images/logo-dark.png")
+              : require("../../../../assets/images/logo.png")}
             style={styles.profileImage}
           />
           <Text style={[styles.welcomeTitle, { color: themeColors.mutedText }]}>
@@ -343,7 +355,9 @@ export const LoginForm = () => {
               style={[styles.logoContainer, { opacity: fadeAnim }]}
             >
               <Image
-                source={require("../../../assets/images/logo.png")}
+                source={isDark
+                  ? require("../../../../assets/images/logo-dark.png")
+                  : require("../../../../assets/images/logo.png")}
                 style={styles.logo}
                 resizeMode="contain"
               />
@@ -495,6 +509,81 @@ export const LoginForm = () => {
         themeColors={themeColors}
         onCancel={clearError}
       />
+
+      <Modal
+        transparent
+        visible={showServerDownAlert}
+        animationType="fade"
+        onRequestClose={() => {
+          setShowServerDownAlert(false);
+          clearError();
+        }}
+      >
+        <View
+          style={{
+            flex: 1,
+            backgroundColor: "rgba(0,0,0,0.55)",
+            justifyContent: "center",
+            alignItems: "center",
+            padding: 24,
+          }}
+        >
+          <View
+            style={{
+              width: "100%",
+              maxWidth: 360,
+              padding: 24,
+              borderRadius: 20,
+              backgroundColor: themeColors.surface,
+              alignItems: "center",
+            }}
+          >
+            <Ionicons name="cloud-offline-outline" size={44} color="#E61C24" />
+            <Text
+              style={{
+                marginTop: 12,
+                color: themeColors.text,
+                fontSize: 18,
+                fontWeight: "700",
+                textAlign: "center",
+              }}
+            >
+              {t.errorTitle || "Sesión cerrada"}
+            </Text>
+            <Text
+              style={{
+                marginTop: 10,
+                marginBottom: 22,
+                color: themeColors.mutedText,
+                fontSize: 14,
+                lineHeight: 21,
+                textAlign: "center",
+              }}
+            >
+              {error ||
+                "No se pudo conectar con el servicio del sistema. Revisa la conexión o inténtalo más tarde."}
+            </Text>
+            <TouchableOpacity
+              onPress={() => {
+                setShowServerDownAlert(false);
+                clearError();
+              }}
+              style={{
+                backgroundColor: "#E61C24",
+                borderRadius: 12,
+                paddingVertical: 12,
+                paddingHorizontal: 24,
+                minWidth: 120,
+                alignItems: "center",
+              }}
+            >
+              <Text style={{ color: "#FFFFFF", fontWeight: "700" }}>
+                Entendido
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };

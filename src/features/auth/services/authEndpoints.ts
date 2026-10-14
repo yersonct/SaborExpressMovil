@@ -5,6 +5,7 @@ export const BASE_URL = `${API_BASE_URL}/api/Auth`;
 export const AUTH_ENDPOINTS = {
   login: `${BASE_URL}/login`,
   logout: `${BASE_URL}/logout`,
+  session: `${BASE_URL}/session`,
   me: `${BASE_URL}/me`,
   registerClient: `${API_BASE_URL}/api/Customers/register`,
   confirmEmail: `${BASE_URL}/confirm-email`,

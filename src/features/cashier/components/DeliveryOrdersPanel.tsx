@@ -3,10 +3,13 @@ import {
   View,
   Text,
   FlatList,
+  Modal,
+  ScrollView,
   TouchableOpacity,
   ActivityIndicator,
   Alert,
 } from "react-native";
+import { BreakdownRows } from "@/features/orders/components/BreakdownRows";
 import { Ionicons } from "@expo/vector-icons";
 import { orderService } from "@/features/orders/services/orderService";
 import { paymentService } from "@/features/payments/services/paymentService";
@@ -15,11 +18,18 @@ import {
   PaymentStatus,
 } from "@/features/payments/types/payment.types";
 import {
+  OrderDetailStatus,
   OrderStatus,
   OrderType,
   OrderSummary,
 } from "@/features/orders/types/order.types";
 import { styles } from "../style/CashierStyles";
+import { useCashierContext } from "../context/CashierContext";
+import { TRANSLATIONS } from "@/locales/CashierTranslations";
+import {
+  formatColombiaTime,
+  isColombiaToday,
+} from "@/features/shared/utils/colombia-date";
 
 interface Props {
   branchId: number | null;
@@ -27,8 +37,6 @@ interface Props {
   showToast: (message: string) => void;
   refreshKey?: number;
 }
-const POLL_INTERVAL_MS = 15000;
-
 // Un domicilio con pago Wompi solo es visible para el cajero cuando ese pago
 // está Completed. Si el pago está Pending o Failed, se oculta.
 // Los de efectivo (sin pagos Wompi) se muestran normal.
@@ -51,16 +59,20 @@ export function DeliveryOrdersPanel({
   showToast,
   refreshKey = 0,
 }: Props) {
+  const { language } = useCashierContext();
+  const t = TRANSLATIONS[language] || TRANSLATIONS.es;
   const [orders, setOrders] = useState<OrderSummary[]>([]);
   const [confirmedOrders, setConfirmedOrders] = useState<OrderSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [confirmingId, setConfirmingId] = useState<number | null>(null);
+  const [selectedDetailOrder, setSelectedDetailOrder] =
+    useState<OrderSummary | null>(null);
 
   const colors = {
-    background: isDark ? "#0F172A" : "#F8FAFC",
-    card: isDark ? "#1E293B" : "#FFFFFF",
+    background: isDark ? "#0B1220" : "#F8FAFC",
+    card: isDark ? "#111827" : "#FFFFFF",
     text: isDark ? "#F8FAFC" : "#1E293B",
-    muted: isDark ? "#94A3B8" : "#64748B",
+    muted: isDark ? "#CBD5E1" : "#64748B",
     border: isDark ? "#334155" : "#E2E8F0",
   };
 
@@ -74,15 +86,13 @@ export function DeliveryOrdersPanel({
       if (!silent) setLoading(true);
       try {
         let summaries = await orderService.getAll(branchId);
-        const todayStr = new Date().toDateString();
-
         // Domicilios de hoy esperando pago: se verifica con Wompi
         const waitingPayment = summaries.filter(
           (o) =>
             o.orderType === OrderType.Delivery &&
             o.status === OrderStatus.Pending &&
             o.orderDetails.length > 0 &&
-            new Date(o.createdAt).toDateString() === todayStr,
+            isColombiaToday(o.createdAt),
         );
         const synced = await Promise.all(waitingPayment.map(syncPendingWompi));
         if (synced.some(Boolean)) {
@@ -94,7 +104,7 @@ export function DeliveryOrdersPanel({
             o.orderType === OrderType.Delivery &&
             o.status === OrderStatus.Pending &&
             o.orderDetails.length > 0 &&
-            new Date(o.createdAt).toDateString() === todayStr,
+            isColombiaToday(o.createdAt),
         );
 
         // Solo los de efectivo o los que Wompi ya aprobó
@@ -102,7 +112,6 @@ export function DeliveryOrdersPanel({
         setOrders(candidates.filter((_, i) => checks[i]));
 
         // Domicilios ya confirmados hoy (incluye los pagados con Wompi)
-        const today = new Date().toDateString();
         setConfirmedOrders(
           summaries.filter(
             (o) =>
@@ -110,35 +119,26 @@ export function DeliveryOrdersPanel({
               (o.status === OrderStatus.Confirmed ||
                 o.status === OrderStatus.InPreparation ||
                 o.status === OrderStatus.Ready) &&
-              new Date(o.createdAt).toDateString() === today,
+              isColombiaToday(o.createdAt),
           ),
         );
       } catch (err: any) {
         if (!silent) {
           Alert.alert(
-            "Error",
-            err?.message ?? "No se pudieron cargar los pedidos de domicilio.",
+            t.errorTitle,
+            err?.message ?? t.deliveryLoadError,
           );
         }
       } finally {
         setLoading(false);
       }
     },
-    [branchId],
+    [branchId, language],
   );
 
   useEffect(() => {
     fetchPendingDeliveries();
   }, [fetchPendingDeliveries, refreshKey]);
-
-  // Refresco automático: el pedido aparece solo cuando Wompi confirma el pago
-  useEffect(() => {
-    const interval = setInterval(
-      () => fetchPendingDeliveries(true),
-      POLL_INTERVAL_MS,
-    );
-    return () => clearInterval(interval);
-  }, [fetchPendingDeliveries]);
 
   const handleConfirm = async (order: OrderSummary) => {
     setConfirmingId(order.id);
@@ -154,20 +154,28 @@ export function DeliveryOrdersPanel({
       } catch {}
 
       if (driver) {
-        showToast(`✅ Pedido #${order.id} confirmado — repartidor: ${driver}`);
+        showToast(
+          t.deliveryConfirmedToast
+            .replace("{id}", String(order.id))
+            .replace("{driver}", driver),
+        );
       } else {
         Alert.alert(
-          "Pedido confirmado sin repartidor",
-          "No hay repartidores disponibles en esta sede. Avisa al gerente para asignarlo manualmente.",
+          t.deliveryNoDriverTitle,
+          t.deliveryNoDriverMessage,
         );
       }
       setOrders((prev) => prev.filter((o) => o.id !== order.id));
       setConfirmedOrders((prev) => [
-        { ...order, status: OrderStatus.Confirmed },
+        {
+          ...order,
+          status: OrderStatus.Confirmed,
+          assignedDeliveryPersonName: driver,
+        },
         ...prev,
       ]);
     } catch (err: any) {
-      Alert.alert("Error", err?.message ?? "No se pudo confirmar el pedido.");
+      Alert.alert(t.errorTitle, err?.message ?? t.deliveryConfirmError);
     } finally {
       setConfirmingId(null);
     }
@@ -182,6 +190,7 @@ export function DeliveryOrdersPanel({
   }
 
   return (
+    <>
     <FlatList
       data={orders}
       keyExtractor={(item) => String(item.id)}
@@ -195,7 +204,7 @@ export function DeliveryOrdersPanel({
             <Text
               style={{ color: colors.muted, fontWeight: "700", fontSize: 13 }}
             >
-              CONFIRMADOS HOY ({confirmedOrders.length})
+              {t.confirmedToday.replace("{count}", String(confirmedOrders.length))}
             </Text>
             {confirmedOrders.map((o) => (
               <View
@@ -216,7 +225,7 @@ export function DeliveryOrdersPanel({
                   }}
                 >
                   <Text style={{ fontWeight: "bold", color: colors.text }}>
-                    Pedido #{o.id}
+                    {t.orderNumber.replace("{id}", String(o.id))}
                   </Text>
                   <Text style={{ fontWeight: "bold", color: colors.text }}>
                     ${o.total.toLocaleString("es-CO")}
@@ -225,8 +234,8 @@ export function DeliveryOrdersPanel({
                 <Text
                   style={{ color: colors.muted, marginTop: 4, fontSize: 13 }}
                 >
-                  {o.customerName ?? "Cliente"} •{" "}
-                  {new Date(o.createdAt).toLocaleTimeString([], {
+                  {o.customerName ?? t.customer} •{" "}
+                  {formatColombiaTime(o.createdAt, undefined, {
                     hour: "2-digit",
                     minute: "2-digit",
                   })}
@@ -236,13 +245,38 @@ export function DeliveryOrdersPanel({
                     marginTop: 8,
                     fontSize: 13,
                     fontWeight: "600",
-                    color: o.assignedDeliveryPersonName ? "#10B981" : "#EF4444",
+                    color: o.assignedDeliveryPersonName ? "#10B981" : "#E61C24",
                   }}
                 >
                   {o.assignedDeliveryPersonName
-                    ? `✅ Confirmado — repartidor: ${o.assignedDeliveryPersonName}`
-                    : "⚠️ Confirmado sin repartidor asignado"}
+                    ? t.deliveryConfirmedWithDriver.replace(
+                        "{driver}",
+                        o.assignedDeliveryPersonName,
+                      )
+                    : t.deliveryConfirmedNoDriver}
                 </Text>
+                <TouchableOpacity
+                  accessibilityRole="button"
+                  accessibilityLabel={t.viewOrderDetails}
+                  onPress={() => setSelectedDetailOrder(o)}
+                  style={{
+                    alignSelf: "flex-start",
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 6,
+                    marginTop: 10,
+                    paddingHorizontal: 10,
+                    paddingVertical: 7,
+                    borderRadius: 9,
+                    borderWidth: 1,
+                    borderColor: colors.border,
+                  }}
+                >
+                  <Ionicons name="eye-outline" size={16} color={colors.muted} />
+                  <Text style={{ color: colors.text, fontSize: 12, fontWeight: "700" }}>
+                    {t.viewOrderDetails}
+                  </Text>
+                </TouchableOpacity>
               </View>
             ))}
           </View>
@@ -252,7 +286,7 @@ export function DeliveryOrdersPanel({
         <View style={{ alignItems: "center", paddingVertical: 40 }}>
           <Ionicons name="bicycle-outline" size={56} color={colors.muted} />
           <Text style={{ color: colors.muted, marginTop: 12, fontSize: 15 }}>
-            No hay pedidos de domicilio esperando confirmación.
+            {t.emptyPendingDeliveries}
           </Text>
         </View>
       }
@@ -270,7 +304,7 @@ export function DeliveryOrdersPanel({
             style={{ flexDirection: "row", justifyContent: "space-between" }}
           >
             <Text style={{ fontWeight: "bold", color: colors.text }}>
-              Pedido #{item.id}
+              {t.orderNumber.replace("{id}", String(item.id))}
             </Text>
             <Text style={{ fontWeight: "bold", color: colors.text }}>
               ${item.total.toLocaleString("es-CO")}
@@ -278,8 +312,8 @@ export function DeliveryOrdersPanel({
           </View>
 
           <Text style={{ color: colors.muted, marginTop: 4, fontSize: 13 }}>
-            {item.customerName ?? "Cliente"} •{" "}
-            {new Date(item.createdAt).toLocaleTimeString([], {
+            {item.customerName ?? t.customer} •{" "}
+            {formatColombiaTime(item.createdAt, undefined, {
               hour: "2-digit",
               minute: "2-digit",
             })}
@@ -292,7 +326,42 @@ export function DeliveryOrdersPanel({
             {item.orderDetails
               .map((d) => `${d.quantity}x ${d.productName}`)
               .join(", ")}
-          </Text>
+ </Text>
+
+          <View style={{ marginTop: 10 }}>
+            <BreakdownRows
+              subTotal={item.subTotal}
+              tax={item.tax}
+              taxRate={item.taxRate}
+              taxIncludedInPrice={item.taxIncludedInPrice}
+              deliveryFee={item.deliveryFee}
+              lang={language}
+              textColor={colors.text}
+              mutedColor={colors.muted}
+            />
+          </View>
+
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel={t.viewOrderDetails}
+            onPress={() => setSelectedDetailOrder(item)}
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 6,
+              paddingVertical: 9,
+              borderRadius: 10,
+              borderWidth: 1,
+              borderColor: colors.border,
+              marginTop: 10,
+            }}
+          >
+            <Ionicons name="eye-outline" size={16} color={colors.muted} />
+            <Text style={{ color: colors.text, fontWeight: "700" }}>
+              {t.viewOrderDetails}
+            </Text>
+          </TouchableOpacity>
 
           <TouchableOpacity
             style={{
@@ -307,12 +376,201 @@ export function DeliveryOrdersPanel({
             disabled={confirmingId === item.id}
           >
             <Text style={{ color: "#FFF", fontWeight: "bold" }}>
-              {confirmingId === item.id ? "Confirmando..." : "Confirmar pedido"}
+              {confirmingId === item.id ? t.confirmingOrder : t.confirmOrder}
             </Text>
           </TouchableOpacity>
         </View>
       )}
     />
+    <Modal
+      visible={selectedDetailOrder !== null}
+      transparent
+      animationType="fade"
+      onRequestClose={() => setSelectedDetailOrder(null)}
+    >
+      {selectedDetailOrder && (
+        <View
+          style={{
+            flex: 1,
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 16,
+            backgroundColor: "rgba(0,0,0,0.62)",
+          }}
+        >
+          <View
+            style={{
+              width: "100%",
+              maxWidth: 620,
+              maxHeight: "90%",
+              borderRadius: 18,
+              overflow: "hidden",
+              backgroundColor: colors.card,
+              borderWidth: 1,
+              borderColor: colors.border,
+            }}
+          >
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "space-between",
+                padding: 18,
+                borderBottomWidth: 1,
+                borderBottomColor: colors.border,
+              }}
+            >
+              <View style={{ flex: 1, minWidth: 0, paddingRight: 12 }}>
+                <Text style={{ color: colors.text, fontSize: 19, fontWeight: "800" }}>
+                  {t.paidOrdersDetails}
+                </Text>
+                <Text style={{ color: colors.muted, marginTop: 3 }}>
+                  {t.orderNumber.replace("{id}", String(selectedDetailOrder.id))}
+                </Text>
+              </View>
+              <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityLabel={t.cancel}
+                onPress={() => setSelectedDetailOrder(null)}
+                style={{ padding: 7 }}
+              >
+                <Ionicons name="close" size={24} color={colors.muted} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView contentContainerStyle={{ padding: 18, gap: 14 }}>
+              <View style={{ gap: 6 }}>
+                <Text style={{ color: colors.text, fontSize: 14, fontWeight: "700" }}>
+                  {t.tabDelivery}
+                </Text>
+                <Text style={{ color: colors.muted, fontSize: 13 }}>
+                  {selectedDetailOrder.customerName ?? t.customer} · {formatColombiaTime(selectedDetailOrder.createdAt, undefined, {
+                    day: "2-digit",
+                    month: "short",
+                    year: "numeric",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </Text>
+                {!!selectedDetailOrder.assignedDeliveryPersonName && (
+                  <Text style={{ color: "#10B981", fontSize: 13, fontWeight: "700" }}>
+                    {t.deliveryConfirmedWithDriver.replace(
+                      "{driver}",
+                      selectedDetailOrder.assignedDeliveryPersonName,
+                    )}
+                  </Text>
+                )}
+              </View>
+
+              <View style={{ height: 1, backgroundColor: colors.border }} />
+              <Text style={{ color: colors.text, fontSize: 15, fontWeight: "800" }}>
+                {t.paidOrdersProducts}
+              </Text>
+              {selectedDetailOrder.orderDetails
+                .filter(
+                  (detail) =>
+                    detail.status !== OrderDetailStatus.Voided &&
+                    detail.status !== OrderDetailStatus.Cancelled,
+                )
+                .map((detail) => (
+                  <View
+                    key={detail.id}
+                    style={{
+                      flexDirection: "row",
+                      justifyContent: "space-between",
+                      alignItems: "flex-start",
+                      gap: 12,
+                    }}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ color: colors.text, fontSize: 14 }}>
+                        {detail.quantity}x {detail.productName}
+                      </Text>
+                      {!!detail.notes && (
+                        <Text style={{ color: colors.muted, fontSize: 12, marginTop: 2 }}>
+                          {detail.notes}
+                        </Text>
+                      )}
+                    </View>
+                    <Text style={{ color: colors.text, fontSize: 14 }}>
+                      ${Math.round(
+                        Number(
+                          detail.subTotal ??
+                            Number(detail.unitPrice ?? 0) *
+                              Number(detail.quantity ?? 0),
+                        ),
+                      ).toLocaleString("es-CO")}
+                    </Text>
+                  </View>
+                ))}
+
+              <View style={{ height: 1, backgroundColor: colors.border, marginTop: 2 }} />
+              <BreakdownRows
+                subTotal={selectedDetailOrder.subTotal}
+                tax={selectedDetailOrder.tax}
+                taxRate={selectedDetailOrder.taxRate}
+                taxIncludedInPrice={selectedDetailOrder.taxIncludedInPrice}
+                deliveryFee={selectedDetailOrder.deliveryFee}
+                lang={language}
+                textColor={colors.text}
+                mutedColor={colors.muted}
+              />
+              <View style={{ flexDirection: "row", justifyContent: "space-between", gap: 12 }}>
+                <Text style={{ color: colors.text, fontSize: 16, fontWeight: "800" }}>
+                  {t.totalToCharge}
+                </Text>
+                <Text style={{ color: colors.text, fontSize: 17, fontWeight: "800" }}>
+                  ${selectedDetailOrder.total.toLocaleString("es-CO")}
+                </Text>
+              </View>
+            </ScrollView>
+
+            <View style={{ padding: 16, borderTopWidth: 1, borderTopColor: colors.border }}>
+              {selectedDetailOrder.status === OrderStatus.Pending ? (
+                <TouchableOpacity
+                  accessibilityRole="button"
+                  disabled={confirmingId === selectedDetailOrder.id}
+                  onPress={() => {
+                    const orderToConfirm = selectedDetailOrder;
+                    setSelectedDetailOrder(null);
+                    if (orderToConfirm) void handleConfirm(orderToConfirm);
+                  }}
+                  style={{
+                    minHeight: 46,
+                    alignItems: "center",
+                    justifyContent: "center",
+                    borderRadius: 12,
+                    backgroundColor: "#10B981",
+                    opacity: confirmingId === selectedDetailOrder.id ? 0.65 : 1,
+                  }}
+                >
+                  <Text style={{ color: "#FFFFFF", fontWeight: "800" }}>
+                    {confirmingId === selectedDetailOrder.id ? t.confirmingOrder : t.confirmOrder}
+                  </Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  accessibilityRole="button"
+                  onPress={() => setSelectedDetailOrder(null)}
+                  style={{
+                    minHeight: 46,
+                    alignItems: "center",
+                    justifyContent: "center",
+                    borderRadius: 12,
+                    backgroundColor: colors.border,
+                  }}
+                >
+                  <Text style={{ color: colors.text, fontWeight: "800" }}>
+                    {t.cancel}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+        </View>
+      )}
+    </Modal>
+    </>
   );
 }
 // Pide al backend que consulte a Wompi el estado real de los pagos pendientes.

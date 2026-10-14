@@ -28,4 +28,11 @@ export const employeeService = {
     });
     return handleResponse<EmployeeMe>(res);
   },
+  updateMyLocation: async (latitude: number, longitude: number): Promise<void> => {
+    const res = await fetchAuthed(`${EMPLOYEES_BASE_URL}/me/location`, {
+      method: "PUT",
+      body: JSON.stringify({ latitude, longitude }),
+    });
+    await handleResponse(res);
+  },
 };

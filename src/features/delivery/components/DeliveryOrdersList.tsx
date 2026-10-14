@@ -1,19 +1,24 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "expo-router";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  AppState,
   Alert,
   FlatList,
   Linking,
+  Platform,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import * as Location from "expo-location";
 import { deliveryService } from "../services/deliveryService";
 import { Delivery, DeliveryStatus } from "../types/delivery.types";
 import { DeliveryModals } from "./DeliveryModals";
 import { useDeliveryContext } from "./context/DeliveryContext";
+import { getDeliveryTheme } from "./context/deliveryTheme";
 import { useMyProfile } from "@/features/employees/hooks/useMyProfile";
 import {
   TRANSLATIONS,
@@ -21,49 +26,22 @@ import {
 } from "../../../locales/DeliveryTranslations";
 import { styles } from "./style/DeliveryOrdersListStyles";
 import { NotificationBell } from "@/features/notifications/components/NotificationBell";
-import { useNotificationListener } from "@/features/notifications/context/UserNotificationsContext";
+import {
+  useUserNotifications,
+} from "@/features/notifications/context/UserNotificationsContext";
+import { employeeService } from "@/features/employees/services/employeeService";
+import { subscribeToNetworkRecovery } from "@/features/shared/services/networkStatus";
+import { loadSession } from "@/features/auth/services/tokenStorage";
+import { useRealtimeEvents } from "@/features/shared/hooks/useRealtimeEvents";
 
 
 export const DeliveryOrdersList = () => {
   const { language, isDark } = useDeliveryContext();
   const t = TRANSLATIONS[language as LanguageCode] || TRANSLATIONS["es"];
-  const { profile } = useMyProfile();
+  const { profile, refetch: refetchProfile } = useMyProfile();
+  const { reportDeliveryLocation } = useUserNotifications();
 
-  const colors = isDark
-    ? {
-        background: "#0F172A",
-        card: "#1E293B",
-        text: "#F8FAFC",
-        muted: "#94A3B8",
-        border: "#334155",
-        accent: "#E61C24",
-        btnPrimary: "#E61C24",
-        badgeSuccessBg: "#064E3B",
-        badgeSuccessText: "#34D399",
-        badgeWarningBg: "#78350F",
-        badgeWarningText: "#FBBF24",
-        badgeInfoBg: "#1E3A8A",
-        badgeInfoText: "#93C5FD",
-        badgeDangerBg: "#7F1D1D",
-        badgeDangerText: "#FCA5A5",
-      }
-    : {
-        background: "#F8FAFC",
-        card: "#FFFFFF",
-        text: "#1E293B",
-        muted: "#64748B",
-        border: "#E2E8F0",
-        accent: "#E61C24",
-        btnPrimary: "#1A1A1A",
-        badgeSuccessBg: "#ECFDF5",
-        badgeSuccessText: "#10B981",
-        badgeWarningBg: "#FEF3C7",
-        badgeWarningText: "#D97706",
-        badgeInfoBg: "#DBEAFE",
-        badgeInfoText: "#2563EB",
-        badgeDangerBg: "#FEE2E2",
-        badgeDangerText: "#DC2626",
-      };
+  const colors = getDeliveryTheme(isDark);
 
   const [deliveries, setDeliveries] = useState<Delivery[]>([]);
   const [loading, setLoading] = useState(true);
@@ -73,12 +51,86 @@ export const DeliveryOrdersList = () => {
   const [mapModalVisible, setMapModalVisible] = useState(false);
   const [isSheetExpanded, setIsSheetExpanded] = useState(true);
   const [startError, setStartError] = useState<string | null>(null);
+  const [activatingAvailability, setActivatingAvailability] = useState(false);
+  const hasInTransitDelivery = deliveries.some(
+    (delivery) => delivery.status === DeliveryStatus.InTransit,
+  );
+  const lastLocationReportAtRef = useRef(0);
+  const locationPermissionRequestedRef = useRef(false);
+  const locationReportInFlightRef = useRef<Promise<void> | null>(null);
+
+  const reportDriverLocation = useCallback(
+    async (force = false) => {
+      if (
+        Platform.OS === "web" ||
+        !profile?.id ||
+        (!profile.isAvailable && !hasInTransitDelivery && !force) ||
+        Date.now() - lastLocationReportAtRef.current <
+          (hasInTransitDelivery ? 10_000 : 60_000)
+      ) {
+        return;
+      }
+
+      if (locationReportInFlightRef.current) {
+        await locationReportInFlightRef.current;
+        return;
+      }
+
+      const request = (async () => {
+        try {
+          let permission = await Location.getForegroundPermissionsAsync();
+          if (
+            !permission.granted &&
+            permission.canAskAgain &&
+            (force || !locationPermissionRequestedRef.current)
+          ) {
+            locationPermissionRequestedRef.current = true;
+            permission = await Location.requestForegroundPermissionsAsync();
+          }
+          if (!permission.granted) return;
+
+          const position = await Location.getCurrentPositionAsync({
+            accuracy: Location.Accuracy.Balanced,
+          });
+          const latitude = position.coords.latitude;
+          const longitude = position.coords.longitude;
+          const sentOverSocket = await reportDeliveryLocation(latitude, longitude);
+          if (!sentOverSocket) {
+            // Conserva el reporte si SignalR aún está conectando o reconectando.
+            await employeeService.updateMyLocation(latitude, longitude);
+          }
+          lastLocationReportAtRef.current = Date.now();
+        } catch {
+          // Si no hay GPS o señal, se conserva la ubicación anterior y la lista
+          // sigue cargando; el servidor descarta ubicaciones demasiado antiguas.
+        }
+      })();
+
+      locationReportInFlightRef.current = request;
+      try {
+        await request;
+      } finally {
+        if (locationReportInFlightRef.current === request) {
+          locationReportInFlightRef.current = null;
+        }
+      }
+    },
+    [
+      profile?.id,
+      profile?.isAvailable,
+      hasInTransitDelivery,
+      reportDeliveryLocation,
+    ],
+  );
 
   const fetchDeliveries = useCallback(
     async (silent = false) => {
       if (!profile?.id) return;
       if (!silent) setLoading(true);
       try {
+        // Actualizar GPS antes del GET: ese endpoint también reintenta pedidos
+        // que esperaban un repartidor y así toma la ubicación más reciente.
+        await reportDriverLocation();
         const data = await deliveryService.getByEmployee(profile.id);
         // Solo lo activo — lo ya entregado no se muestra aquí
         setDeliveries(
@@ -89,38 +141,117 @@ export const DeliveryOrdersList = () => {
           ),
         );
       } catch (err: any) {
-        if (!silent)
+        if (!silent) {
+          // apiClient cierra la sesión cuando confirma que el token fue
+          // revocado. No pongas encima del login un alert de una petición
+          // antigua de esta pantalla.
+          if (
+            (err?.statusCode === 401 || err?.statusCode === 403) &&
+            !(await loadSession())
+          ) {
+            return;
+          }
           Alert.alert(
-            "Error",
-            err?.message ?? "No se pudieron cargar tus entregas.",
+            t.errorTitle ?? "Error",
+            err?.message ?? t.deliveryLoadError ?? "No se pudieron cargar tus entregas.",
           );
+        }
       } finally {
         if (!silent) setLoading(false);
       }
     },
-    [profile?.id],
+    [language, profile?.id, reportDriverLocation],
   );
-  // Al llegar un domicilio asignado (o cambiar/cancelarse un pedido) se recarga la lista al instante
-  useNotificationListener((n) => {
+
+  useEffect(() => {
     if (
-      [
-        "DeliveryAssigned",
-        "OrderStatusChanged",
-        "OrderReady",
-        "Resync",
-      ].includes(n.type)
-    ) {
-      fetchDeliveries(true);
-    }
-  });
-  // Refresca al enfocar la pantalla y cada 20 s en segundo plano
+      !profile?.id ||
+      (!profile.isAvailable && !hasInTransitDelivery) ||
+      Platform.OS === "web"
+    ) return;
+    let cancelled = false;
+    let subscription: Location.LocationSubscription | null = null;
+
+    void (async () => {
+      await reportDriverLocation();
+      if (cancelled) return;
+
+      const permission = await Location.getForegroundPermissionsAsync();
+      if (!permission.granted) return;
+
+      subscription = await Location.watchPositionAsync(
+        {
+          accuracy: Location.Accuracy.Balanced,
+          distanceInterval: hasInTransitDelivery ? 15 : 75,
+          timeInterval: hasInTransitDelivery ? 10_000 : 60_000,
+        },
+        () => void reportDriverLocation(),
+      );
+      if (cancelled) subscription.remove();
+    })().catch(() => undefined);
+
+    return () => {
+      cancelled = true;
+      subscription?.remove();
+    };
+  }, [
+    profile?.id,
+    profile?.isAvailable,
+    hasInTransitDelivery,
+    reportDriverLocation,
+  ]);
+  useRealtimeEvents(
+    ["DeliveriesChanged", "OrdersChanged", "RealtimeConnected"],
+    () => void fetchDeliveries(true),
+  );
+
+  // Carga al entrar y al volver a esta pantalla.
   useFocusEffect(
     useCallback(() => {
       fetchDeliveries();
-      const id = setInterval(() => fetchDeliveries(true), 20000);
-      return () => clearInterval(id);
     }, [fetchDeliveries]),
   );
+
+  // Si el backend vuelve a responder después de un corte, consulta de inmediato
+  // los domicilios que pudieron asignarse mientras el repartidor estaba desconectado.
+  useEffect(
+    () =>
+      subscribeToNetworkRecovery(() => {
+        void fetchDeliveries(true);
+        void refetchProfile();
+      }),
+    [fetchDeliveries, refetchProfile],
+  );
+
+  // En móviles, los temporizadores y SignalR pueden quedar suspendidos en segundo
+  // plano. Al volver a la app se consultan de nuevo pedidos y disponibilidad.
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state !== "active") return;
+      void fetchDeliveries(true);
+      void refetchProfile();
+    });
+    return () => subscription.remove();
+  }, [fetchDeliveries, refetchProfile]);
+
+  const handleEnableAvailability = async () => {
+    setActivatingAvailability(true);
+    try {
+      // El backend guarda la disponibilidad y reintenta asignar domicilios
+      // confirmados que hayan quedado pendientes en esta sede.
+      await reportDriverLocation(true);
+      await employeeService.setAvailability(true);
+      await refetchProfile();
+      await fetchDeliveries();
+    } catch (err: any) {
+      Alert.alert(
+        t.errorTitle,
+        err?.message ?? "No se pudo activar la disponibilidad.",
+      );
+    } finally {
+      setActivatingAvailability(false);
+    }
+  };
 
   // Mantiene el modal abierto sincronizado con el último refresco de la lista
   useEffect(() => {
@@ -178,7 +309,7 @@ export const DeliveryOrdersList = () => {
         );
       }, 400);
     } catch (err: any) {
-      Alert.alert("Error", err?.message ?? "No se pudo marcar como entregado.");
+      Alert.alert(t.errorTitle, err?.message ?? t.deliveryMarkError);
     }
   };
 
@@ -230,22 +361,22 @@ export const DeliveryOrdersList = () => {
               }}
             >
               {isInTransit
-                ? "En camino"
+                ? t.onWayLabel
                 : waitingKitchen
-                  ? "En cocina"
-                  : "Listo para recoger"}
+                  ? t.inKitchenLabel
+                  : t.readyForPickupLabel}
             </Text>
           </View>
         </View>
 
         <Text style={[styles.customerName, { color: colors.text }]}>
-          🧑 {item.customerName ?? "Cliente"}
+          🧑 {item.customerName ?? t.customerLabel}
         </Text>
         <Text style={[styles.addressText, { color: colors.muted }]}>
-          📍 {item.addressText ?? "Sin dirección"}
+          📍 {item.addressText ?? t.noAddressLabel}
         </Text>
         <Text style={[styles.itemsSummaryText, { color: colors.accent }]}>
-          🍔 {item.itemsCount} artículos
+          🍔 {t.deliveryItemsCount(item.itemsCount)}
         </Text>
         {(item.items ?? []).slice(0, 3).map((it, i) => (
           <Text key={i} style={{ color: colors.muted, fontSize: 13 }}>
@@ -254,7 +385,7 @@ export const DeliveryOrdersList = () => {
         ))}
         {(item.items?.length ?? 0) > 3 && (
           <Text style={{ color: colors.muted, fontSize: 13 }}>
-            +{item.items.length - 3} más…
+            +{item.items.length - 3} {t.moreItems}
           </Text>
         )}
 
@@ -286,52 +417,103 @@ export const DeliveryOrdersList = () => {
           </View>
         </View>
 
-        <TouchableOpacity
-          style={[
-            styles.acceptButton,
-            {
-              backgroundColor: isInTransit
-                ? "#3B82F6"
-                : waitingKitchen
-                  ? "#94A3B8"
-                  : colors.btnPrimary,
-            },
-          ]}
-          disabled={waitingKitchen}
-          onPress={() =>
-            isInTransit ? handleOpenDelivery(item) : handleStartTrip(item)
-          }
-        >
-          <Text style={[styles.acceptButtonText, { color: "#FFFFFF" }]}>
-            {isInTransit
-              ? "Ver ruta"
-              : waitingKitchen
-                ? "Esperando a cocina"
-                : "Iniciar entrega"}
-          </Text>
-        </TouchableOpacity>
+        {waitingKitchen ? (
+          <View style={{ flexDirection: "row", gap: 10 }}>
+            <TouchableOpacity
+              style={[
+                styles.acceptButton,
+                {
+                  flex: 1,
+                  backgroundColor: colors.badgeWarningBg,
+                  borderWidth: 1,
+                  borderColor: isDark ? colors.badgeWarningText : "#D97706",
+                },
+              ]}
+              disabled
+              accessibilityRole="button"
+              accessibilityState={{ disabled: true }}
+            >
+              <Text
+                style={[
+                  styles.acceptButtonText,
+                  {
+                    color: isDark ? colors.badgeWarningText : "#92400E",
+                    textAlign: "center",
+                  },
+                ]}
+              >
+                {t.waitingInKitchen}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.acceptButton,
+                {
+                  flex: 1,
+                  flexDirection: "row",
+                  justifyContent: "center",
+                  gap: 6,
+                  backgroundColor: "#3B82F6",
+                },
+              ]}
+              onPress={() => handleOpenDelivery(item)}
+              accessibilityRole="button"
+              accessibilityLabel={t.viewOrderLocation}
+            >
+              <Ionicons name="map-outline" size={18} color="#FFFFFF" />
+              <Text style={[styles.acceptButtonText, { color: "#FFFFFF" }]}>
+                {t.viewMap}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <TouchableOpacity
+            style={[
+              styles.acceptButton,
+              {
+                backgroundColor: isInTransit ? "#3B82F6" : colors.btnPrimary,
+              },
+            ]}
+            onPress={() =>
+              isInTransit ? handleOpenDelivery(item) : handleStartTrip(item)
+            }
+          >
+            <Text style={[styles.acceptButtonText, { color: "#FFFFFF" }]}>
+              {isInTransit ? t.viewRoute : t.goForOrder}
+            </Text>
+          </TouchableOpacity>
+        )}
       </View>
     );
   };
 
   if (loading)
     return (
-      <View style={styles.centered}>
+      <SafeAreaView
+        edges={["top"]}
+        style={[styles.centered, { backgroundColor: colors.background }]}
+      >
         <ActivityIndicator size="large" color={colors.accent} />
-      </View>
+      </SafeAreaView>
     );
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
+    <SafeAreaView
+      edges={["top"]}
+      style={[styles.container, { backgroundColor: colors.background }]}
+    >
       <View
         style={{
           flexDirection: "row",
           justifyContent: "flex-end",
           paddingHorizontal: 16,
-          paddingTop: 12,
+          paddingTop: 4,
         }}
       >
-        <NotificationBell />
+        <NotificationBell
+          colors={colors}
+          t={(key) => t[key] ?? key}
+        />
       </View>
       {startError && (
         <View
@@ -339,19 +521,19 @@ export const DeliveryOrdersList = () => {
             flexDirection: "row",
             alignItems: "center",
             gap: 8,
-            backgroundColor: "#FEF3C7",
+            backgroundColor: colors.warningBg,
             padding: 12,
             marginHorizontal: 16,
             marginTop: 12,
             borderRadius: 10,
           }}
         >
-          <Ionicons name="alert-circle-outline" size={18} color="#92400E" />
-          <Text style={{ flex: 1, color: "#92400E", fontWeight: "600" }}>
+          <Ionicons name="alert-circle-outline" size={18} color={colors.warningText} />
+          <Text style={{ flex: 1, color: colors.warningText, fontWeight: "600" }}>
             {startError}
           </Text>
           <TouchableOpacity onPress={() => setStartError(null)}>
-            <Ionicons name="close" size={18} color="#92400E" />
+            <Ionicons name="close" size={18} color={colors.warningText} />
           </TouchableOpacity>
         </View>
       )}
@@ -367,8 +549,47 @@ export const DeliveryOrdersList = () => {
           <View style={styles.emptyContainer}>
             <Ionicons name="bicycle-outline" size={60} color={colors.muted} />
             <Text style={[styles.emptyText, { color: colors.muted }]}>
-              No tienes pedidos asignados por ahora.
+              {t.noAssignedOrders}
             </Text>
+            {profile && !profile.isAvailable && (
+              <>
+                <Text
+                  style={{
+                    color: colors.muted,
+                    textAlign: "center",
+                    marginTop: 12,
+                    paddingHorizontal: 24,
+                  }}
+                >
+                  {t.enableAvailabilityHint}
+                </Text>
+                <TouchableOpacity
+                  onPress={handleEnableAvailability}
+                  disabled={activatingAvailability}
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 8,
+                    backgroundColor: colors.btnPrimary,
+                    paddingHorizontal: 18,
+                    paddingVertical: 12,
+                    borderRadius: 10,
+                    marginTop: 14,
+                    opacity: activatingAvailability ? 0.65 : 1,
+                  }}
+                >
+                  {activatingAvailability ? (
+                    <ActivityIndicator color="#FFFFFF" />
+                  ) : (
+                    <Ionicons name="radio-button-on-outline" size={18} color="#FFFFFF" />
+                  )}
+                  <Text style={{ color: "#FFFFFF", fontWeight: "700" }}>
+                    {activatingAvailability ? t.searchingOrders : t.receiveOrders}
+                  </Text>
+                </TouchableOpacity>
+              </>
+            )}
           </View>
         }
       />
@@ -384,6 +605,6 @@ export const DeliveryOrdersList = () => {
         handleFinishDelivery={handleFinishDelivery}
         styles={styles}
       />
-    </View>
+    </SafeAreaView>
   );
 };;

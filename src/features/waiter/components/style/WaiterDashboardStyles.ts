@@ -89,6 +89,7 @@ export const styles = StyleSheet.create({
   capacityBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F1F5F9', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, marginBottom: 8, gap: 4 },
   capacityText: { fontSize: 12, color: '#64748B', fontWeight: '600', fontFamily: baseFontFamily },
   gridTableStatus: { fontSize: 13, fontWeight: 'bold', textTransform: 'uppercase' },
+  gridTableWaiter: { fontSize: 11, fontWeight: '600', marginTop: 5, textAlign: 'center', fontFamily: baseFontFamily },
 
   // ÓRDENES ACTIVAS
   emptyOrders: { alignItems: 'center', marginTop: 50 },

@@ -7,57 +7,119 @@ import {
   Platform,
   LayoutAnimation,
   Modal,
+  ScrollView,
+  Alert,
+  useWindowDimensions,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "expo-router";
 import { styles } from "../style/CashierStyles";
-import { useCashierContext } from "../context/CashierContext";
+import { useCashierContext } from "@/features/cashier";
 
 import { STAFF_TODAY, Employee, Order } from "./CashierData";
 import { OrdersFeature } from "./OrdersFeature";
 import { DeliveryOrdersPanel } from "./DeliveryOrdersPanel";
+import { PaidOrdersPanel } from "./PaidOrdersPanel";
 import { useMyBranch } from "@/features/employees/hooks/useMyBranch";
-import { useCashierOrders } from "../hooks/useCashierOrders";
+import { useCashierOrders } from "@/features/cashier";
+import { useTables } from "@/features/tables/hooks/useTables";
+import { TableStatus } from "@/features/tables/types/table.types";
 import { useCashierNotifications } from "../hooks/useCashierNotifications";
 import { paymentService } from "@/features/payments/services/paymentService";
-import { orderService } from "@/features/orders/services/orderService";
-import { OrderStatus, OrderType } from "@/features/orders/types/order.types";
+import { orderService, OrderStatus, OrderType } from "@/features/orders";
 import type { CashierShiftSummary } from "@/features/payments/types/payment.types";
 import { isReadyForCashier } from "./DeliveryOrdersPanel";
+import { useMyProfile } from "@/features/employees/hooks/useMyProfile";
+import { isColombiaToday } from "@/features/shared/utils/colombia-date";
 
 import {
   TRANSLATIONS,
   LanguageCode,
 } from "./../../../locales/CashierTranslations";
 
-
 export default function CashierDashboard() {
+  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
+  const isNarrowScreen = screenWidth < 390;
   const navigation = useNavigation();
-  const { language, isDark, notificationSound } = useCashierContext();
+  const {
+    language,
+    isDark,
+    notificationSound,
+    vibrationNotifications,
+    autoPrint,
+  } = useCashierContext();
+  const { profile: cashierProfile } = useMyProfile();
+  const cashierName = [cashierProfile?.name, cashierProfile?.lastName]
+    .filter(Boolean)
+    .join(" ")
+    .trim();
   const t = TRANSLATIONS[language as LanguageCode] || TRANSLATIONS["es"];
 
   // 🔥 PALETA GLOBAL DE COLORES
   const colors = {
-    background: isDark ? "#0F172A" : "#F8FAFC",
-    card: isDark ? "#1E293B" : "#FFFFFF",
+    background: isDark ? "#0B1220" : "#F8FAFC",
+    card: isDark ? "#111827" : "#FFFFFF",
     text: isDark ? "#F8FAFC" : "#1E293B",
-    muted: isDark ? "#94A3B8" : "#64748B",
+    muted: isDark ? "#CBD5E1" : "#64748B",
     border: isDark ? "#334155" : "#E2E8F0",
     buttonDark: isDark ? "#334155" : "#1E293B",
   };
 
   const [activeTab, setActiveTab] = useState<
-    "mesa" | "llevar" | "delivery" | "personal"
+    "mesa" | "llevar" | "delivery" | "pagados" | "personal"
   >("mesa");
   const { branchId } = useMyBranch();
   const {
     orders,
     setOrders,
     loading: ordersLoading,
+    error: ordersError,
     markAsPaid,
-    refetch,
+    paidOrdersAwaitingDelivery,
+    paidOrders,
+    tablesWithBlockingOrders,
   } = useCashierOrders(branchId);
+
+  const { tables, setTableStatus } = useTables(branchId);
+
+  const tablesWithoutOrder = tables.filter(
+    (tb) =>
+      !ordersLoading &&
+      !ordersError &&
+      tb.status === TableStatus.Occupied &&
+      !tablesWithBlockingOrders.has(tb.id) &&
+      !orders.some((o) => o.table === tb.number),
+  );
+  const tableOrderCount =
+    orders.filter((order) => order.type === "mesa").length +
+    paidOrdersAwaitingDelivery.length;
+
+  const [tableToRelease, setTableToRelease] = useState<{
+    id: number;
+    number: number;
+  } | null>(null);
+  const [releasing, setReleasing] = useState(false);
+
+  const handleReleaseTable = (tableId: number, tableNumber: number) => {
+    setTableToRelease({ id: tableId, number: tableNumber });
+  };
+
+  const confirmReleaseTable = async () => {
+    if (!tableToRelease) return;
+    const target = tableToRelease;
+    setReleasing(true);
+    setTableToRelease(null);
+    try {
+      await setTableStatus(target.id, TableStatus.Available);
+      showToast(t.tableReleased.replace("{table}", String(target.number)));
+    } catch (err: any) {
+      showToast(t.releaseTableFailed.replace("{error}", err?.message ?? ""));
+    } finally {
+      setReleasing(false);
+    }
+  };
+
   // Pedidos de domicilio que se ven en la pestaña Delivery (mismo filtro que el panel)
   const [deliveryCount, setDeliveryCount] = useState(0);
   const fetchDeliveryCount = useCallback(async () => {
@@ -67,17 +129,25 @@ export default function CashierDashboard() {
     }
     try {
       const all = await orderService.getAll(branchId);
-      const todayStr = new Date().toDateString();
       const candidates = all.filter(
         (o) =>
           o.orderType === OrderType.Delivery &&
           o.status === OrderStatus.Pending &&
           o.orderDetails.length > 0 &&
-          new Date(o.createdAt).toDateString() === todayStr,
+          isColombiaToday(o.createdAt),
       );
       // Mismo criterio del panel: efectivo, o Wompi ya aprobado
       const checks = await Promise.all(candidates.map(isReadyForCashier));
-      setDeliveryCount(checks.filter(Boolean).length);
+      const confirmedDeliveries = all.filter(
+        (o) =>
+          o.orderType === OrderType.Delivery &&
+          (o.status === OrderStatus.Confirmed ||
+            o.status === OrderStatus.InPreparation ||
+            o.status === OrderStatus.Ready) &&
+          isColombiaToday(o.createdAt),
+      ).length;
+      // La pestaña también muestra los domicilios confirmados en el pie.
+      setDeliveryCount(checks.filter(Boolean).length + confirmedDeliveries);
     } catch {
       // Silencioso: se reintenta en el siguiente ciclo
     }
@@ -85,8 +155,6 @@ export default function CashierDashboard() {
 
   useEffect(() => {
     fetchDeliveryCount();
-    const id = setInterval(fetchDeliveryCount, 15000);
-    return () => clearInterval(id);
   }, [fetchDeliveryCount]);
 
   const [staff, setStaff] = useState<Employee[]>(STAFF_TODAY);
@@ -132,35 +200,46 @@ export default function CashierDashboard() {
   // Sube cada vez que llega una notificación, para que el panel de Delivery se recargue.
   const [deliveryRefreshKey, setDeliveryRefreshKey] = useState(0);
 
-  const { soundEnabled, enableSound } = useCashierNotifications(async (n) => {
-    refetch();
+  // Refresca los contadores y el panel de domicilios; pedidos y mesas escuchan sus eventos.
+  const refreshAll = useCallback(() => {
     fetchDeliveryCount();
     setDeliveryRefreshKey((k) => k + 1);
+  }, [fetchDeliveryCount]);
 
-    if (n.type !== "OrderReady" && n.type !== "OrderCreated") return;
+  const { soundEnabled, enableSound } = useCashierNotifications(
+    async (n) => {
+      if (n.type === "PaymentConfirmed") {
+        showToast(n.message);
+        return;
+      }
+      if (n.type !== "OrderCreated") return;
 
-    // Se consulta el pedido para saber en qué pestaña quedó
-    let lugar = "";
-    if (n.relatedEntityId) {
-      try {
-        const o = await orderService.getById(n.relatedEntityId);
-        lugar =
-          o.orderType === OrderType.DineIn
-            ? `En Mesa${o.tableNumber ? ` ${o.tableNumber}` : ""}`
-            : o.orderType === OrderType.Delivery
-              ? "Delivery"
-              : "Para Llevar";
-      } catch {}
-    }
-    const sufijo = lugar ? ` — pestaña: ${lugar}` : "";
-    const numero = n.relatedEntityId ? ` #${n.relatedEntityId}` : "";
+      // Se consulta el pedido para saber en qué pestaña quedó
+      let lugar = "";
+      if (n.relatedEntityId) {
+        try {
+          const o = await orderService.getById(n.relatedEntityId);
+          lugar =
+            o.orderType === OrderType.DineIn
+              ? t.locationTable.replace("{table}", String(o.tableNumber ?? ""))
+              : o.orderType === OrderType.Delivery
+                ? t.tabDelivery
+                : t.tabTakeaway;
+        } catch {}
+      }
+      const location = lugar ? t.toastTabSuffix.replace("{tab}", lugar) : "";
+      const orderNumber = n.relatedEntityId ? ` #${n.relatedEntityId}` : "";
 
-    if (n.type === "OrderCreated") {
-      showToast(`🔔 Llegó un pedido nuevo${numero}${sufijo}`);
-    } else {
-      showToast(`✅ El pedido${numero} está listo para cobrar${sufijo}`);
-    }
-  }, notificationSound);
+      showToast(
+        t.toastNewOrder
+          .replace("{number}", orderNumber)
+          .replace("{location}", location),
+      );
+    },
+    notificationSound,
+    refreshAll,
+    vibrationNotifications,
+  );
 
   const handleOpenCloseRegister = async () => {
     setCloseRegisterModal(true);
@@ -206,12 +285,24 @@ export default function CashierDashboard() {
           { backgroundColor: colors.card, borderBottomColor: colors.border },
         ]}
       >
-        <View style={styles.headerLeft}>
-          <View>
-            <Text style={[styles.headerSubtitle, { color: colors.muted }]}>
-              {t.shiftManagement}
+        <View
+          style={[
+            styles.headerLeft,
+            { flex: 1, minWidth: 0, paddingRight: 12 },
+          ]}
+        >
+          {!!cashierName && (
+            <Text
+              style={[
+                styles.headerTitle,
+                { color: colors.text, flexShrink: 1 },
+              ]}
+              numberOfLines={1}
+              ellipsizeMode="tail"
+            >
+              {cashierName}
             </Text>
-          </View>
+          )}
         </View>
 
         <View style={styles.headerActions}>
@@ -251,12 +342,17 @@ export default function CashierDashboard() {
       <View
         style={[
           styles.tabContainer,
-          { backgroundColor: colors.card, borderBottomColor: colors.border },
+          {
+            backgroundColor: colors.card,
+            borderBottomColor: colors.border,
+            flexDirection: "row",
+          },
         ]}
       >
         <TouchableOpacity
           style={[
             styles.tabButton,
+            { flex: 1, minWidth: 0, paddingHorizontal: 4 },
             activeTab === "mesa" && styles.tabButtonActive,
           ]}
           onPress={() => setActiveTab("mesa")}
@@ -268,18 +364,14 @@ export default function CashierDashboard() {
               activeTab === "mesa" && styles.tabTextActive,
             ]}
           >
-            {t.tabTables} (
-            {
-              orders.filter((o) => o.type === "mesa" && o.status !== "pagado")
-                .length
-            }
-            )
+            {t.tabTables} ({tableOrderCount})
           </Text>
         </TouchableOpacity>
 
         <TouchableOpacity
           style={[
             styles.tabButton,
+            { flex: 1, minWidth: 0, paddingHorizontal: 4 },
             activeTab === "llevar" && styles.tabButtonActive,
           ]}
           onPress={() => setActiveTab("llevar")}
@@ -309,6 +401,7 @@ export default function CashierDashboard() {
         <TouchableOpacity
           style={[
             styles.tabButton,
+            { flex: 1, minWidth: 0, paddingHorizontal: 4 },
             activeTab === "delivery" && styles.tabButtonActive,
           ]}
           onPress={() => setActiveTab("delivery")}
@@ -323,9 +416,90 @@ export default function CashierDashboard() {
             {t.tabDelivery} ({deliveryCount})
           </Text>
         </TouchableOpacity>
+        <TouchableOpacity
+          style={[
+            styles.tabButton,
+            { flex: 1, minWidth: 0, paddingHorizontal: 4 },
+            activeTab === "pagados" && styles.tabButtonActive,
+          ]}
+          onPress={() => setActiveTab("pagados")}
+        >
+          <Text
+            style={[
+              styles.tabText,
+              { color: colors.muted },
+              activeTab === "pagados" && styles.tabTextActive,
+            ]}
+          >
+            {t.tabPaid} ({paidOrders.length})
+          </Text>
+        </TouchableOpacity>
       </View>
 
       <View style={styles.content}>
+        {activeTab === "mesa" && tablesWithoutOrder.length > 0 && (
+          <View
+            style={{
+              maxHeight: 190,
+              margin: 16,
+              marginBottom: 0,
+              borderRadius: 12,
+              borderWidth: 1,
+              borderColor: "#F59E0B",
+              backgroundColor: isDark ? "#451a03" : "#FEF3C7",
+              padding: 12,
+            }}
+          >
+            <Text
+              style={{
+                color: isDark ? "#fde68a" : "#92400E",
+                fontWeight: "800",
+                marginBottom: 8,
+              }}
+            >
+              {t.tablesOccupiedNoOrder.replace(
+                "{count}",
+                String(tablesWithoutOrder.length),
+              )}
+            </Text>
+            <ScrollView>
+              {tablesWithoutOrder.map((tb) => (
+                <View
+                  key={tb.id}
+                  style={{
+                    flexDirection: "row",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    paddingVertical: 6,
+                  }}
+                >
+                  <Text
+                    style={{
+                      color: isDark ? "#fde68a" : "#92400E",
+                      fontWeight: "600",
+                    }}
+                  >
+                    {t.tableNumber.replace("{number}", String(tb.number))}
+                  </Text>
+                  <TouchableOpacity
+                    onPress={() => handleReleaseTable(tb.id, tb.number)}
+                    style={{
+                      backgroundColor: colors.buttonDark,
+                      paddingHorizontal: 14,
+                      paddingVertical: 8,
+                      borderRadius: 8,
+                    }}
+                  >
+                    <Text style={{ color: "#FFFFFF", fontWeight: "bold" }}>
+                      {t.release}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </ScrollView>
+          </View>
+        )}
+
         {(activeTab === "mesa" || activeTab === "llevar") && (
           <OrdersFeature
             orders={orders}
@@ -337,6 +511,7 @@ export default function CashierDashboard() {
             setActiveTab={setActiveTab}
             lang={language}
             isDark={isDark}
+            autoPrint={autoPrint}
           />
         )}
         {activeTab === "delivery" && (
@@ -345,6 +520,13 @@ export default function CashierDashboard() {
             isDark={isDark}
             showToast={showToast}
             refreshKey={deliveryRefreshKey}
+          />
+        )}
+        {activeTab === "pagados" && (
+          <PaidOrdersPanel
+            orders={paidOrders}
+            isDark={isDark}
+            loading={ordersLoading}
           />
         )}
       </View>
@@ -357,7 +539,18 @@ export default function CashierDashboard() {
         onRequestClose={() => setCloseRegisterModal(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalBox, { backgroundColor: colors.card }]}>
+          <View
+            style={[
+              styles.modalBox,
+              {
+                backgroundColor: colors.card,
+                maxHeight: screenHeight * 0.92,
+                maxWidth: 640,
+                paddingHorizontal:
+                  screenWidth < 360 ? 14 : screenWidth < 420 ? 18 : 24,
+              },
+            ]}
+          >
             <View style={styles.modalHeader}>
               <Text style={[styles.modalTitle, { color: colors.text }]}>
                 {t.registerSummaryTitle}
@@ -367,94 +560,227 @@ export default function CashierDashboard() {
               </TouchableOpacity>
             </View>
 
-            <View
-              style={[
-                styles.summaryContainer,
-                {
-                  backgroundColor: colors.background,
-                  borderColor: colors.border,
-                },
-              ]}
+            <ScrollView
+              style={{ flexShrink: 1 }}
+              contentContainerStyle={{ paddingBottom: 4 }}
+              showsVerticalScrollIndicator={false}
             >
-              <Text style={[styles.summarySubtitle, { color: colors.muted }]}>
-                {t.shiftSummarySubtitle}
-              </Text>
-              <View style={styles.summaryRow}>
-                <View style={styles.summaryItem}>
-                  <Ionicons name="cash-outline" size={24} color="#10B981" />
-                  <Text style={[styles.summaryLabel, { color: colors.text }]}>
-                    {t.cashInDrawer}
-                  </Text>
-                </View>
-                <Text style={styles.summaryValueEfectivo}>
-                  ${totalEfectivo.toLocaleString("es-CO")}
-                </Text>
-              </View>
-              <View style={styles.summaryRow}>
-                <View style={styles.summaryItem}>
-                  <Ionicons
-                    name="swap-horizontal-outline"
-                    size={24}
-                    color="#3B82F6"
-                  />
-                  <Text style={[styles.summaryLabel, { color: colors.text }]}>
-                    {t.transfersAppBank}
-                  </Text>
-                </View>
-                <Text style={styles.summaryValueTransfer}>
-                  ${totalTransferencia.toLocaleString("es-CO")}
-                </Text>
-              </View>
-              <View style={styles.summaryRow}>
-                <View style={styles.summaryItem}>
-                  <Ionicons name="card-outline" size={24} color="#8B5CF6" />
-                  <Text style={[styles.summaryLabel, { color: colors.text }]}>
-                    Datáfono
-                  </Text>
-                </View>
-                <Text
-                  style={[styles.summaryValueTransfer, { color: "#8B5CF6" }]}
-                >
-                  ${totalDatafono.toLocaleString("es-CO")}
-                </Text>
-              </View>
-              {loadingShiftSummary && (
-                <Text
-                  style={{
-                    color: colors.muted,
-                    textAlign: "center",
-                    marginTop: 8,
-                  }}
-                >
-                  Cargando pagos del turno...
-                </Text>
-              )}
               <View
-                style={[styles.divider, { backgroundColor: colors.border }]}
-              />
-              <View style={styles.totalSummaryRow}>
-                <Text
-                  style={[styles.totalSummaryLabel, { color: colors.text }]}
+                style={[
+                  styles.summaryContainer,
+                  {
+                    backgroundColor: colors.background,
+                    borderColor: colors.border,
+                    padding: screenWidth < 360 ? 14 : 20,
+                  },
+                ]}
+              >
+                <Text style={[styles.summarySubtitle, { color: colors.muted }]}>
+                  {t.shiftSummarySubtitle}
+                </Text>
+                <View
+                  style={[
+                    styles.summaryRow,
+                    isNarrowScreen && { flexWrap: "wrap", gap: 6 },
+                  ]}
                 >
-                  {t.totalSales}
-                </Text>
-                <Text style={styles.totalSummaryValue}>
-                  ${totalGlobal.toLocaleString("es-CO")}
-                </Text>
+                  <View style={styles.summaryItem}>
+                    <Ionicons name="cash-outline" size={24} color="#10B981" />
+                    <Text style={[styles.summaryLabel, { color: colors.text }]}>
+                      {t.cashInDrawer}
+                    </Text>
+                  </View>
+                  <Text
+                    style={[
+                      styles.summaryValueEfectivo,
+                      isNarrowScreen && { fontSize: 16 },
+                    ]}
+                  >
+                    ${totalEfectivo.toLocaleString("es-CO")}
+                  </Text>
+                </View>
+                <View
+                  style={[
+                    styles.summaryRow,
+                    isNarrowScreen && { flexWrap: "wrap", gap: 6 },
+                  ]}
+                >
+                  <View style={styles.summaryItem}>
+                    <Ionicons
+                      name="swap-horizontal-outline"
+                      size={24}
+                      color="#3B82F6"
+                    />
+                    <Text style={[styles.summaryLabel, { color: colors.text }]}>
+                      {t.transfersAppBank}
+                    </Text>
+                  </View>
+                  <Text
+                    style={[
+                      styles.summaryValueTransfer,
+                      isNarrowScreen && { fontSize: 16 },
+                    ]}
+                  >
+                    ${totalTransferencia.toLocaleString("es-CO")}
+                  </Text>
+                </View>
+                <View
+                  style={[
+                    styles.summaryRow,
+                    isNarrowScreen && { flexWrap: "wrap", gap: 6 },
+                  ]}
+                >
+                  <View style={styles.summaryItem}>
+                    <Ionicons name="card-outline" size={24} color="#8B5CF6" />
+                    <Text style={[styles.summaryLabel, { color: colors.text }]}>
+                      {t.payCard}
+                    </Text>
+                  </View>
+                  <Text
+                    style={[
+                      styles.summaryValueTransfer,
+                      { color: "#8B5CF6" },
+                      isNarrowScreen && { fontSize: 16 },
+                    ]}
+                  >
+                    ${totalDatafono.toLocaleString("es-CO")}
+                  </Text>
+                </View>
+                {loadingShiftSummary && (
+                  <Text
+                    style={{
+                      color: colors.muted,
+                      textAlign: "center",
+                      marginTop: 8,
+                    }}
+                  >
+                    {t.loadingShiftPayments}
+                  </Text>
+                )}
+                <View
+                  style={[styles.divider, { backgroundColor: colors.border }]}
+                />
+                <View
+                  style={[
+                    styles.totalSummaryRow,
+                    isNarrowScreen && { flexWrap: "wrap", gap: 6 },
+                  ]}
+                >
+                  <Text
+                    style={[styles.totalSummaryLabel, { color: colors.text }]}
+                  >
+                    {t.totalSales}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.totalSummaryValue,
+                      isNarrowScreen && { fontSize: 22 },
+                    ]}
+                  >
+                    ${totalGlobal.toLocaleString("es-CO")}
+                  </Text>
+                </View>
               </View>
-            </View>
 
-            <TouchableOpacity
-              style={[
-                styles.closeShiftBtn,
-                { backgroundColor: colors.buttonDark },
-              ]}
-              onPress={handleCloseRegister}
+              <TouchableOpacity
+                style={[
+                  styles.closeShiftBtn,
+                  { backgroundColor: colors.buttonDark },
+                ]}
+                onPress={handleCloseRegister}
+              >
+                <Text style={styles.closeShiftBtnText}>
+                  {t.approveAndCloseShift}
+                </Text>
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={!!tableToRelease}
+        onRequestClose={() => setTableToRelease(null)}
+      >
+        <View
+          style={{
+            flex: 1,
+            backgroundColor: "rgba(0,0,0,0.6)",
+            justifyContent: "center",
+            alignItems: "center",
+            padding: 24,
+          }}
+        >
+          <View
+            style={{
+              width: "100%",
+              maxWidth: 360,
+              backgroundColor: colors.card,
+              borderRadius: 20,
+              padding: 22,
+              borderWidth: 1,
+              borderColor: colors.border,
+            }}
+          >
+            <Text
+              style={{
+                fontSize: 18,
+                fontWeight: "800",
+                color: colors.text,
+                textAlign: "center",
+              }}
             >
-              <Text style={styles.closeShiftBtnText}>
-                {t.approveAndCloseShift}
-              </Text>
-            </TouchableOpacity>
+              {t.releaseTableTitle.replace(
+                "{number}",
+                String(tableToRelease?.number ?? ""),
+              )}
+            </Text>
+            <Text
+              style={{
+                color: colors.muted,
+                textAlign: "center",
+                marginTop: 8,
+                marginBottom: 18,
+              }}
+            >
+              {t.releaseTableMessage}
+            </Text>
+            <View style={{ flexDirection: "row", gap: 10 }}>
+              <TouchableOpacity
+                style={{
+                  flex: 1,
+                  paddingVertical: 14,
+                  borderRadius: 12,
+                  borderWidth: 1,
+                  borderColor: colors.border,
+                  alignItems: "center",
+                }}
+                disabled={releasing}
+                onPress={() => setTableToRelease(null)}
+              >
+                <Text style={{ color: colors.text, fontWeight: "bold" }}>
+                  {t.cancel}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={{
+                  flex: 1,
+                  paddingVertical: 14,
+                  borderRadius: 12,
+                  backgroundColor: "#E61C24",
+                  alignItems: "center",
+                  opacity: releasing ? 0.6 : 1,
+                }}
+                disabled={releasing}
+                onPress={confirmReleaseTable}
+              >
+                <Text style={{ color: "#FFFFFF", fontWeight: "bold" }}>
+                  {releasing ? t.releasing : t.release}
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
