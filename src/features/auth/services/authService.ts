@@ -1,13 +1,23 @@
-import { login } from './login';
-import { registerClient } from './registerClient';
-import { registerWorker } from './registerWorker';
-import { logout } from './logout';
-import { getCurrentUser } from './getCurrentUser';
+import { login } from "./login";
+import { registerClient } from "./registerClient";
+import { logout } from "./logout";
+import { confirmEmail } from "./confirmEmail";
+import { resendConfirmationCode } from "./resendConfirmationCode";
+import { activateAccount } from "./activateAccount";
+import { resendActivationCode } from "./resendActivationCode";
+import { forgotPassword } from "./forgotPassword";
+import { verifyResetCode } from "./verifyResetCode";
+import { resetPassword } from "./resetPassword";
 
 export const authService = {
   login,
   registerClient,
-  registerWorker,
   logout,
-  getCurrentUser,
+  confirmEmail,
+  resendConfirmationCode,
+  activateAccount,
+  resendActivationCode,
+  forgotPassword,
+  verifyResetCode,
+  resetPassword,
 };

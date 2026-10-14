@@ -1,159 +1,325 @@
-// TableroPedidos.tsx
-'use client';
+import React, { useCallback, useEffect, useState } from "react";
+import {
+  View,
+  Text,
+  ScrollView,
+  RefreshControl,
+  ActivityIndicator,
+  TouchableOpacity,
+} from "react-native";
+import { orderService } from "@/features/orders/services/orderService";
+import {
+  OrderSummary,
+  OrderDetailStatus,
+  OrderChannel,
+  OrderStatus,
+  OrderType,
+  ACTIVE_ORDER_STATUSES,
+} from "@/features/orders/types/order.types";
+import { useMyBranch } from "@/features/employees/hooks/useMyBranch";
+import { chefStyles, boardStyles } from "./style/ChefStyles";
+import { useChefTheme } from "../context/ChefThemeContext";
+import { useChefLanguage } from "../context/ChefLanguageContext";
+import PedidoCard from "./PedidoCard";
+import KitchenColumns from "./KitchenColumns";
 
-import React, { useState } from 'react';
-import './style/TableroPedidos.css';
-import { Pedido, calcularTiemposConCola } from './TableroUtils';
-import PedidoCard from './PedidoCard';
-import SidebarMetricas from './SidebarMetricas';
-import { translations, LanguageCode } from './../../../locales/TableroTranslations'; // Asegúrate de la ruta correcta de importación
+import { useRouter } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
+import { useAuth } from "@/features/auth/context/AuthContext";
+import { useKitchenNotifications } from "@/features/shared/hooks/useKitchenNotifications";
+import { isColombiaToday } from "@/features/shared/utils/colombia-date";
 
-export default function TableroPedidos({ rolActual = 'cocinero' }: { rolActual?: string }) {
+// Un "lote" es la combinación de un pedido + un número de tanda enviada a cocina.
+// Cada vez que el mesero agrega productos a una mesa ya en curso, nace un lote nuevo.
+export interface KitchenBatch {
+  orderId: number;
+  batchNumber: number;
+  tableNumber: number | null;
+  orderType: string;
+  employeeName: string | null;
+  customerName: string | null;
+  assignedDeliveryPersonName: string | null;
+  awaitingCashierConfirmation: boolean;
+  createdAt: string;
+  status: OrderDetailStatus;
+  items: OrderSummary["orderDetails"];
+}
 
-  const [pedidos, setPedidos] = useState<Pedido[]>(() => {
-    const pedidosIniciales: Pedido[] = [
-      { id: 'ORD-001', nombreMesero: 'Carlos Gómez', mesa: 'Mesa 4', estado: 'Pendiente', tipoPedido: 'Mesa', horaIngreso: '12:30 PM', menu: [{ platillo: 'Hamburguesa Sencilla', cantidad: 2, notas: 'Sin cebolla, urgente' }, { platillo: 'Papas Fritas Grandes', cantidad: 1 }] },
-      { id: 'ORD-002', nombreMesero: 'Ana López', mesa: 'Mostrador', estado: 'Pendiente', tipoPedido: 'Para Llevar', horaIngreso: '12:32 PM', menu: [{ platillo: 'Pizza Peperoni', cantidad: 1, notas: 'Bien tostada por favor' }] },
-      { id: 'ORD-003', nombreMesero: 'Luis Pérez', mesa: 'Mesa 7', estado: 'Pendiente', tipoPedido: 'Mesa', horaIngreso: '12:35 PM', menu: [{ platillo: 'Carne Asada', cantidad: 1, notas: 'Término medio' }, { platillo: 'Ensalada', cantidad: 2 }] }
-    ];
-    return calcularTiemposConCola(pedidosIniciales);
-  });
+const nextStatus = (status: OrderDetailStatus): OrderDetailStatus | null => {
+  if (status === OrderDetailStatus.Pending)
+    return OrderDetailStatus.InPreparation;
+  if (status === OrderDetailStatus.InPreparation)
+    return OrderDetailStatus.Ready;
+  return null;
+};
 
-  const [isDarkTheme, setIsDarkTheme] = useState(true);
-  const [language, setLanguage] = useState<LanguageCode>('es');
-  const t = translations[language];
+const COLUMNS: { status: OrderDetailStatus; label: string; color: string }[] = [
+  {
+    status: OrderDetailStatus.Pending,
+    label: "Por preparar",
+    color: "#f97316",
+  },
+  {
+    status: OrderDetailStatus.InPreparation,
+    label: "En preparación",
+    color: "#3b82f6",
+  },
+  { status: OrderDetailStatus.Ready, label: "Listos", color: "#22c55e" },
+];
 
-  const togglePantallaCompleta = () => {
-    if (typeof document !== 'undefined') {
-      if (!document.fullscreenElement) {
-        document.documentElement.requestFullscreen().catch(err => console.error(err));
-      } else {
-        document.exitFullscreen();
+// Agrupa los items de todos los pedidos en "lotes" (orderId + batchNumber).
+// El estado del lote es el estado del primer item vivo (todos los items de
+// un mismo lote avanzan juntos, así que comparten el mismo estado).
+export function buildBatches(orders: OrderSummary[]): KitchenBatch[] {
+  const batches = new Map<string, KitchenBatch>();
+
+  for (const order of orders) {
+    // Los pedidos de clientes (domicilio / recoger) que siguen abiertos se
+    // mantienen aunque sean de ayer: el cliente los ve activos y cocina también.
+    // Lo demás (mesas, entregados) solo se muestra si es de hoy.
+    const isToday = isColombiaToday(order.createdAt);
+    const isOpenCustomerOrder =
+      (order.orderType === OrderType.Delivery ||
+        order.orderType === OrderType.Pickup) &&
+      ACTIVE_ORDER_STATUSES.includes(order.status);
+    const awaitingCashierConfirmation =
+      order.channel === OrderChannel.App && order.status === OrderStatus.Pending;
+
+    if (!isToday && !isOpenCustomerOrder) continue;
+
+    // Domicilios sin confirmar: aún no los valida el cajero ni se ha pagado
+    if (
+      order.orderType === OrderType.Delivery &&
+      order.status === OrderStatus.Pending &&
+      !awaitingCashierConfirmation
+    )
+      continue;
+
+    // Solo los cancelados salen del tablero. Los ENTREGADOS se mantienen
+    // (se muestran en "Listos" con el marcador "Entregado") — así cocina
+    // conserva el historial del día hasta que cambie de turno, momento en
+    // que el filtro de "todayISO" de arriba los saca solo automáticamente.
+    if (order.status === OrderStatus.Cancelled)
+      continue;
+
+    for (const item of order.orderDetails) {
+      if (item.status === "Voided" || item.status === "Cancelled")
+        continue;
+
+      const key = `${order.id}-${item.batchNumber}`;
+      if (!batches.has(key)) {
+        batches.set(key, {
+          orderId: order.id,
+          batchNumber: item.batchNumber,
+          tableNumber: order.tableNumber,
+          orderType: order.orderType,
+          employeeName: order.employeeName,
+          customerName: order.customerName,
+          assignedDeliveryPersonName: order.assignedDeliveryPersonName,
+          awaitingCashierConfirmation,
+          createdAt: order.createdAt,
+          status: item.status,
+          items: [],
+        });
       }
+      batches.get(key)!.items.push(item);
+    }
+  }
+
+  return Array.from(batches.values());
+}
+
+export default function ChefOrders() {
+  const { colors } = useChefTheme();
+  const { t } = useChefLanguage();
+  const { branchId } = useMyBranch();
+  const router = useRouter();
+  const { handleLogout, user } = useAuth();
+
+  // El auxiliar de cocina ve el mismo tablero, pero no puede avanzar estados.
+  const canUpdateStatus = !user?.roles?.includes("AUXILIAR_COCINA");
+
+  const onLogout = () => {
+    handleLogout().then(() => router.replace("/"));
+  };
+  const [orders, setOrders] = useState<OrderSummary[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const loadOrders = useCallback(async () => {
+    if (!branchId) return;
+    try {
+      const data = await orderService.getAll(branchId);
+      setOrders(data);
+    } catch {
+      // sin conexión momentánea: se conserva lo que ya se ve
+    }
+  }, [branchId]);
+
+  // Recibe el sonido de "pedido nuevo" y refresca el tablero al instante
+  // mediante el canal SignalR compartido.
+  // Si el usuario conectado es Auxiliar, simplemente nunca le llegará esa
+  // notificación (el backend no lo incluye como destinatario).
+  const { soundEnabled, enableSound } = useKitchenNotifications(
+    (notification) => {
+      if (notification.relatedEntityType === "Order") {
+        loadOrders();
+      }
+    },
+    () => {
+      // OrdersChanged / reconexión / volver a primer plano
+      loadOrders();
+    },
+  );
+
+  useEffect(() => {
+    (async () => {
+      setLoading(true);
+      await loadOrders();
+      setLoading(false);
+    })();
+
+  }, [loadOrders]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadOrders();
+    setRefreshing(false);
+  }, [loadOrders]);
+
+  const avanzarEstado = async (batch: KitchenBatch) => {
+    const next = nextStatus(batch.status);
+    if (!next) return;
+    try {
+      await orderService.updateBatchStatus(
+        batch.orderId,
+        batch.batchNumber,
+        next,
+      );
+      await loadOrders();
+    } catch (err) {
+      loadOrders();
     }
   };
 
-  const avanzarEstado = (idPedido: string) => {
-    setPedidos(pedidosActuales => {
-      const nuevosPedidos: Pedido[] = pedidosActuales.map((pedido): Pedido | any => {
-        if (pedido.id === idPedido) {
-          if (pedido.estado === 'Pendiente') return { ...pedido, estado: 'En Preparación' };
-          if (pedido.estado === 'En Preparación') return { ...pedido, estado: 'Listo en Barra' };
-          if (pedido.estado === 'Listo en Barra') return { ...pedido, estado: 'Entregado' };
-        }
-        return pedido;
-      });
-      return calcularTiemposConCola(nuevosPedidos);
-    });
-  };
+  if (!branchId) {
+    return (
+      <View
+        style={[
+          chefStyles.wrapper,
+          {
+            backgroundColor: colors.background,
+            justifyContent: "center",
+            alignItems: "center",
+          },
+        ]}
+      >
+        <Text style={{ color: colors.text, marginBottom: 20 }}>
+          {t.noBranchAssigned}
+        </Text>
+        <TouchableOpacity
+          onPress={onLogout}
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            backgroundColor: colors.card,
+            borderWidth: 1,
+            borderColor: colors.border,
+            paddingVertical: 10,
+            paddingHorizontal: 20,
+            borderRadius: 10,
+          }}
+        >
+          <Ionicons name="log-out-outline" size={20} color={colors.text} />
+          <Text
+            style={{ color: colors.text, marginLeft: 8, fontWeight: "600" }}
+          >
+            {t.logout}
+          </Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
-  const handleLogout = () => {
-    if (window.confirm(t.logoutConfirm)) {
-      window.location.href = '/';
-    }
-  };
+  if (loading) {
+    return (
+      <View
+        style={[
+          chefStyles.wrapper,
+          {
+            backgroundColor: colors.background,
+            justifyContent: "center",
+            alignItems: "center",
+          },
+        ]}
+      >
+        <ActivityIndicator size="large" color={colors.accent} />
+      </View>
+    );
+  }
 
-  const themeVars = isDarkTheme 
-    ? {
-        '--bg-main': '#0d0e12',
-        '--bg-card': '#15181e',
-        '--bg-header': '#1a1e24',
-        '--text-main': '#f1f5f9',
-        '--text-muted': '#94a3b8',
-        '--border-color': '#22252a',
-        '--border-light': '#262a30',
-        '--accent-bg': '#1e293b'
-      }
-    : {
-        '--bg-main': '#f0f2f5',
-        '--bg-card': '#ffffff',
-        '--bg-header': '#f8fafc',
-        '--text-main': '#0f172a',
-        '--text-muted': '#475569',
-        '--border-color': '#e2e8f0',
-        '--border-light': '#cbd5e1',
-        '--accent-bg': '#ffffff'
-      };
+  const batches = buildBatches(orders);
 
   return (
-    <div className={`tablero-wrapper ${isDarkTheme ? 'theme-dark' : 'theme-light'}`} style={themeVars as any}>
-      <header className="tablero-header">
+    <View style={[chefStyles.wrapper, { backgroundColor: colors.background }]}>
+      <View
+        style={[
+          chefStyles.header,
+          {
+            backgroundColor: colors.header,
+            borderBottomColor: colors.border,
+            flexDirection: "row",
+            justifyContent: "space-between",
+            alignItems: "center",
+          },
+        ]}
+      >
+        <View>
+          <Text style={[chefStyles.brandText, { color: colors.text }]}>
+            SABOREXPRESS
+          </Text>
+          <Text style={[chefStyles.roleBadge, { color: colors.mutedText }]}>
+            {t.kitchenLabel}
+          </Text>
+        </View>
 
-        <div className="header-brand">
-          <div className="logo-circulo"></div>
-          <h2>SABOREXPRESS <span className="rol-badge">{t.roleChef ? t.roleChef.toUpperCase() : 'COCINERO'}</span></h2>
-        </div>
+        <TouchableOpacity onPress={onLogout} style={{ padding: 8 }}>
+          <Ionicons name="log-out-outline" size={24} color={colors.mutedText} />
+        </TouchableOpacity>
+      </View>
 
-        <div className="header-controls">
+      {!soundEnabled && (
+        <TouchableOpacity
+          onPress={enableSound}
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 8,
+            backgroundColor: "#FEF3C7",
+            paddingVertical: 10,
+          }}
+        >
+          <Ionicons name="volume-mute-outline" size={18} color="#92400E" />
+          <Text style={{ color: "#92400E", fontWeight: "700" }}>
+            {t.soundPrompt}
+          </Text>
+        </TouchableOpacity>
+      )}
 
-          <select 
-            className="lang-select" 
-            value={language} 
-            onChange={(e) => setLanguage(e.target.value as LanguageCode)}
-            title="Seleccionar Idioma"
-          >
-            <option value="es">Español</option>
-            <option value="en">English</option>
-            <option value="pt">Português</option>
-            <option value="fr">Français</option>
-          </select>
-
-         {/* 🔥 BOTÓN DE TEMA EXACTO A LA IMAGEN 🔥 */}
-          <div className="theme-toggle-container">
-            <button 
-              className={`theme-option ${!isDarkTheme ? 'active-light' : ''}`}
-              onClick={() => setIsDarkTheme(false)}
-            >
-              <span className="icon">☀️</span>
-              {/* {!isDarkTheme && <span className="text">{t.themeLight || 'Blanco'}</span>} */}
-            </button>
-
-            <button 
-              className={`theme-option ${isDarkTheme ? 'active-dark' : ''}`}
-              onClick={() => setIsDarkTheme(true)}
-            >
-              <span className="icon">🌙</span>
-              {/* {isDarkTheme && <span className="text">{t.themeDark || 'Negro'}</span>} */}
-            </button>
-          </div>
-
-          <button className="btn-fullscreen" onClick={togglePantallaCompleta} title={t.fullscreen}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path></svg>
-            <span className="hide-on-mobile"> {t.fullscreen}</span>
-          </button>
-
-          {/* 🔥 BOTÓN PERFIL EXACTAMENTE COMO LA IMAGEN 🔥 */}
-          <button className="btn-user-profile" onClick={handleLogout} title={t.logout}>
-            <div className="user-info">
-              {/* <span className="user-name">{rolActual}_01</span> */}
-              <span className="user-back">← Volver al login</span>
-            </div>
-            {/* <div className="user-avatar-red">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-                <circle cx="12" cy="7" r="4"></circle>
-              </svg>
-            </div> */}
-          </button>
-
-        </div>
-      </header>
-
-      <div className="layout-principal">
-        <div className="grid-pedidos">
-          {pedidos.filter(p => p.estado !== 'Entregado').map(pedido => (
-            <PedidoCard
-              key={pedido.id}
-              pedido={pedido}
-              rolActual={rolActual}
-              onAvanzarEstado={avanzarEstado}
-              lang={language}
-            />
-          ))}
-        </div>
-
-        <SidebarMetricas pedidos={pedidos} lang={language} />
-      </div>
-    </div>
+      <KitchenColumns
+        batches={batches}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+        renderCard={(batch) => (
+          <PedidoCard
+            batch={batch}
+            onAvanzarEstado={avanzarEstado}
+            canUpdateStatus={canUpdateStatus && !batch.awaitingCashierConfirmation}
+          />
+        )}
+      />
+    </View>
   );
 }

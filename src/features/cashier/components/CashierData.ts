@@ -6,11 +6,20 @@ export interface Order {
   table?: number;
   items: string;
   total: number;
+  subTotal?: number;
+  tax?: number;
+  taxRate?: number;
+  taxIncludedInPrice?: boolean;
+  deliveryFee?: number;
   status: 'pendiente' | 'pagado' | 'pagando_transferencia';
   paymentMethod?: 'transferencia' | 'efectivo';
   deliveryPerson?: string;
   time: string;
   transferProofUrl?: string;
+  // Nombre del cliente para pedidos "Para Llevar" (guestName en el backend).
+  customerName?: string;
+  // Quién tomó el pedido (mesero/cajero).
+  employeeName?: string;
 }
 
 export interface Employee {
