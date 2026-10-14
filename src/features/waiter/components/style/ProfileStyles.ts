@@ -26,4 +26,16 @@ export const profileStyles = StyleSheet.create({
     inputDisabled: { backgroundColor: '#F8FAFC', borderColor: '#E2E8F0', color: '#64748B' },
     inputError: { borderColor: '#EF4444', borderWidth: 1.5 },
     errorText: { color: '#EF4444', fontSize: 12, marginTop: 5, marginLeft: 4, fontWeight: '500', fontFamily: baseFontFamily },
+    saveButton: {
+        marginTop: 16,
+        paddingVertical: 16,
+        borderRadius: 14,
+        alignItems: 'center',
+    },
+    saveButtonText: {
+        color: '#FFFFFF',
+        fontSize: 16,
+        fontWeight: 'bold',
+        fontFamily: baseFontFamily,
+    },
 });

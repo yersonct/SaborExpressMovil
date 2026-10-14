@@ -1,0 +1,30 @@
+export const mobileFeatureRegistry = [
+  "addresses",
+  "auth",
+  "branches",
+  "cart",
+  "cashier",
+  "catalog",
+  "chef",
+  "Client",
+  "customers",
+  "delivery",
+  "employees",
+  "employeeSchedules",
+  "invoices",
+  "notifications",
+  "orders",
+  "payments",
+  "products",
+  "shared",
+  "tables",
+  "userPreferences",
+  "waiter",
+] as const;
+
+export const mobileArchitecturePrinciples = [
+  "View only receives and dispatches.",
+  "Hooks and services own domain logic.",
+  "Realtime stays in dedicated feature hooks or shared transport.",
+  "Preferences and application state remain centralized and feature-scoped.",
+] as const;
