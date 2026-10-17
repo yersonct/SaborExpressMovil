@@ -6,6 +6,7 @@ import {
   OrderDetailStatus,
   type OrderSummary,
 } from "@/features/orders/types/order.types";
+import { tableService } from "@/features/tables/services/tableService";
 import type { Order as CashierOrder } from "../components/CashierData";
 import { formatColombiaTime } from "@/features/shared/utils/colombia-date";
 import { useRealtimeEvents } from "@/features/shared/hooks/useRealtimeEvents";
@@ -23,8 +24,7 @@ function isWaitingForTableRelease(order: OrderSummary): boolean {
   if (
     order.orderType !== OrderType.DineIn ||
     order.tableId == null ||
-    order.status === OrderStatus.Cancelled ||
-    order.status === OrderStatus.Delivered
+    order.status === OrderStatus.Cancelled
   ) {
     return false;
   }
@@ -57,8 +57,11 @@ function mapToCashierOrder(order: OrderSummary): CashierOrder {
     table: order.tableNumber ?? undefined,
     customerName: order.customerName ?? undefined,
     employeeName: order.employeeName ?? undefined,
-    items: order.orderDetails.length
+    items: order.orderDetails.some(
+      (d) => d.status !== OrderDetailStatus.Voided && d.status !== OrderDetailStatus.Cancelled,
+    )
       ? order.orderDetails
+          .filter((d) => d.status !== OrderDetailStatus.Voided && d.status !== OrderDetailStatus.Cancelled)
           .map((d) => {
             let base = `${d.quantity}x ${d.productName}`;
             // Igual que en cocina: si el producto es para llevar, el
@@ -108,7 +111,20 @@ export function useCashierOrders(branchId: number | null) {
       return;
     }
     try {
-      const summaries = await orderService.getAll(branchId);
+      const [summaries, tables] = await Promise.all([
+  orderService.getAll(branchId),
+  tableService.getByBranch(branchId),
+]);
+
+// No ocultar cuentas pendientes por carecer de TableSessionId.
+// Es habitual en pedidos anteriores a la migración de sesiones.
+// Para decidir si Caja debe ofrecer "Liberar", la API es la fuente de
+// verdad; el listado de pedidos del mesero NO equivale a una mesa saldada.
+const occupiedTableIds = new Set(
+  tables
+    .filter((table) => table.status === "Occupied")
+    .map((table) => Number(table.id)),
+);
       setPaidOrders(
         summaries
           .filter(
@@ -125,9 +141,14 @@ export function useCashierOrders(branchId: number | null) {
               new Date(first.createdAt).getTime(),
           ),
       );
-      const blockingTableOrders = summaries.filter(isWaitingForTableRelease);
+      const blockingTableOrders = summaries.filter(
+        (order) =>
+          order.tableId != null &&
+          occupiedTableIds.has(Number(order.tableId)) &&
+          isWaitingForTableRelease(order),
+      );
       setTablesWithBlockingOrders(
-        new Set(blockingTableOrders.map((order) => order.tableId!)),
+        new Set(blockingTableOrders.map((order) => Number(order.tableId))),
       );
       setPaidOrdersAwaitingDelivery(
         blockingTableOrders.filter(
@@ -170,10 +191,16 @@ export function useCashierOrders(branchId: number | null) {
     fetchOrders();
   }, [fetchOrders]);
 
-  useRealtimeEvents(
-    ["OrdersChanged", "DeliveriesChanged", "PaymentsChanged", "RealtimeConnected"],
-    () => void fetchOrders(),
-  );
+useRealtimeEvents(
+  [
+    "OrdersChanged",
+    "TablesChanged",
+    "DeliveriesChanged",
+    "PaymentsChanged",
+    "RealtimeConnected",
+  ],
+  () => void fetchOrders(),
+);
 
   return {
     orders,

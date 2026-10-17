@@ -10,6 +10,7 @@ export interface Table {
   branchId: number;
   branchName: string | null;
   number: number;
+  currentSessionId: string | null;
   status: TableStatus;
   createdAt: string;
 }
