@@ -41,7 +41,7 @@ if (
 }
 
   return (
-    <ChefThemeProvider key={preferenceScope}>
+    <ChefThemeProvider key={preferenceScope} storageScope={preferenceScope}>
       <ChefLanguageProvider>
         <Stack screenOptions={{ headerShown: false }} />
       </ChefLanguageProvider>

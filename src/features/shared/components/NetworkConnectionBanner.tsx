@@ -3,28 +3,41 @@ import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { subscribeToNetworkStatus } from "../services/networkStatus";
+import { getApiLanguage } from "@/features/auth/services/apiLanguage";
+import { subscribeBackendRecovery, dismissBackendRecovery } from "../services/backendRecoveryWatch";
+
+const recoveryTexts = {
+  es: "Conexión recuperada. Ya puedes iniciar sesión nuevamente.",
+  en: "Connection restored. You can sign in again.",
+  pt: "Conexão restabelecida. Você já pode entrar novamente.",
+  fr: "Connexion rétablie. Vous pouvez vous reconnecter.",
+};
 
 export function NetworkConnectionBanner() {
   const [message, setMessage] = useState<string | null>(null);
+  const [recovered, setRecovered] = useState(false);
   const insets = useSafeAreaInsets();
 
   useEffect(() => subscribeToNetworkStatus(setMessage), []);
+  useEffect(() => subscribeBackendRecovery(setRecovered), []);
 
-  if (!message) return null;
+  if (!message && !recovered) return null;
+  const bannerText = recovered ? recoveryTexts[getApiLanguage()] : message;
+  const close = () => { if (recovered) dismissBackendRecovery(); else setMessage(null); };
 
   return (
     <View
       pointerEvents="box-none"
       style={[styles.container, { top: Math.max(10, insets.top + 8) }]}
     >
-      <View accessibilityRole="alert" accessibilityLiveRegion="polite" style={styles.banner}>
-        <Ionicons name="cloud-offline-outline" size={22} color="#FFFFFF" />
-        <Text style={styles.message}>{message}</Text>
+      <View accessibilityRole="alert" accessibilityLiveRegion="polite" style={[styles.banner, recovered && styles.recovered]}>
+        <Ionicons name={recovered ? "checkmark-circle-outline" : "cloud-offline-outline"} size={22} color="#FFFFFF" />
+        <Text style={styles.message}>{bannerText}</Text>
         <TouchableOpacity
           accessibilityRole="button"
           accessibilityLabel="Cerrar aviso de conexión"
           hitSlop={10}
-          onPress={() => setMessage(null)}
+          onPress={close}
         >
           <Ionicons name="close" size={20} color="#FFFFFF" />
         </TouchableOpacity>
@@ -55,6 +68,7 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 3 },
   },
+  recovered: { backgroundColor: "#047857" },
   message: {
     flex: 1,
     color: "#FFFFFF",

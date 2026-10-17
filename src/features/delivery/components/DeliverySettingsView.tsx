@@ -1,7 +1,5 @@
-import React, { useEffect, useState } from "react";
+import React from "react";
 import {
-  ActivityIndicator,
-  Alert,
   Platform,
   ScrollView,
   StyleSheet,
@@ -15,8 +13,6 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useAuth } from "@/features/auth/context/AuthContext";
-import { useMyProfile } from "@/features/employees/hooks/useMyProfile";
-import { employeeService } from "@/features/employees/services/employeeService";
 import { LanguageDropdown } from "@/components/LanguageDropdown";
 import { showAppAlert } from "@/features/shared/services/alertEvents";
 import { useDeliveryContext } from "./context/DeliveryContext";
@@ -25,6 +21,9 @@ import {
   TRANSLATIONS,
   LanguageCode,
 } from "../../../locales/DeliveryTranslations";
+
+// En web, RN usa una perilla verde al encender; la forzamos a blanco.
+const switchWebProps = { activeThumbColor: "#FFFFFF" } as object;
 
 export const DeliverySettingsView = () => {
   const router = useRouter();
@@ -42,33 +41,6 @@ export const DeliverySettingsView = () => {
     preferencesHydrated,
   } = useDeliveryContext();
   const t = TRANSLATIONS[language] || TRANSLATIONS.es;
-  const { profile, refetch: refetchProfile } = useMyProfile();
-  const [isOnline, setIsOnline] = useState(false);
-  const [savingAvailability, setSavingAvailability] = useState(false);
-
-  useEffect(() => {
-    if (profile) setIsOnline(profile.isAvailable);
-  }, [profile]);
-
-  const handleToggleOnline = async (value: boolean) => {
-    if (!profile || savingAvailability) return;
-    const previousValue = isOnline;
-    setIsOnline(value);
-    setSavingAvailability(true);
-    try {
-      await employeeService.setAvailability(value);
-      await refetchProfile();
-    } catch (err: any) {
-      setIsOnline(previousValue);
-      Alert.alert(
-        t.errorTitle || "Error",
-        err?.message ?? t.availabilitySaveError,
-      );
-    } finally {
-      setSavingAvailability(false);
-    }
-  };
-
   const handleToggleVibration = (enabled: boolean) => {
     setVibrationNotifications(enabled);
     if (enabled && Platform.OS !== "web") Vibration.vibrate([0, 100]);
@@ -121,56 +93,6 @@ export const DeliverySettingsView = () => {
       >
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: colors.mutedText }]}>
-            {t.workStatus}
-          </Text>
-          <View
-            style={[
-              styles.card,
-              { backgroundColor: colors.card, borderColor: colors.border },
-            ]}
-          >
-            <View style={styles.settingRow}>
-              <View style={styles.settingInfo}>
-                <Ionicons
-                  name={isOnline ? "radio" : "radio-outline"}
-                  size={24}
-                  color={isOnline ? "#10B981" : colors.mutedText}
-                />
-                <View style={styles.textGroup}>
-                  <Text style={[styles.settingTitle, { color: colors.text }]}>
-                    {t.receiveOrders}
-                  </Text>
-                  <Text
-                    style={[styles.settingDesc, { color: colors.mutedText }]}
-                  >
-                    {!profile
-                      ? t.loadingProfile
-                      : isOnline
-                        ? t.onlineDesc
-                        : t.offlineDesc}
-                  </Text>
-                </View>
-              </View>
-              <Switch
-                value={isOnline}
-                onValueChange={handleToggleOnline}
-                disabled={savingAvailability || !profile}
-                trackColor={{ false: colors.border, true: colors.successText }}
-                thumbColor="#FFFFFF"
-              />
-            </View>
-            {savingAvailability && (
-              <ActivityIndicator
-                style={{ marginBottom: 14 }}
-                size="small"
-                color={colors.accent}
-              />
-            )}
-          </View>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: colors.mutedText }]}>
             {t.notificationsTitle}
           </Text>
           <View
@@ -199,8 +121,8 @@ export const DeliverySettingsView = () => {
                 value={pushNotifications}
                 onValueChange={setPushNotifications}
                 disabled={!preferencesHydrated}
-                trackColor={{ false: colors.border, true: colors.successText }}
-                thumbColor="#FFFFFF"
+                trackColor={{ false: colors.border, true: colors.accent }}
+                thumbColor="#FFFFFF" {...switchWebProps}
               />
             </View>
             <View style={[styles.divider, { backgroundColor: colors.border }]} />
@@ -220,8 +142,8 @@ export const DeliverySettingsView = () => {
                 value={soundNotifications}
                 onValueChange={setSoundNotifications}
                 disabled={!preferencesHydrated}
-                trackColor={{ false: colors.border, true: colors.successText }}
-                thumbColor="#FFFFFF"
+                trackColor={{ false: colors.border, true: colors.accent }}
+                thumbColor="#FFFFFF" {...switchWebProps}
               />
             </View>
             <View style={[styles.divider, { backgroundColor: colors.border }]} />
@@ -241,8 +163,8 @@ export const DeliverySettingsView = () => {
                 value={vibrationNotifications}
                 onValueChange={handleToggleVibration}
                 disabled={!preferencesHydrated}
-                trackColor={{ false: colors.border, true: colors.successText }}
-                thumbColor="#FFFFFF"
+                trackColor={{ false: colors.border, true: colors.accent }}
+                thumbColor="#FFFFFF" {...switchWebProps}
               />
             </View>
           </View>
@@ -325,8 +247,8 @@ export const DeliverySettingsView = () => {
               <Switch
                 value={isDark}
                 onValueChange={setIsDark}
-                trackColor={{ false: colors.border, true: colors.successText }}
-                thumbColor="#FFFFFF"
+                trackColor={{ false: colors.border, true: colors.accent }}
+                thumbColor="#FFFFFF" {...switchWebProps}
               />
             </View>
           </View>

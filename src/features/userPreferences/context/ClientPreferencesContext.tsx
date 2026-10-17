@@ -254,7 +254,15 @@ type ClientPreferencesContextValue = {
 };
 
 const lightColors = { background: "#F8FAFC", surface: "#FFFFFF", elevated: "#F1F5F9", text: "#1E293B", muted: "#64748B", border: "#E2E8F0", accent: "#E61C24" };
-const darkColors = { background: "#0B1220", surface: "#111827", elevated: "#1F2937", text: "#F8FAFC", muted: "#CBD5E1", border: "#334155", accent: "#F87171" };
+const darkColors = {
+  background: "#0B1220",
+  surface: "#111827",
+  elevated: "#1F2937",
+  text: "#F8FAFC",
+  muted: "#CBD5E1",
+  border: "#334155",
+  accent: "#E61C24",
+};
 const ClientPreferencesContext = createContext<ClientPreferencesContextValue | null>(null);
 
 export function ClientPreferencesProvider({ children }: { children: React.ReactNode }) {

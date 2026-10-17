@@ -15,6 +15,7 @@ export interface Order {
   paymentMethod?: 'transferencia' | 'efectivo';
   deliveryPerson?: string;
   time: string;
+  createdAt?: string; // Fecha ISO del servidor
   transferProofUrl?: string;
   // Nombre del cliente para pedidos "Para Llevar" (guestName en el backend).
   customerName?: string;
