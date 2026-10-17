@@ -27,6 +27,13 @@ export function BreakdownRows({
   mutedColor = "#64748B",
 }: Props) {
   const l = getBreakdownLabels(lang);
+  // Usar la tasa y el precio final para el impuesto incluido. La columna
+  // tax recibida puede proceder de pedidos creados antes de corregir el backend.
+  const inclusiveTax = taxIncludedInPrice && taxRate > 0
+    ? Math.round(((subTotal * taxRate) / (100 + taxRate)) * 100) / 100
+    : 0;
+  const displayedTax = taxIncludedInPrice ? inclusiveTax : tax;
+  const taxBase = subTotal - inclusiveTax;
   const fmt = (n: number) => `$${Math.round(n).toLocaleString(locale)}`;
   const row = (label: string, value: string) => (
     <View
@@ -43,10 +50,11 @@ export function BreakdownRows({
   return (
     <View style={{ marginBottom: 8 }}>
       {row(l.subtotal, fmt(subTotal))}
-      {tax > 0 &&
+      {taxIncludedInPrice && taxRate > 0 && row(l.taxBase, fmt(taxBase))}
+      {displayedTax > 0 &&
         row(
           `${taxIncludedInPrice ? l.taxIncluded : l.taxLegacy}${taxRate > 0 ? ` (${taxRate}%)` : ""}`,
-          fmt(tax),
+          fmt(displayedTax),
         )}
       {deliveryFee > 0 && row(l.delivery, fmt(deliveryFee))}
     </View>

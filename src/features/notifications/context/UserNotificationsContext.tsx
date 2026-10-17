@@ -8,6 +8,7 @@ import React, {
   useState,
 } from "react";
 import { Platform, StyleSheet, Vibration, View } from "react-native";
+import { useRouter } from "expo-router";
 import { useAudioPlayer, setAudioModeAsync } from "expo-audio";
 import { useAuth } from "@/features/auth/context/AuthContext";
 import { getUserIdFromToken } from "@/features/auth/services/decodeToken";
@@ -50,6 +51,7 @@ interface UserNotificationsValue {
   markAllRead: () => void;
   clear: () => void;
   subscribe: (fn: Listener) => () => void;
+  openRelatedOrder: (notification: ToastNotification) => void;
   reportDeliveryLocation: (latitude: number, longitude: number) => Promise<boolean>;
 }
 
@@ -61,6 +63,7 @@ export function UserNotificationsProvider({
   children: React.ReactNode;
 }) {
   const { user } = useAuth();
+  const router = useRouter();
   const clientPreferences = useOptionalClientPreferences();
   const deliveryPreferences = useOptionalDeliveryNotificationPreferences();
   const deliveryTheme = deliveryPreferences
@@ -244,13 +247,22 @@ export function UserNotificationsProvider({
     ids.forEach((id) => notificationService.delete(id).catch(() => {}));
   }, []);
 
+  const openRelatedOrder = useCallback((notification: ToastNotification) => {
+    // Empleados nunca acceden a las rutas del Cliente por tocar este aviso.
+    if (!clientPreferences || !user?.token) return;
+    if (notification.relatedEntityType?.toLowerCase() !== "order") return;
+    const orderId = Number(notification.relatedEntityId);
+    if (!Number.isSafeInteger(orderId) || orderId <= 0) return;
+    router.push({ pathname: "/client/profile", params: { orderId: String(orderId) } });
+  }, [router, clientPreferences, user?.token]);
+
   const dismissToast = useCallback((id: number) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
   const value = useMemo(
-    () => ({ history, unreadCount, markAllRead, clear, subscribe, reportDeliveryLocation }),
-    [history, unreadCount, markAllRead, clear, subscribe, reportDeliveryLocation],
+    () => ({ history, unreadCount, markAllRead, clear, subscribe, openRelatedOrder, reportDeliveryLocation }),
+    [history, unreadCount, markAllRead, clear, subscribe, openRelatedOrder, reportDeliveryLocation],
   );
 
   return (
@@ -264,6 +276,7 @@ export function UserNotificationsProvider({
           <NotificationToastContainer
             notifications={toasts}
             onDismiss={dismissToast}
+            onSelect={clientPreferences ? openRelatedOrder : undefined}
             t={deliveryPreferences?.translate}
             colors={
               deliveryTheme

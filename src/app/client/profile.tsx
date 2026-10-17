@@ -13,7 +13,8 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { getClientLocale, useClientPreferences, useClientThemedStyles } from "@/features/userPreferences/context/ClientPreferencesContext";
-import { useRouter, useFocusEffect } from "expo-router";
+import { useRouter, useFocusEffect, useLocalSearchParams } from "expo-router";
+import { isColombiaToday } from "@/features/shared/utils/colombia-date";
 import { useAuth } from "@/features/auth/context/AuthContext";
 import { getCustomerIdFromToken } from "@/features/auth/services/decodeToken";
 import { useAddresses } from "@/features/addresses/hooks/useAddresses";
@@ -141,9 +142,10 @@ export default function ClientProfile() {
   const styles = useClientThemedStyles(baseStyles);
   const { t, language } = useClientPreferences();
   const router = useRouter();
+  const { orderId: requestedOrderId } = useLocalSearchParams<{ orderId?: string }>();
   const { customer, loading, completeProfile } = useCompleteProfile();
   const { activeOrder } = useActiveClientOrder();
-  const { orders, loading: loadingOrders } = useClientOrders();
+  const { orders, loading: loadingOrders, refetch: refetchOrders } = useClientOrders();
   const { user } = useAuth();
   const customerId = user?.token ? getCustomerIdFromToken(user.token) : null;
   const { addresses, refetch: refetchAddresses } = useAddresses(customerId);
@@ -154,12 +156,21 @@ export default function ClientProfile() {
   useFocusEffect(
     useCallback(() => {
       refetchAddresses();
-    }, [refetchAddresses]),
+      void refetchOrders();
+    }, [refetchAddresses, refetchOrders]),
   );
   const [isEditing, setIsEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [showAllOrders, setShowAllOrders] = useState(false);
   const [trackingOrder, setTrackingOrder] = useState<OrderSummary | null>(null);
+
+  // Las notificaciones abren un pedido concreto del propio cliente.
+  useEffect(() => {
+    const id = Number(Array.isArray(requestedOrderId) ? requestedOrderId[0] : requestedOrderId);
+    if (!Number.isSafeInteger(id) || id <= 0 || loadingOrders) return;
+    const myOrder = orders.find((o) => o.id === id);
+    if (myOrder) setTrackingOrder(myOrder);
+  }, [requestedOrderId, loadingOrders, orders]);
   const [rateTarget, setRateTarget] = useState<Delivery | null>(null);
   const [trackingRefresh, setTrackingRefresh] = useState(0);
   const askedRatingFor = useRef<number | null>(null);
@@ -283,13 +294,15 @@ export default function ClientProfile() {
     );
   }
 
-  const inProgressCount = orders.filter((o) =>
+  // Día calendario de Colombia: no se mezclan pedidos de semanas pasadas.
+  const todayOrders = orders.filter((o) => isColombiaToday(o.createdAt));
+  const inProgressCount = todayOrders.filter((o) =>
     ACTIVE_ORDER_STATUSES.includes(o.status),
   ).length;
-  const deliveredCount = orders.filter(
+  const deliveredCount = todayOrders.filter(
     (o) => o.status === OrderStatus.Delivered,
   ).length;
-  const recentOrders = orders.slice(0, showAllOrders ? 10 : 3);
+  const recentOrders = todayOrders.slice(0, showAllOrders ? todayOrders.length : 3);
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -323,7 +336,7 @@ export default function ClientProfile() {
             <Stat
               icon="receipt-outline"
               color="#3B82F6"
-              value={orders.length}
+              value={todayOrders.length}
               label={t("total")}
             />
           </View>
@@ -409,6 +422,21 @@ export default function ClientProfile() {
                 </Text>
               </View>
 
+              {/* Acceso al mapa desde que existe un repartidor asignado. */}
+              {activeOrder.order.orderType === OrderType.Delivery && activeOrder.delivery && (
+                <TouchableOpacity
+                  accessibilityRole="button"
+                  onPress={() => setTrackingOrder(activeOrder.order)}
+                  style={{ marginTop: 14, padding: 14, borderRadius: 12, backgroundColor: "#2563EB",
+                    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 }}
+                >
+                  <Ionicons name="map-outline" size={20} color="#FFFFFF" />
+                  <Text style={{ color: "#FFFFFF", fontWeight: "800" }}>
+                    {activeOrder.delivery.status === "InTransit" ? "Seguir repartidor en el mapa" : "Ver mapa de mi entrega"}
+                  </Text>
+                </TouchableOpacity>
+              )}
+
               {/* Repartidor: solo si ya hay uno asignado */}
               {activeOrder.delivery && (
                 <>
@@ -450,11 +478,11 @@ export default function ClientProfile() {
 
           {/* Últimos pedidos */}
           <Text style={[styles.subTitle, { marginTop: 18 }]}>
-            {t("latestOrders")}
+            {({ es: "Pedidos de hoy", en: "Today's orders", pt: "Pedidos de hoje", fr: "Commandes du jour" } as const)[language]}
           </Text>
           {loadingOrders ? (
             <ActivityIndicator style={{ marginTop: 12 }} color="#E61C24" />
-          ) : orders.length === 0 ? (
+          ) : todayOrders.length === 0 ? (
             <View style={[styles.card, styles.emptyOrders]}>
               <Ionicons name="bag-outline" size={32} color="#CBD5E1" />
               <Text style={styles.emptyOrdersText}>
@@ -505,7 +533,7 @@ export default function ClientProfile() {
                 );
               })}
 
-              {orders.length > 3 && (
+              {todayOrders.length > 3 && (
                 <TouchableOpacity
                   style={styles.moreButton}
                   onPress={() => setShowAllOrders((v) => !v)}
@@ -619,7 +647,10 @@ export default function ClientProfile() {
         visible={!!trackingOrder}
         order={trackingOrder}
         refreshKey={trackingRefresh}
-        onClose={() => setTrackingOrder(null)}
+        onClose={() => {
+          setTrackingOrder(null);
+          if (requestedOrderId) router.setParams({ orderId: "" });
+        }}
         onRate={(d) => setRateTarget(d)}
       />
 

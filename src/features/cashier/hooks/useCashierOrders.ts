@@ -76,6 +76,7 @@ function mapToCashierOrder(order: OrderSummary): CashierOrder {
     deliveryFee: order.deliveryFee,
     status: "pendiente",
     time: formatTime(order.createdAt),
+    createdAt: order.createdAt,
   };
 }
 

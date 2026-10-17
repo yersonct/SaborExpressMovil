@@ -22,6 +22,9 @@ import { TRANSLATIONS } from "../../locales/CashierTranslations";
 import type { LanguageCode } from "../../locales/CashierTranslations";
 import { useCashierContext } from "../../features/cashier/context/CashierContext";
 
+// En web, RN usa una perilla verde al encender; la forzamos a blanco.
+const switchWebProps = { activeThumbColor: "#FFFFFF" } as object;
+
 const LANGUAGE_OPTIONS: Array<{ label: string; value: LanguageCode }> = [
   { label: "Español", value: "es" },
   { label: "English", value: "en" },
@@ -126,6 +129,7 @@ export default function CashierSettings() {
         disabled={!hydrated}
         trackColor={{ false: colors.border, true: colors.accent }}
         thumbColor="#FFFFFF"
+        {...switchWebProps}
       />
     </View>
   );

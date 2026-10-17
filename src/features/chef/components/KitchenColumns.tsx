@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
+import { useRememberedUiState } from "@/features/shared/hooks/useRememberedUiState";
 import {
   View,
   Text,
@@ -9,7 +10,9 @@ import {
 import { OrderDetailStatus } from "@/features/orders/types/order.types";
 import { boardStyles } from "./style/ChefStyles";
 import { useChefTheme } from "../context/ChefThemeContext";
+import { useAuth } from "@/features/auth/context/AuthContext";
 import type { KitchenBatch } from "./ChefOrders";
+import { getColombiaDayKey } from "@/features/shared/utils/colombia-date";
 
 const COLUMNS: {
   status: OrderDetailStatus;
@@ -51,15 +54,38 @@ export default function KitchenColumns({
   refreshControl,
 }: Props) {
   const { colors } = useChefTheme();
+  // El auxiliar conserva la vista de pedidos anteriores; el cocinero solo ve hoy.
+  const { user } = useAuth();
+  const isAuxiliary = user?.roles?.includes("AUXILIAR_COCINA") ?? false;
   const { width } = useWindowDimensions();
   const isWide = width >= WIDE_BREAKPOINT;
-  const [activeStatus, setActiveStatus] = useState<OrderDetailStatus>(
-    OrderDetailStatus.Pending,
+  const [activeStatus, setActiveStatus] = useRememberedUiState<OrderDetailStatus>(
+    "chef:column", OrderDetailStatus.Pending,
+    (v): v is OrderDetailStatus => v === OrderDetailStatus.Pending || v === OrderDetailStatus.InPreparation || v === OrderDetailStatus.Ready,
   );
+  const [showOlderBatches, setShowOlderBatches] = useRememberedUiState<boolean>("chef:older", false);
+  const [todayKey, setTodayKey] = useState(() => getColombiaDayKey());
+  useEffect(() => {
+    const timer = setInterval(() => setTodayKey(getColombiaDayKey()), 60_000);
+    return () => clearInterval(timer);
+  }, []);
+  const todayBatches = batches.filter((b) => getColombiaDayKey(b.createdAt) === todayKey);
+  const olderBatches = batches.filter((b) => getColombiaDayKey(b.createdAt) !== todayKey);
+  const displayedBatches = isAuxiliary && showOlderBatches ? olderBatches : todayBatches;
+  const historyControl = isAuxiliary && (olderBatches.length > 0 || showOlderBatches) ? (
+    <TouchableOpacity accessibilityRole="button"
+      onPress={() => setShowOlderBatches((v) => !v)}
+      style={{ padding: 10, backgroundColor: colors.header,
+        borderBottomColor: colors.border, borderBottomWidth: 1 }}>
+      <Text style={{ textAlign: "center", color: colors.text, fontWeight: "700" }}>
+        {showOlderBatches ? "Volver a cocina de hoy" : `Ver pedidos anteriores abiertos (${olderBatches.length})`}
+      </Text>
+    </TouchableOpacity>
+  ) : null;
 
   // "Listos" también incluye los ya entregados
   const batchesOf = (status: OrderDetailStatus) =>
-    batches.filter((b) =>
+    displayedBatches.filter((b) =>
       status === OrderDetailStatus.Ready
         ? b.status === OrderDetailStatus.Ready ||
           b.status === OrderDetailStatus.Delivered
@@ -114,8 +140,11 @@ export default function KitchenColumns({
   // Pantalla ancha: 3 columnas lado a lado
   if (isWide) {
     return (
-      <View style={[boardStyles.board, { flex: 1, flexDirection: "row" }]}>
-        {COLUMNS.map((col) => renderColumn(col, true))}
+      <View style={{ flex: 1 }}>
+        {historyControl}
+        <View style={[boardStyles.board, { flex: 1, flexDirection: "row" }]} >
+          {COLUMNS.map((col) => renderColumn(col, true))}
+        </View>
       </View>
     );
   }
@@ -126,6 +155,7 @@ export default function KitchenColumns({
 
   return (
     <View style={{ flex: 1 }}>
+      {historyControl}
       <View
         style={{
           flexDirection: "row",

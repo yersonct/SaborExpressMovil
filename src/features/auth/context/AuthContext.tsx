@@ -18,6 +18,7 @@ import { refreshAccessToken } from "../services/apiClient";
 import { fetchAuthed } from "../services/apiClient";
 import { AUTH_ENDPOINTS } from "../services/authEndpoints";
 import { isServerAlive } from "../services/serverHealth";
+import { startBackendRecoveryWatch, stopBackendRecoveryWatch } from "@/features/shared/services/backendRecoveryWatch";
 import { getApiLanguage } from "../services/apiLanguage";
 import { getEmployeeIdFromToken, decodeToken } from "../services/decodeToken";
 import * as signalR from "@microsoft/signalr";
@@ -77,18 +78,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
 
         if (session) {
           if (!(await isServerAlive(3000))) {
-            const currentSession = await loadSession();
-            // No cerrar una sesión nueva si la respuesta de red llega tarde.
-            if (currentSession?.token !== session.token) return;
-            await clearSession();
-            setUser(null);
-            setError(
-              "No se pudo conectar con el servicio del sistema. Revisa la conexión o inténtalo más tarde.",
-            );
-            setErrorCode("SERVER_DOWN");
-            try {
-              router.replace("/");
-            } catch {}
+            // Contrato solicitado: si el servicio está caído, volver al login.
+            notifySessionExpired("server_down");
             return;
           }
 
@@ -152,6 +143,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       } else if (reason === "expired") {
         setError("Tu sesión venció o dejó de ser válida. Inicia sesión de nuevo.");
       } else if (reason === "server_down") {
+        startBackendRecoveryWatch();
         setError(
           "No se pudo conectar con el servicio del sistema. Revisa la conexión o inténtalo más tarde.",
         );
@@ -231,7 +223,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       healthCheckInProgress = true;
       try {
         if (!(await isServerAlive(4000)) && !disposed) {
-          notifySessionExpired("server_down");
+          // Si falla el servicio, el monitor HTTP confirmará el cierre.
+          setRealtimeConnectionState(false);
         } else if (!disposed) {
           // SignalR puede rechazar el JWT con 401 al reconectar después de que
           // otro dispositivo inició sesión. Valida por HTTP para que apiClient
@@ -308,6 +301,38 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     };
   }, [hasSession]);
 
+  // SignalR puede permanecer en "Reconnecting" cuando el backend se apaga.
+  // Un pulso HTTP independiente detecta incluso esa condición.
+  useEffect(() => {
+    if (!hasSession) return;
+    let disposed = false;
+    let failures = 0;
+    let checking = false;
+    let loggedOut = false;
+    const check = async () => {
+      if (disposed || checking || loggedOut) return;
+      checking = true;
+      try {
+        const healthy = await isServerAlive(3500);
+        if (disposed) return;
+        failures = healthy ? 0 : failures + 1;
+        // Dos comprobaciones consecutivas evitan cerrar por un paquete aislado.
+        if (failures >= 2) {
+          loggedOut = true;
+          notifySessionExpired("server_down");
+        }
+      } finally {
+        checking = false;
+      }
+    };
+    const timer = setInterval(() => { void check(); }, 5000);
+    const appState = AppState.addEventListener("change", (state) => {
+      if (state === "active") void check();
+    });
+    void check();
+    return () => { disposed = true; clearInterval(timer); appState.remove(); };
+  }, [hasSession]);
+
   const clearError = () => {
     setError(null);
     setErrorCode(null);
@@ -339,6 +364,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         return;
       }
 
+      stopBackendRecoveryWatch();
       await saveSession(response);
       setUser(response);
     } catch (err) {

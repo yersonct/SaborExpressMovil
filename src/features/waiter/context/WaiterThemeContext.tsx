@@ -42,7 +42,7 @@ const lightColors = {
   accent: '#E61C24',
   accentSoft: '#FEF2F2',
   success: '#10B981',
-  danger: '#EF4444',
+  danger: '#E61C24',
   warning: '#D97706',
 };
 
@@ -57,10 +57,10 @@ const darkColors = {
   border: '#334155',
   divider: '#334155',
   icon: '#FAFAFA',
-  accent: '#F87171',
-  accentSoft: '#312020',
+  accent: '#E61C24',
+  accentSoft: '#3F1D24',
   success: '#34D399',
-  danger: '#F87171',
+  danger: '#E61C24',
   warning: '#FBBF24',
 };
 

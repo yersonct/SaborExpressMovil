@@ -18,6 +18,8 @@ interface AuthInputProps {
   onTogglePassword?: () => void;
   error?: boolean;
   themeColors: any;
+  inputRef?: React.Ref<TextInput>;
+  onFocus?: () => void;
   keyboardType?: "default" | "numeric" | "email-address" | "phone-pad"; // 🔥 nuevo
   maxLength?: number; // 🔥 nuevo
 }
@@ -32,6 +34,8 @@ export const AuthInput: React.FC<AuthInputProps> = ({
   onTogglePassword,
   error,
   themeColors,
+  inputRef,
+  onFocus,
   keyboardType = "default",
   maxLength,
 }) => {
@@ -51,6 +55,8 @@ export const AuthInput: React.FC<AuthInputProps> = ({
         ]}
       >
         <TextInput
+          ref={inputRef}
+          onFocus={onFocus}
           style={[styles.input, { color: themeColors.text }]}
           placeholder={placeholder}
           placeholderTextColor="#A0A0A0"
