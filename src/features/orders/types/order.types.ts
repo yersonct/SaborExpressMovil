@@ -59,7 +59,8 @@ export interface OrderSummary {
   employeeId: number | null;
   employeeName: string | null;
   tableId: number | null;
- tableNumber: number | null;
+  tableNumber: number | null;
+  tableSessionId: string | null;
   branchId: number;
   channel: OrderChannel;
   orderType: OrderType;
