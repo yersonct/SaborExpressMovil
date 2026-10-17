@@ -656,6 +656,28 @@ export const WaiterDashboard = () => {
           return;
         }
 
+        const liveDetails = freshOrder.orderDetails.filter(
+          (detail) =>
+            detail.status !== OrderDetailStatus.Voided &&
+            detail.status !== OrderDetailStatus.Cancelled,
+        );
+
+        if (liveDetails.length === 1 && liveDetails[0].id === freshDetail.id) {
+          // No dejar pedidos vacíos ocupando mesas: al quitar el último
+          // producto, cancelar TODO el pedido por la vía normal del backend.
+          // El backend valida pagos, cocina y genera el historial de cancelación.
+          await orderService.cancel(
+            orderId,
+            "Cancelado al retirar el último producto del pedido",
+          );
+          await Promise.all([refetchOrders(), refetchTables()]);
+          setActiveTableForOrder(null);
+          setActiveOrderId(null);
+          setOrderItems([]);
+          setActiveTab("MESAS");
+          return;
+        }
+
         await orderService.voidDetail(
           freshDetail.id,
           t.orderItemVoidReason || "Quitado por el mesero",
