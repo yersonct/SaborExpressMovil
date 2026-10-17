@@ -17,6 +17,7 @@ import {
   ACTIVE_ORDER_STATUSES,
 } from "@/features/orders/types/order.types";
 import { useMyBranch } from "@/features/employees/hooks/useMyBranch";
+import { useMyProfile } from "@/features/employees/hooks/useMyProfile";
 import { chefStyles, boardStyles } from "./style/ChefStyles";
 import { useChefTheme } from "../context/ChefThemeContext";
 import { useChefLanguage } from "../context/ChefLanguageContext";
@@ -130,7 +131,8 @@ export function buildBatches(orders: OrderSummary[]): KitchenBatch[] {
 }
 
 export default function ChefOrders() {
-  const { colors } = useChefTheme();
+  const { colors, isDark, setMode } = useChefTheme();
+  const { profile: kitchenProfile } = useMyProfile();
   const { t } = useChefLanguage();
   const { branchId } = useMyBranch();
   const router = useRouter();
@@ -281,11 +283,24 @@ export default function ChefOrders() {
           <Text style={[chefStyles.roleBadge, { color: colors.mutedText }]}>
             {t.kitchenLabel}
           </Text>
+          <Text style={{ color: colors.text, fontSize: 14, fontWeight: "700", marginTop: 3 }}>
+            {[kitchenProfile?.name, kitchenProfile?.lastName].filter(Boolean).join(" ") || t.kitchenLabel}
+          </Text>
         </View>
 
-        <TouchableOpacity onPress={onLogout} style={{ padding: 8 }}>
-          <Ionicons name="log-out-outline" size={24} color={colors.mutedText} />
-        </TouchableOpacity>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel={isDark ? t.themeLight : t.themeDark}
+            onPress={() => setMode(isDark ? "light" : "dark")}
+            style={{ padding: 8 }}
+          >
+            <Ionicons name={isDark ? "sunny-outline" : "moon-outline"} size={23} color={colors.text} />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={onLogout} style={{ padding: 8 }}>
+            <Ionicons name="log-out-outline" size={24} color={colors.mutedText} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {!soundEnabled && (

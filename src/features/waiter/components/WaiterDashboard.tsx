@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
+import { useRememberedUiState } from "@/features/shared/hooks/useRememberedUiState";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   LayoutAnimation,
@@ -102,7 +103,7 @@ export const WaiterDashboard = () => {
       type: "normal",
     }));
 
-  const [activeTab, setActiveTab] = useState<"MESAS" | "ORDENES">("MESAS");
+  const [activeTab, setActiveTab] = useRememberedUiState<"MESAS" | "ORDENES">("waiter:tab", "MESAS", (v): v is "MESAS" | "ORDENES" => v === "MESAS" || v === "ORDENES");
   const { orders: activeOrders, refetch: refetchOrders } =
     useActiveOrders(branchId);
   const [occupiedTableWaiters, setOccupiedTableWaiters] = useState<

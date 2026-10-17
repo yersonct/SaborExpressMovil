@@ -6,7 +6,7 @@ export function calcBreakdown(
   deliveryFee: number,
 ) {
   const fee = subTotal > 0 ? deliveryFee : 0;
-  const exactTax = taxRate > 0 ? (subTotal * taxRate) / 100 : 0;
+  const exactTax = taxRate > 0 ? (subTotal * taxRate) / (100 + taxRate) : 0;
   const taxCents = exactTax * 100;
   const tax =
     Math.round(
@@ -41,25 +41,29 @@ export function haversineKm(
 
 const LABELS = {
   es: {
-    subtotal: "Subtotal",
+    subtotal: "Subtotal (productos)",
+    taxBase: "Base gravable (comida/bebida)",
     taxIncluded: "Impoconsumo sobre productos",
     taxLegacy: "Impuesto registrado",
     delivery: "Domicilio",
   },
   en: {
-    subtotal: "Subtotal",
+    subtotal: "Subtotal (products)",
+    taxBase: "Taxable base (food/drinks)",
     taxIncluded: "Consumption tax on products",
     taxLegacy: "Recorded tax",
     delivery: "Delivery",
   },
   pt: {
-    subtotal: "Subtotal",
+    subtotal: "Subtotal (produtos)",
+    taxBase: "Base tributável (comida/bebida)",
     taxIncluded: "Imposto sobre consumo dos produtos",
     taxLegacy: "Imposto registrado",
     delivery: "Entrega",
   },
   fr: {
-    subtotal: "Sous-total",
+    subtotal: "Sous-total (produits)",
+    taxBase: "Base imposable (repas/boissons)",
     taxIncluded: "Taxe sur les produits",
     taxLegacy: "Taxe enregistrée",
     delivery: "Livraison",

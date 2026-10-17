@@ -7,7 +7,7 @@ import {
   registerCashierPushDevice,
   type CashierPushDeviceSettings,
 } from "@/features/notifications/services/pushDeviceService";
-import { useCashierContext } from "@/features/cashier";
+import { useCashierContext } from "../context/CashierContext";
 import type { LanguageCode } from "@/locales/CashierTranslations";
 
 type NotificationsModule = typeof import("expo-notifications");

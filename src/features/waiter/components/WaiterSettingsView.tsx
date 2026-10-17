@@ -19,6 +19,9 @@ import { useWaiterNotificationPreferences } from "@/features/waiter/context/Wait
 import { vibrateWaiterDevice } from "@/features/waiter/services/waiterVibration";
 import { showAppAlert } from "@/features/shared/services/alertEvents";
 
+// En web, RN usa una perilla verde al encender; la forzamos a blanco.
+const switchWebProps = { activeThumbColor: "#FFFFFF" } as object;
+
 export const WaiterSettingsView = () => {
   const router = useRouter();
   const { handleLogout } = useAuth();
@@ -77,6 +80,7 @@ export const WaiterSettingsView = () => {
         disabled={disabled}
         trackColor={{ false: colors.border, true: colors.accent }}
         thumbColor="#FFFFFF"
+        {...switchWebProps}
       />
     </View>
   );
@@ -153,6 +157,7 @@ export const WaiterSettingsView = () => {
                 onValueChange={(value) => setMode(value ? "dark" : "light")}
                 trackColor={{ false: colors.border, true: colors.accent }}
                 thumbColor="#FFFFFF"
+        {...switchWebProps}
               />
             </View>
             <View style={[styles.divider, { backgroundColor: colors.border }]} />

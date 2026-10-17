@@ -1,12 +1,12 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import {
   StyleSheet,
   StatusBar,
   View,
   ActivityIndicator,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 import { Redirect } from "expo-router";
+import { readLastVisitedRoute, routeStorageScope } from "@/features/shared/services/lastVisitedRoute";
 import { LoginForm } from "../features/auth/components/LoginForm";
 import { useAuth } from "../features/auth/context/AuthContext";
 import {
@@ -17,6 +17,20 @@ import {
 
 export default function IndexScreen() {
   const { user, initializing } = useAuth();
+  const [restored, setRestored] = useState<{ scope: string; base: string; path: string } | null>(null);
+  const effectiveRole = user
+    ? resolveEffectiveRole(user.roles, user.hasActiveShift, user.activeShiftRoleName)
+    : null;
+  const base = effectiveRole ? ROLE_ROUTES[effectiveRole] : null;
+  const scope = user ? routeStorageScope(user) : null;
+  useEffect(() => {
+    if (!base || !scope) return;
+    let active = true;
+    void readLastVisitedRoute(scope, base).then((path) => {
+      if (active) setRestored({ scope, base, path });
+    });
+    return () => { active = false; };
+  }, [base, scope]);
 
   if (initializing) {
     return (
@@ -26,23 +40,22 @@ export default function IndexScreen() {
     );
   }
 
- if (user) {
-   const effectiveRole = resolveEffectiveRole(
-     user.roles,
-     user.hasActiveShift,
-     user.activeShiftRoleName,
-   );
-   const route = ROLE_ROUTES[effectiveRole];
-   if (route) {
-     return <Redirect href={route as any} />;
-   }
- }
+  if (user && base && scope) {
+    if (!restored || restored.scope !== scope || restored.base !== base) {
+      return (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#E61C24" />
+        </View>
+      );
+    }
+    return <Redirect href={restored.path as any} />;
+  }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={styles.container}>
       <StatusBar barStyle="dark-content" />
       <LoginForm />
-    </SafeAreaView>
+    </View>
   );
 }
 

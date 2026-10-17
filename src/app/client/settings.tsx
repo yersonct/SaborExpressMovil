@@ -19,6 +19,11 @@ import {
   type ClientLanguage,
 } from "../../features/userPreferences/context/ClientPreferencesContext";
 
+// En web, RN usa una perilla verde al encender; la forzamos a blanco.
+const switchWebProps = { activeThumbColor: "#FFFFFF" } as object;
+
+// En web, RN usa una perilla verde al encender; la forzamos a blanco.
+
 const languages: Array<{ code: ClientLanguage; label: string }> = [
   { code: "es", label: "Español" },
   { code: "en", label: "English" },
@@ -59,8 +64,8 @@ export default function ClientSettingsScreen() {
         value={value}
         onValueChange={onChange}
         disabled={loading}
-        trackColor={{ false: "#CBD5E1", true: "#10B981" }}
-        thumbColor="#FFFFFF"
+        trackColor={{ false: "#CBD5E1", true: colors.accent }}
+        thumbColor="#FFFFFF" {...switchWebProps} {...switchWebProps}
       />
     </View>
   );
@@ -121,7 +126,7 @@ export default function ClientSettingsScreen() {
                 }}
               >
                 <Text style={[styles.settingTitle, { color: colors.text }]}>{item.label}</Text>
-                {language === item.code && <Ionicons name="checkmark" size={21} color="#10B981" />}
+                {language === item.code && <Ionicons name="checkmark" size={21} color={colors.accent} />}
               </TouchableOpacity>
             ))}
           </View>

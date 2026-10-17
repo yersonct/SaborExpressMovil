@@ -6,6 +6,8 @@ export type { MapMarker } from "./leafletShared";
 
 export function LeafletMap({
   markers,
+  circles,
+  fitCircles,
   route,
   fitKey,
   focus,
@@ -52,9 +54,9 @@ export function LeafletMap({
     lastFitKey.current = fitKey;
     send({
       cmd: "update",
-      payload: { markers, route: route ?? [], fit },
+      payload: { markers, circles: circles ?? [], fitCircles: fitCircles ?? false, route: route ?? [], fit },
     });
-  }, [ready, markers, route, fitKey]);
+  }, [ready, markers, circles, fitCircles, route, fitKey]);
 
   useEffect(() => {
     if (!ready || !focus) return;
