@@ -1,4 +1,5 @@
 import React, { useCallback, useMemo, useState } from "react";
+import { useRememberedUiState } from "@/features/shared/hooks/useRememberedUiState";
 import {
   ActivityIndicator,
   Alert,
@@ -73,8 +74,9 @@ export function PaidOrdersPanel({ orders, isDark, loading }: Props) {
   const { language } = useCashierContext();
   const t = TRANSLATIONS[language as LanguageCode] || TRANSLATIONS.es;
   const [printingOrderId, setPrintingOrderId] = useState<number | null>(null);
-  const [selectedDate, setSelectedDate] = useState(
-    () => getColombiaDayKey() ?? "",
+  const [selectedDate, setSelectedDate] = useRememberedUiState<string>(
+    "cashier:paid-date", getColombiaDayKey() ?? "",
+    (v): v is string => typeof v === "string" && isValidDateKey(v) && v <= (getColombiaDayKey() ?? ""),
   );
   const [selectedOrder, setSelectedOrder] = useState<OrderSummary | null>(null);
   const today = getColombiaDayKey() ?? "";

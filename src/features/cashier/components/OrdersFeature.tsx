@@ -1,5 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useRememberedUiState } from "@/features/shared/hooks/useRememberedUiState";
 import { BreakdownRows } from "@/features/orders/components/BreakdownRows";
 import {
   ActivityIndicator,
@@ -95,7 +96,7 @@ export const OrdersFeature = ({
   };
 
   const [orderType, setOrderType] = useState<"mesa" | "llevar">("mesa");
-  const [showAllOrders, setShowAllOrders] = useState(false);
+  const [showAllOrders, setShowAllOrders] = useRememberedUiState<boolean>("cashier:all-orders", false);
   const [isSubmittingPayment, setIsSubmittingPayment] = useState(false);
   // Saldo real pendiente (total del pedido menos lo ya pagado antes).
   // null mientras se consulta; evita cobrar el total completo si el
@@ -103,7 +104,7 @@ export const OrdersFeature = ({
   const [remainingBalance, setRemainingBalance] = useState<number | null>(null);
   const [loadingBalance, setLoadingBalance] = useState(false);
 
-  useEffect(() => setShowAllOrders(false), [filterType]);
+  // Mantener el filtro al volver; no reabrir ningún modal de cobro.
 
   // Catálogo REAL del backend (antes era MENU_ITEMS, una lista inventada
   // sin relación con los productos reales — por eso "Agregar extra" nunca

@@ -8,10 +8,20 @@ export type MapMarker = {
   description?: string;
   color?: string;
   draggable?: boolean;
+  alwaysShowLabel?: boolean;
+};
+
+export type MapCircle = {
+  latitude: number;
+  longitude: number;
+  radiusKm: number;
+  color?: string;
 };
 
 export type LeafletMapProps = {
   markers: MapMarker[];
+  circles?: MapCircle[];
+  fitCircles?: boolean;
   route?: Coords[];
   // Cuando cambia este valor, el mapa se vuelve a encuadrar para ver todo.
   fitKey?: string;
@@ -29,7 +39,11 @@ export const LEAFLET_HTML = `<!DOCTYPE html>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<style>html,body,#map{height:100%;margin:0;padding:0;background:#e5e7eb}</style>
+<style>
+html,body,#map{height:100%;margin:0;padding:0;background:#e5e7eb}
+.sabor-branch-tooltip{background:#0f172a;color:#fff;border:0;border-radius:6px;padding:3px 7px;font-size:12px;font-weight:700;box-shadow:0 2px 6px #0005}
+.sabor-branch-tooltip:before{border-top-color:#0f172a!important}
+</style>
 </head>
 <body>
 <div id="map"></div>
@@ -51,9 +65,24 @@ map.on('click', function (e) {
   post({ type: 'tap', lat: e.latlng.lat, lng: e.latlng.lng });
 });
 
+function safeText(value) {
+  return String(value || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
 window.updateMap = function (d) {
   layer.clearLayers();
   var pts = [];
+
+  (d.circles || []).forEach(function (c) {
+    if (!Number.isFinite(c.radiusKm) || c.radiusKm <= 0) return;
+    L.circle([c.latitude,c.longitude], {
+      radius: c.radiusKm * 1000,
+      color: c.color || '#E61C24', weight: 2,
+      fillColor: c.color || '#E61C24', fillOpacity: 0.09,
+      interactive: false
+    }).addTo(layer);
+  });
 
   if (d.route && d.route.length > 1) {
     var line = d.route.map(function (c) { return [c.latitude, c.longitude]; });
@@ -72,7 +101,13 @@ window.updateMap = function (d) {
     });
     var mk = L.marker([m.latitude, m.longitude], { icon: icon, draggable: !!m.draggable }).addTo(layer);
     if (m.title) {
-      mk.bindPopup('<b>' + m.title + '</b>' + (m.description ? '<br>' + m.description : ''));
+      mk.bindPopup('<b>' + safeText(m.title) + '</b>' + (m.description ? '<br>' + safeText(m.description) : ''));
+      if (m.alwaysShowLabel) {
+        mk.bindTooltip(safeText(m.title), {
+          permanent: true, direction: 'top', offset: [0, -13],
+          className: 'sabor-branch-tooltip'
+        });
+      }
     }
     if (m.draggable) {
       mk.on('dragend', function (e) {
@@ -84,7 +119,15 @@ window.updateMap = function (d) {
   });
 
   if (d.fit && pts.length) {
-    if (pts.length === 1) map.setView(pts[0], 15);
+    if (d.fitCircles && (d.circles || []).length) {
+      var bounds = L.latLngBounds(pts);
+      d.circles.forEach(function (c) {
+        if (Number.isFinite(c.radiusKm) && c.radiusKm > 0) {
+          bounds.extend(L.circle([c.latitude,c.longitude], { radius: c.radiusKm * 1000 }).getBounds());
+        }
+      });
+      map.fitBounds(bounds, { padding: [30, 30] });
+    } else if (pts.length === 1) map.setView(pts[0], 15);
     else map.fitBounds(pts, { padding: [50, 50] });
   }
 };

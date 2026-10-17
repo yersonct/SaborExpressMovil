@@ -1,7 +1,7 @@
 export type AppLanguage = "es" | "en" | "pt" | "fr";
 
 const offlineMessages: Record<AppLanguage, string> = {
-  es: "Sin conexión a Internet. Revisa tu señal e inténtalo de nuevo.",
+  es: "No se pudo conectar con SaborExpress. Comprueba que el servidor esté disponible e inténtalo de nuevo.",
   en: "No internet connection. Check your signal and try again.",
   pt: "Sem conexão com a internet. Verifique seu sinal e tente novamente.",
   fr: "Pas de connexion Internet. Vérifiez votre réseau et réessayez.",

@@ -52,6 +52,8 @@ export const DeliveryOrdersList = () => {
   const [isSheetExpanded, setIsSheetExpanded] = useState(true);
   const [startError, setStartError] = useState<string | null>(null);
   const [activatingAvailability, setActivatingAvailability] = useState(false);
+  const [pausingAvailability, setPausingAvailability] = useState(false);
+  const [gpsError, setGpsError] = useState<string | null>(null);
   const hasInTransitDelivery = deliveries.some(
     (delivery) => delivery.status === DeliveryStatus.InTransit,
   );
@@ -62,7 +64,6 @@ export const DeliveryOrdersList = () => {
   const reportDriverLocation = useCallback(
     async (force = false) => {
       if (
-        Platform.OS === "web" ||
         !profile?.id ||
         (!profile.isAvailable && !hasInTransitDelivery && !force) ||
         Date.now() - lastLocationReportAtRef.current <
@@ -78,31 +79,48 @@ export const DeliveryOrdersList = () => {
 
       const request = (async () => {
         try {
-          let permission = await Location.getForegroundPermissionsAsync();
-          if (
-            !permission.granted &&
-            permission.canAskAgain &&
-            (force || !locationPermissionRequestedRef.current)
-          ) {
-            locationPermissionRequestedRef.current = true;
-            permission = await Location.requestForegroundPermissionsAsync();
+          let latitude: number;
+          let longitude: number;
+          if (Platform.OS === "web") {
+            // El navegador requiere HTTPS o localhost y permiso expreso del usuario.
+            const coords = await new Promise<{ latitude: number; longitude: number }>((resolve, reject) => {
+              if (typeof navigator === "undefined" || !navigator.geolocation) {
+                reject(new Error("Geolocalización web no disponible: usa HTTPS/localhost y habilita GPS."));
+                return;
+              }
+              navigator.geolocation.getCurrentPosition(
+                (pos) => resolve({ latitude: pos.coords.latitude, longitude: pos.coords.longitude }),
+                (error) => reject(error),
+                { enableHighAccuracy: true, maximumAge: 5000, timeout: 12000 },
+              );
+            });
+            latitude = coords.latitude;
+            longitude = coords.longitude;
+          } else {
+            let permission = await Location.getForegroundPermissionsAsync();
+            if (!permission.granted && permission.canAskAgain && (force || !locationPermissionRequestedRef.current)) {
+              locationPermissionRequestedRef.current = true;
+              permission = await Location.requestForegroundPermissionsAsync();
+            }
+            if (!permission.granted) {
+              setGpsError(t.gpsPermissionRequired);
+              return;
+            }
+            const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+            latitude = position.coords.latitude;
+            longitude = position.coords.longitude;
           }
-          if (!permission.granted) return;
-
-          const position = await Location.getCurrentPositionAsync({
-            accuracy: Location.Accuracy.Balanced,
-          });
-          const latitude = position.coords.latitude;
-          const longitude = position.coords.longitude;
           const sentOverSocket = await reportDeliveryLocation(latitude, longitude);
           if (!sentOverSocket) {
             // Conserva el reporte si SignalR aún está conectando o reconectando.
             await employeeService.updateMyLocation(latitude, longitude);
           }
           lastLocationReportAtRef.current = Date.now();
-        } catch {
-          // Si no hay GPS o señal, se conserva la ubicación anterior y la lista
-          // sigue cargando; el servidor descarta ubicaciones demasiado antiguas.
+          setGpsError(null);
+        } catch (error) {
+          // Ubicación no disponible: dejar una explicación visible, nunca inventar coordenadas.
+          if (__DEV__) console.warn("[Repartidor] No se pudo compartir GPS:", error);
+          setGpsError(t.gpsPermissionRequired);
         }
       })();
 
@@ -200,6 +218,15 @@ export const DeliveryOrdersList = () => {
     hasInTransitDelivery,
     reportDriverLocation,
   ]);
+  // Seguimiento del navegador mientras la página del repartidor esté abierta.
+  // No promete GPS de fondo: los navegadores suspenden procesos en pestañas cerradas.
+  useEffect(() => {
+    if (Platform.OS !== "web" || !profile?.id || (!profile.isAvailable && !hasInTransitDelivery)) return;
+    void reportDriverLocation();
+    const interval = setInterval(() => void reportDriverLocation(), hasInTransitDelivery ? 15_000 : 60_000);
+    return () => clearInterval(interval);
+  }, [profile?.id, profile?.isAvailable, hasInTransitDelivery, reportDriverLocation]);
+
   useRealtimeEvents(
     ["DeliveriesChanged", "OrdersChanged", "RealtimeConnected"],
     () => void fetchDeliveries(true),
@@ -233,6 +260,19 @@ export const DeliveryOrdersList = () => {
     });
     return () => subscription.remove();
   }, [fetchDeliveries, refetchProfile]);
+
+  const handlePauseAvailability = async () => {
+    if (!profile?.isAvailable || pausingAvailability) return;
+    setPausingAvailability(true);
+    try {
+      await employeeService.setAvailability(false);
+      await refetchProfile();
+    } catch (error: any) {
+      Alert.alert(t.errorTitle, error?.message ?? t.availabilitySaveError);
+    } finally {
+      setPausingAvailability(false);
+    }
+  };
 
   const handleEnableAvailability = async () => {
     setActivatingAvailability(true);
@@ -510,11 +550,33 @@ export const DeliveryOrdersList = () => {
           paddingTop: 4,
         }}
       >
+        {profile && (
+          <TouchableOpacity
+            accessibilityRole="button"
+            onPress={profile.isAvailable ? handlePauseAvailability : handleEnableAvailability}
+            disabled={pausingAvailability || activatingAvailability}
+            style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 12, gap: 6 }}
+          >
+            <Ionicons
+              name={profile.isAvailable ? "pause-circle-outline" : "play-circle-outline"}
+              size={18}
+              color={colors.muted}
+            />
+            <Text style={{ color: colors.muted, fontSize: 12, fontWeight: "700" }}>
+              {profile.isAvailable ? t.pauseAssignments : t.receiveOrders}
+            </Text>
+          </TouchableOpacity>
+        )}
         <NotificationBell
           colors={colors}
           t={(key) => t[key] ?? key}
         />
       </View>
+      {gpsError && hasInTransitDelivery && (
+        <View style={{ marginHorizontal: 16, marginTop: 8, padding: 10, borderRadius: 8, backgroundColor: colors.warningBg }}>
+          <Text style={{ color: colors.warningText, fontSize: 12 }}>{gpsError}</Text>
+        </View>
+      )}
       {startError && (
         <View
           style={{

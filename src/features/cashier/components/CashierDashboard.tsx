@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
+import { useRememberedUiState } from "@/features/shared/hooks/useRememberedUiState";
 import {
   View,
   Text,
@@ -15,14 +16,14 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "expo-router";
 import { styles } from "../style/CashierStyles";
-import { useCashierContext } from "@/features/cashier";
+import { useCashierContext } from "../context/CashierContext";
 
 import { STAFF_TODAY, Employee, Order } from "./CashierData";
 import { OrdersFeature } from "./OrdersFeature";
 import { DeliveryOrdersPanel } from "./DeliveryOrdersPanel";
 import { PaidOrdersPanel } from "./PaidOrdersPanel";
 import { useMyBranch } from "@/features/employees/hooks/useMyBranch";
-import { useCashierOrders } from "@/features/cashier";
+import { useCashierOrders } from "../hooks/useCashierOrders";
 import { useTables } from "@/features/tables/hooks/useTables";
 import { TableStatus } from "@/features/tables/types/table.types";
 import { useCashierNotifications } from "../hooks/useCashierNotifications";
@@ -31,7 +32,7 @@ import { orderService, OrderStatus, OrderType } from "@/features/orders";
 import type { CashierShiftSummary } from "@/features/payments/types/payment.types";
 import { isReadyForCashier } from "./DeliveryOrdersPanel";
 import { useMyProfile } from "@/features/employees/hooks/useMyProfile";
-import { isColombiaToday } from "@/features/shared/utils/colombia-date";
+import { getColombiaDayKey } from "@/features/shared/utils/colombia-date";
 
 import {
   TRANSLATIONS,
@@ -66,10 +67,19 @@ export default function CashierDashboard() {
     buttonDark: isDark ? "#334155" : "#1E293B",
   };
 
-  const [activeTab, setActiveTab] = useState<
+  const [activeTab, setActiveTab] = useRememberedUiState<
     "mesa" | "llevar" | "delivery" | "pagados" | "personal"
-  >("mesa");
+  >("cashier:tab", "mesa", (v): v is "mesa" | "llevar" | "delivery" | "pagados" | "personal" =>
+    typeof v === "string" && ["mesa", "llevar", "delivery", "pagados", "personal"].includes(v));
   const { branchId } = useMyBranch();
+  const [showOlderOrders, setShowOlderOrders] = useRememberedUiState<boolean>("cashier:older", false);
+  const [todayKey, setTodayKey] = useState(() => getColombiaDayKey());
+  useEffect(() => {
+    const interval = setInterval(() => setTodayKey(getColombiaDayKey()), 60_000);
+    return () => clearInterval(interval);
+  }, []);
+  const belongsToToday = (iso?: string | null) =>
+    Boolean(iso) && getColombiaDayKey(iso!) === todayKey;
   const {
     orders,
     setOrders,
@@ -91,9 +101,13 @@ export default function CashierDashboard() {
       !tablesWithBlockingOrders.has(tb.id) &&
       !orders.some((o) => o.table === tb.number),
   );
-  const tableOrderCount =
-    orders.filter((order) => order.type === "mesa").length +
-    paidOrdersAwaitingDelivery.length;
+  const ordersToday = orders.filter((o) => belongsToToday(o.createdAt));
+  const ordersPrevious = orders.filter((o) => !belongsToToday(o.createdAt));
+  const ordersOnScreen = showOlderOrders ? ordersPrevious : ordersToday;
+  const oldInTab = ordersPrevious.filter((o) => o.type === activeTab).length;
+  const tableOrderCount = ordersToday.filter((o) => o.type === "mesa").length +
+    paidOrdersAwaitingDelivery.filter((o) => belongsToToday(o.createdAt)).length;
+  const paidTodayCount = paidOrders.filter((o) => belongsToToday(o.paidAt ?? o.createdAt)).length;
 
   const [tableToRelease, setTableToRelease] = useState<{
     id: number;
@@ -134,7 +148,7 @@ export default function CashierDashboard() {
           o.orderType === OrderType.Delivery &&
           o.status === OrderStatus.Pending &&
           o.orderDetails.length > 0 &&
-          isColombiaToday(o.createdAt),
+          getColombiaDayKey(o.createdAt) === todayKey,
       );
       // Mismo criterio del panel: efectivo, o Wompi ya aprobado
       const checks = await Promise.all(candidates.map(isReadyForCashier));
@@ -144,14 +158,14 @@ export default function CashierDashboard() {
           (o.status === OrderStatus.Confirmed ||
             o.status === OrderStatus.InPreparation ||
             o.status === OrderStatus.Ready) &&
-          isColombiaToday(o.createdAt),
+          getColombiaDayKey(o.createdAt) === todayKey,
       ).length;
       // La pestaña también muestra los domicilios confirmados en el pie.
       setDeliveryCount(checks.filter(Boolean).length + confirmedDeliveries);
     } catch {
       // Silencioso: se reintenta en el siguiente ciclo
     }
-  }, [branchId]);
+  }, [branchId, todayKey]);
 
   useEffect(() => {
     fetchDeliveryCount();
@@ -384,7 +398,7 @@ export default function CashierDashboard() {
             ]}
           >
             {t.tabTakeaway}{" "}
-            {orders.some(
+            {ordersToday.some(
               (o) =>
                 o.type === "llevar" && o.status === "pagando_transferencia",
             )
@@ -392,7 +406,7 @@ export default function CashierDashboard() {
               : ""}{" "}
             (
             {
-              orders.filter((o) => o.type === "llevar" && o.status !== "pagado")
+              ordersToday.filter((o) => o.type === "llevar" && o.status !== "pagado")
                 .length
             }
             )
@@ -431,7 +445,7 @@ export default function CashierDashboard() {
               activeTab === "pagados" && styles.tabTextActive,
             ]}
           >
-            {t.tabPaid} ({paidOrders.length})
+            {t.tabPaid} ({paidTodayCount})
           </Text>
         </TouchableOpacity>
       </View>
@@ -500,9 +514,19 @@ export default function CashierDashboard() {
           </View>
         )}
 
+        {(activeTab === "mesa" || activeTab === "llevar") && (oldInTab > 0 || showOlderOrders) && (
+          <TouchableOpacity accessibilityRole="button"
+            onPress={() => setShowOlderOrders((value) => !value)}
+            style={{ padding: 12, marginHorizontal: 16, marginTop: 10, borderRadius: 10,
+              backgroundColor: isDark ? "#1E293B" : "#E2E8F0" }}>
+            <Text style={{ color: colors.text, textAlign: "center", fontWeight: "700" }}>
+              {showOlderOrders ? "Volver a pedidos de hoy" : `Ver pendientes anteriores (${oldInTab})`}
+            </Text>
+          </TouchableOpacity>
+        )}
         {(activeTab === "mesa" || activeTab === "llevar") && (
           <OrdersFeature
-            orders={orders}
+            orders={ordersOnScreen}
             setOrders={setOrders}
             markAsPaid={markAsPaid}
             setPaidHistory={setPaidHistory}

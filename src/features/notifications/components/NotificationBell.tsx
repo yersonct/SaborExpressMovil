@@ -23,7 +23,7 @@ export function NotificationBell({
   colors?: NotificationThemeColors;
   t?: (key: string) => string;
 }) {
-  const { history, unreadCount, markAllRead, clear } = useUserNotifications();
+  const { history, unreadCount, markAllRead, clear, openRelatedOrder } = useUserNotifications();
   const preferences = useOptionalClientPreferences();
   return (
     <NotificationCenter
@@ -33,7 +33,7 @@ export function NotificationBell({
       unreadCount={unreadCount}
       onOpen={markAllRead}
       onClear={clear}
-      onSelect={onSelect}
+      onSelect={onSelect ?? openRelatedOrder}
     />
   );
 }

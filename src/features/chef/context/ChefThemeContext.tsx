@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState, ReactNode } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import React, { createContext, useContext, useEffect, useState, ReactNode } from "react";
 
 const darkColors = {
   background: "#0B1220",
@@ -33,10 +34,30 @@ const ChefThemeContext = createContext<ChefThemeContextType | undefined>(
   undefined,
 );
 
-export function ChefThemeProvider({ children }: { children: ReactNode }) {
+export function ChefThemeProvider({ children, storageScope = "anonymous" }: {
+  children: ReactNode;
+  storageScope?: string;
+}) {
   const [isDark, setIsDark] = useState(true);
+  const storageKey = `saborexpress-chef-theme:${encodeURIComponent(storageScope)}`;
+
+  useEffect(() => {
+    let active = true;
+    void AsyncStorage.getItem(storageKey)
+      .then((value) => {
+        if (active && (value === "dark" || value === "light")) {
+          setIsDark(value === "dark");
+        }
+      })
+      .catch(() => undefined);
+    return () => { active = false; };
+  }, [storageKey]);
+
   const colors = isDark ? darkColors : lightColors;
-  const setMode = (mode: "dark" | "light") => setIsDark(mode === "dark");
+  const setMode = (mode: "dark" | "light") => {
+    setIsDark(mode === "dark");
+    void AsyncStorage.setItem(storageKey, mode).catch(() => undefined);
+  };
 
   return (
     <ChefThemeContext.Provider value={{ isDark, setMode, colors }}>
