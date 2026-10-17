@@ -6,12 +6,16 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   ScrollView,
+  Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { usePublicBranches } from "../hooks/usePublicBranches";
 import type { PublicBranch } from "../types/branch.types";
 import { useDeliveryRoute } from "../hooks/useDeliveryRoute";
 import { LeafletMap, type MapMarker } from "./LeafletMap";
+import type { MapCircle } from "./leafletShared";
+import { useDeliveryCoverage } from "../hooks/useDeliveryCoverage";
+import { haversineKm } from "@/features/orders/utils/orderBreakdown";
 import { useClientPreferences } from "@/features/userPreferences/context/ClientPreferencesContext";
 
 type Props = {
@@ -51,6 +55,9 @@ export function BranchesMapModal({
       ),
     [branches],
   );
+
+  // Consulta el radio real de cada sede.
+  const { radii, loading: coverageLoading } = useDeliveryCoverage(located, visible);
 
   // Al abrir, conserva la sede activa; si aún no hay selección, usa la más cercana.
   useEffect(() => {
@@ -103,6 +110,7 @@ export function BranchesMapModal({
       title: b.name,
       description: b.address ?? undefined,
       color: b.id === selectedId ? "#10B981" : "#E61C24",
+      alwaysShowLabel: true,
     }));
     if (userLocation) {
       list.push({
@@ -116,9 +124,19 @@ export function BranchesMapModal({
     return list;
   }, [located, selectedId, userLocation?.latitude, userLocation?.longitude, t]);
 
+  const circles = useMemo<MapCircle[]>(() => located.flatMap((b) => {
+    const radius = radii[b.id];
+    if (radius == null || radius <= 0) return [];
+    return [{
+      latitude: Number(b.latitude), longitude: Number(b.longitude),
+      radiusKm: radius,
+      color: b.id === selectedId ? "#10B981" : "#E61C24",
+    }];
+  }), [located, radii, selectedId]);
+
   // No cambia al tocar otra sede; así el mapa conserva el foco que eligió el usuario.
   const fitKey = visible
-    ? `open-${located.length}-${userLocation ? 1 : 0}-${selectedBranchId ?? nearestBranchId ?? 0}`
+    ? `open-${located.length}-${userLocation ? 1 : 0}-${selectedBranchId ?? nearestBranchId ?? 0}-${located.map((b) => radii[b.id] ?? "n").join("-")}`
     : "closed";
 
   const focusBranch = (lat: number, lng: number) =>
@@ -165,6 +183,8 @@ export function BranchesMapModal({
             <View style={{ flex: 1 }}>
               <LeafletMap
                 markers={markers}
+                circles={circles}
+                fitCircles
                 route={lineToDraw}
                 fitKey={fitKey}
                 focus={focus}
@@ -188,7 +208,7 @@ export function BranchesMapModal({
                   {loadingRoute
                     ? t("routeCalculating")
                     : distanceKm != null
-                      ? `${selectedBranch.name}: ${distanceKm.toFixed(1)} km · ~${durationMin} min`
+                      ? `${selectedBranch.name}: ${distanceKm.toFixed(1)} km por calles · ~${durationMin} min`
                       : `${selectedBranch.name} (${t("routeNoStreet")})`}
                 </Text>
               </View>
@@ -221,6 +241,17 @@ export function BranchesMapModal({
                     <Text style={{ fontSize: 12, color: colors.muted }}>
                       {b.address}
                     </Text>
+                    <Text style={{ fontSize: 12, color: colors.muted, marginTop: 4 }}>
+                      {coverageLoading
+                        ? "Consultando radio de entrega..."
+                        : radii[b.id] == null
+                          ? "Radio no disponible"
+                          : "Radio: " + radii[b.id] + " km" + (userLocation
+                            ? " · " + haversineKm(userLocation.latitude, userLocation.longitude, Number(b.latitude), Number(b.longitude)).toFixed(1)
+                              + " km en línea recta · " + (haversineKm(userLocation.latitude, userLocation.longitude, Number(b.latitude), Number(b.longitude)) <= radii[b.id]!
+                                ? "Dentro de cobertura" : "Fuera de cobertura")
+                            : "")}
+                    </Text>
                   </TouchableOpacity>
                 ))}
               </ScrollView>
@@ -228,6 +259,15 @@ export function BranchesMapModal({
             {selectedBranch && onSelectBranch && (
               <TouchableOpacity
                 onPress={() => {
+                  if (coverageLoading || radii[selectedBranch.id] == null) {
+                    Alert.alert("Radio no disponible", "No se pudo verificar el radio de entrega de esta sede.");
+                    return;
+                  }
+                  if (userLocation && haversineKm(userLocation.latitude, userLocation.longitude,
+                        Number(selectedBranch.latitude), Number(selectedBranch.longitude)) > radii[selectedBranch.id]!) {
+                    Alert.alert("Fuera de cobertura", "La dirección elegida está fuera del radio de entrega de " + selectedBranch.name + ". Elige otra sede o dirección.");
+                    return;
+                  }
                   onSelectBranch(selectedBranch);
                   onClose();
                 }}

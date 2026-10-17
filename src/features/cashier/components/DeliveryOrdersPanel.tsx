@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from "react";
+import { useRememberedUiState } from "@/features/shared/hooks/useRememberedUiState";
 import {
   View,
   Text,
@@ -28,7 +29,7 @@ import { useCashierContext } from "../context/CashierContext";
 import { TRANSLATIONS } from "@/locales/CashierTranslations";
 import {
   formatColombiaTime,
-  isColombiaToday,
+  getColombiaDayKey,
 } from "@/features/shared/utils/colombia-date";
 
 interface Props {
@@ -62,6 +63,13 @@ export function DeliveryOrdersPanel({
   const { language } = useCashierContext();
   const t = TRANSLATIONS[language] || TRANSLATIONS.es;
   const [orders, setOrders] = useState<OrderSummary[]>([]);
+  const [showOlderOrders, setShowOlderOrders] = useRememberedUiState<boolean>("cashier:delivery-older", false);
+  const [olderCount, setOlderCount] = useState(0);
+  const [todayKey, setTodayKey] = useState(() => getColombiaDayKey());
+  useEffect(() => {
+    const interval = setInterval(() => setTodayKey(getColombiaDayKey()), 60_000);
+    return () => clearInterval(interval);
+  }, []);
   const [confirmedOrders, setConfirmedOrders] = useState<OrderSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [confirmingId, setConfirmingId] = useState<number | null>(null);
@@ -92,24 +100,27 @@ export function DeliveryOrdersPanel({
             o.orderType === OrderType.Delivery &&
             o.status === OrderStatus.Pending &&
             o.orderDetails.length > 0 &&
-            isColombiaToday(o.createdAt),
+            getColombiaDayKey(o.createdAt) === todayKey,
         );
         const synced = await Promise.all(waitingPayment.map(syncPendingWompi));
         if (synced.some(Boolean)) {
           // Alguno se aprobó: se recarga para verlo ya confirmado y con repartidor
           summaries = await orderService.getAll(branchId);
         }
-        const candidates = summaries.filter(
-          (o) =>
-            o.orderType === OrderType.Delivery &&
-            o.status === OrderStatus.Pending &&
-            o.orderDetails.length > 0 &&
-            isColombiaToday(o.createdAt),
+        const candidates = summaries.filter((o) =>
+          o.orderType === OrderType.Delivery &&
+          o.status === OrderStatus.Pending &&
+          o.orderDetails.length > 0,
         );
-
-        // Solo los de efectivo o los que Wompi ya aprobó
+        // Nunca omitir la comprobación del pago, ni siquiera para un pedido antiguo.
         const checks = await Promise.all(candidates.map(isReadyForCashier));
-        setOrders(candidates.filter((_, i) => checks[i]));
+        const eligible = candidates.filter((_, i) => checks[i]);
+        setOlderCount(eligible.filter((o) => getColombiaDayKey(o.createdAt) !== todayKey).length);
+        setOrders(eligible.filter((o) =>
+          showOlderOrders
+            ? getColombiaDayKey(o.createdAt) !== todayKey
+            : getColombiaDayKey(o.createdAt) === todayKey,
+        ));
 
         // Domicilios ya confirmados hoy (incluye los pagados con Wompi)
         setConfirmedOrders(
@@ -119,7 +130,7 @@ export function DeliveryOrdersPanel({
               (o.status === OrderStatus.Confirmed ||
                 o.status === OrderStatus.InPreparation ||
                 o.status === OrderStatus.Ready) &&
-              isColombiaToday(o.createdAt),
+              getColombiaDayKey(o.createdAt) === todayKey,
           ),
         );
       } catch (err: any) {
@@ -133,7 +144,7 @@ export function DeliveryOrdersPanel({
         setLoading(false);
       }
     },
-    [branchId, language],
+    [branchId, language, showOlderOrders, todayKey],
   );
 
   useEffect(() => {
@@ -166,14 +177,15 @@ export function DeliveryOrdersPanel({
         );
       }
       setOrders((prev) => prev.filter((o) => o.id !== order.id));
-      setConfirmedOrders((prev) => [
-        {
+      if (getColombiaDayKey(order.createdAt) === todayKey) {
+        setConfirmedOrders((prev) => [{
           ...order,
           status: OrderStatus.Confirmed,
           assignedDeliveryPersonName: driver,
-        },
-        ...prev,
-      ]);
+        }, ...prev]);
+      } else {
+        setOlderCount((n) => Math.max(0, n-1));
+      }
     } catch (err: any) {
       Alert.alert(t.errorTitle, err?.message ?? t.deliveryConfirmError);
     } finally {
@@ -192,6 +204,16 @@ export function DeliveryOrdersPanel({
   return (
     <>
     <FlatList
+      ListHeaderComponent={olderCount > 0 || showOlderOrders ? (
+        <TouchableOpacity accessibilityRole="button"
+          onPress={() => setShowOlderOrders((v) => !v)}
+          style={{ padding: 12, borderRadius: 10,
+            backgroundColor: isDark ? "#1E293B" : "#E2E8F0" }}>
+          <Text style={{ color: colors.text, textAlign: "center", fontWeight: "700" }}>
+            {showOlderOrders ? "Volver a domicilios de hoy" : `Ver domicilios pendientes anteriores (${olderCount})`}
+          </Text>
+        </TouchableOpacity>
+      ) : null}
       data={orders}
       keyExtractor={(item) => String(item.id)}
       contentContainerStyle={{ padding: 16, gap: 12 }}
@@ -286,7 +308,7 @@ export function DeliveryOrdersPanel({
         <View style={{ alignItems: "center", paddingVertical: 40 }}>
           <Ionicons name="bicycle-outline" size={56} color={colors.muted} />
           <Text style={{ color: colors.muted, marginTop: 12, fontSize: 15 }}>
-            {t.emptyPendingDeliveries}
+            {showOlderOrders ? "No hay domicilios pendientes anteriores." : t.emptyPendingDeliveries}
           </Text>
         </View>
       }

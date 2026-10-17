@@ -1,4 +1,4 @@
-import { StyleSheet, Platform } from 'react-native';
+import { StyleSheet } from 'react-native';
 
 export const styles = StyleSheet.create({
     safeArea: { flex: 1 },
@@ -9,7 +9,7 @@ export const styles = StyleSheet.create({
         justifyContent: 'space-between',
         alignItems: 'center',
         paddingHorizontal: 24,
-        paddingTop: Platform.OS === 'android' ? 40 : 10,
+        paddingTop: 10,
         paddingBottom: 10,
         zIndex: 10,
     },

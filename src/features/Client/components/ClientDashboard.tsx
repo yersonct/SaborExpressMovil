@@ -25,6 +25,7 @@
   import { Ionicons } from "@expo/vector-icons";
 import { Image as ExpoImage } from "expo-image";
   import { useRouter } from "expo-router";
+  import { useRememberedUiState } from "@/features/shared/hooks/useRememberedUiState";
   import { orderService } from "@/features/orders/services/orderService";
   import { paymentService } from "@/features/payments/services/paymentService";
   import { OrderType } from "@/features/orders/types/order.types";
@@ -93,6 +94,7 @@ import { OrderTrackingModal } from "@/features/orders/components/OrderTrackingMo
 
     const [showBranchesMap, setShowBranchesMap] = useState(false);
     const [showLocationPicker, setShowLocationPicker] = useState(false);
+    const [savingMapLocation, setSavingMapLocation] = useState(false);
     const [showDeliveryOptions, setShowDeliveryOptions] = useState(false);
     const [trackingOrderId, setTrackingOrderId] = useState<number | null>(null);
     const [manualBranch, setManualBranch] = useState<PublicBranch | null>(null);
@@ -169,19 +171,21 @@ import { OrderTrackingModal } from "@/features/orders/components/OrderTrackingMo
     const saveLocationAsAddress = async (
       coords: { latitude: number; longitude: number },
       isDefault: boolean,
-    ) => {
+      exactAddress?: string,
+    ): Promise<boolean> => {
       try {
-        let addressLine = "Ubicación actual";
-        try {
-          const [place] = await Location.reverseGeocodeAsync(coords);
-          if (place) {
-            const parts = [place.street, place.name, place.city].filter(
-              Boolean,
-            );
-            if (parts.length > 0) addressLine = parts.join(", ");
+        if (!customerId) throw new Error("No se identificó la cuenta del cliente.");
+        let addressLine = exactAddress?.trim() || "Ubicación actual";
+        if (!exactAddress?.trim()) {
+          try {
+            const [place] = await Location.reverseGeocodeAsync(coords);
+            if (place) {
+              const parts = [place.street, place.name, place.city].filter(Boolean);
+              if (parts.length > 0) addressLine = parts.join(", ");
+            }
+          } catch {
+            // El cliente puede editar luego una dirección aproximada.
           }
-        } catch {
-          // Si no se puede obtener el texto, se queda con "Ubicación actual".
         }
 
         const created = await createAddress({
@@ -193,11 +197,13 @@ import { OrderTrackingModal } from "@/features/orders/components/OrderTrackingMo
         setManualBranch(null);
         setSelectedAddressId(created.id);
         setLiveLocation(null);
+        return true;
       } catch (err: any) {
         Alert.alert(
           t("error"),
           err?.message ?? t("addressSaveError"),
         );
+        return false;
       }
     };
     const handleUseCurrentLocationForBranch = async () => {
@@ -277,7 +283,7 @@ import { OrderTrackingModal } from "@/features/orders/components/OrderTrackingMo
       handleUseCurrentLocationForBranch();
     }, [loadingAddresses, addresses]);
     // Estados Generales
-    const [activeCategory, setActiveCategory] = useState("__all__");
+    const [activeCategory, setActiveCategory] = useRememberedUiState<string>("client:category", "__all__");
     const { cart, addItem, removeItem, clearCart } = useCart();
 
     const handleOpenBranchPicker = () => {
@@ -332,7 +338,7 @@ import { OrderTrackingModal } from "@/features/orders/components/OrderTrackingMo
     ];
 
     useEffect(() => {
-      if (!categoryNames.includes(activeCategory)) setActiveCategory("__all__");
+      if (products.length > 0 && categories.length > 0 && !categoryNames.includes(activeCategory)) setActiveCategory("__all__");
     }, [products, categories]);
     const filteredMenu = (
       activeCategory === "__all__"
@@ -701,10 +707,7 @@ import { OrderTrackingModal } from "@/features/orders/components/OrderTrackingMo
               backgroundColor: isDark ? "#3B2024" : "#FEF2F2",
               gap: 8,
             }}
-            onPress={() => {
-              setShowAllAddresses(false);
-              setShowAddressPicker(true);
-            }}
+            onPress={handleOpenLocationPicker}
           >
             <Ionicons name="location" size={18} color={colors.accent} />
             <Text
@@ -1024,7 +1027,14 @@ import { OrderTrackingModal } from "@/features/orders/components/OrderTrackingMo
 
         <LocationPickerModal
           visible={showLocationPicker}
-          onClose={() => setShowLocationPicker(false)}
+          onClose={() => { if (!savingMapLocation) setShowLocationPicker(false); }}
+          savedAddresses={addresses}
+          selectedAddressId={selectedAddressId}
+          saving={savingMapLocation}
+          onChooseSavedAddress={(id) => {
+            void handleSelectAddress(id);
+            setShowLocationPicker(false);
+          }}
           initialLocation={
             coordsForBranch
               ? {
@@ -1033,17 +1043,14 @@ import { OrderTrackingModal } from "@/features/orders/components/OrderTrackingMo
                 }
               : null
           }
-          onConfirm={(coords) => {
-            setManualBranch(null);
-            setLiveLocation(coords);
-            setShowLocationPicker(false);
-            Alert.alert(t("useLocationTitle"), t("useLocationMessage"), [
-              { text: t("onlyViewBranch"), style: "cancel" },
-              {
-                text: t("saveAndUse"),
-                onPress: () => saveLocationAsAddress(coords, true),
-              },
-            ]);
+          onConfirm={(coords, exactAddress) => {
+            if (savingMapLocation) return;
+            setSavingMapLocation(true);
+            void saveLocationAsAddress(coords, true, exactAddress)
+              .then((saved) => {
+                if (saved) setShowLocationPicker(false);
+              })
+              .finally(() => setSavingMapLocation(false));
           }}
         />
         {/* PEDIDO EN CURSO */}

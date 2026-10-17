@@ -29,6 +29,7 @@ export interface ToastNotification {
 interface Props {
   notifications: ToastNotification[];
   onDismiss: (id: number) => void;
+  onSelect?: (notification: ToastNotification) => void;
   t?: (key: string) => string;
   colors?: {
     surface: string;
@@ -54,11 +55,13 @@ const ICONS: Record<
 function ToastItem({
   notification,
   onDismiss,
+  onSelect,
   t,
   colors,
 }: {
   notification: ToastNotification;
   onDismiss: (id: number) => void;
+  onSelect?: (notification: ToastNotification) => void;
   t?: (key: string) => string;
   colors?: Props["colors"];
 }) {
@@ -112,6 +115,13 @@ function ToastItem({
         { transform: [{ translateY }], opacity },
       ]}
     >
+      <TouchableOpacity
+        style={styles.toastBody}
+        accessibilityRole="button"
+        accessibilityLabel="Abrir pedido de esta notificación"
+        disabled={!(notification.relatedEntityType?.toLowerCase() === "order" && notification.relatedEntityId && onSelect)}
+        onPress={() => { onSelect?.(notification); handleDismiss(); }}
+      >
       <View style={[styles.iconBox, { backgroundColor: icon.color + "22" }]}>
         <Ionicons name={icon.name} size={22} color={icon.color} />
       </View>
@@ -123,6 +133,7 @@ function ToastItem({
           {displayNotification.message}
         </Text>
       </View>
+      </TouchableOpacity>
       <TouchableOpacity onPress={handleDismiss} hitSlop={10}>
         <Ionicons name="close" size={18} color={colors?.mutedText ?? "#94A3B8"} />
       </TouchableOpacity>
@@ -133,6 +144,7 @@ function ToastItem({
 export function NotificationToastContainer({
   notifications,
   onDismiss,
+  onSelect,
   t,
   colors,
 }: Props) {
@@ -150,6 +162,7 @@ export function NotificationToastContainer({
           key={n.id}
           notification={n}
           onDismiss={onDismiss}
+          onSelect={onSelect}
           t={t ?? preferences?.t}
           colors={colors}
         />
@@ -179,6 +192,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     elevation: 6,
   },
+  toastBody: { flex: 1, flexDirection: "row", alignItems: "center", gap: 10 },
   iconBox: {
     width: 38,
     height: 38,

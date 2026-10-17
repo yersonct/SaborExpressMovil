@@ -7,7 +7,7 @@ import {
 } from "./tokenStorage";
 import { AUTH_ENDPOINTS } from "./authEndpoints";
 import { notifySessionExpired } from "./authEvents";
-import { isServerAlive, isServerDownStatus } from "./serverHealth";
+import { isServerDownStatus } from "./serverHealth";
 import { ROLE_NAMES } from "../types/role";
 import { getApiLanguage } from "./apiLanguage";
 import {
@@ -29,23 +29,7 @@ let refreshPromise: Promise<string | null> | null = null;
 // Evita pedir dos veces el mismo GET si varias pantallas/hooks se actualizan juntos.
 // Las respuestas no se guardan: cada nueva carga posterior consulta al servidor.
 const inFlightGetRequests = new Map<string, Promise<Response>>();
-let serverDownLogout: Promise<void> | null = null;
-
-async function closeSessionForServerDown(): Promise<void> {
-  if (serverDownLogout) return serverDownLogout;
-
-  serverDownLogout = (async () => {
-    if (!(await loadSession())) return;
-    await clearSession();
-    notifySessionExpired("server_down");
-  })();
-
-  try {
-    await serverDownLogout;
-  } finally {
-    serverDownLogout = null;
-  }
-}
+// La indisponibilidad temporal de la API no invalida una sesion local.
 
 function isServerUnavailableError(error: unknown): boolean {
   if (isNetworkFailure(error)) return true;
@@ -59,18 +43,11 @@ function isServerUnavailableError(error: unknown): boolean {
 }
 
 async function handleServerUnavailableError(error: unknown): Promise<void> {
-  if (!isServerUnavailableError(error)) return;
-
-  const candidate = error as { statusCode?: unknown } | null;
-  const explicitServerDown =
-    typeof candidate?.statusCode === "number" &&
-    isServerDownStatus(candidate.statusCode);
-
-  // Un corte breve de red no invalida la sesión si el backend sigue vivo.
-  // Cuando no hay una respuesta HTTP explícita de caída, confirmamos con /health.
-  if (!explicitServerDown && (await isServerAlive(3000))) return;
-
-  await closeSessionForServerDown();
+  // Solo se cierra sesión ante rechazo explícito de autenticación
+  // (401, refresh token revocado, etc.), nunca por una falla de conexión.
+  if (isNetworkFailure(error)) {
+    toUserFacingNetworkError(error);
+  }
 }
 
 // Reintenta solo ante fallas de red reales (tunnel no listo, wifi cortado, etc.)
@@ -257,7 +234,7 @@ async function executeAuthedRequest(
   }
 
   if (!skipAuth && isServerDownStatus(res.status)) {
-    await closeSessionForServerDown();
+    // El fallo 502/503/504 puede ser temporal. Conservar la sesión.
     return res;
   }
 
@@ -285,7 +262,7 @@ async function executeAuthedRequest(
       }
 
       if (isServerDownStatus(res.status)) {
-        await closeSessionForServerDown();
+        // Error temporal del backend: sin borrar credenciales locales.
         return res;
       }
 

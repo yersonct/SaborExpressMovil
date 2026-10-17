@@ -8,8 +8,11 @@ import {
   Image,
   TouchableOpacity,
   KeyboardAvoidingView,
+  Keyboard,
   Platform,
   ScrollView,
+  TextInput,
+  useWindowDimensions,
   Animated,
   Modal,
 } from "react-native";
@@ -46,6 +49,7 @@ export const LoginForm = () => {
   const [selectedLanguage, setSelectedLanguage] = useState<LanguageCode>("es");
   const [themeMode, setThemeMode] = useState<"light" | "dark">("light");
   const [showPassword, setShowPassword] = useState(false);
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
 
   const [activeView, setActiveView] = useState<
     "login" | "forgot" | "registerClient"
@@ -67,10 +71,60 @@ export const LoginForm = () => {
     clearError,
   } = useAuth();
   const router = useRouter();
+  const { width: windowWidth } = useWindowDimensions();
   const t = translations[selectedLanguage] || translations.es;
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
+
+  // Registrar el campo enfocado, sin mover el formulario hasta arriba.
+  const scrollRef = useRef<ScrollView>(null);
+  const identifierRef = useRef<TextInput>(null);
+  const passwordRef = useRef<TextInput>(null);
+  const focusedFieldRef = useRef<"identifier" | "password" | null>(null);
+  const scrollOffsetRef = useRef(0);
+
+  // Desplazamiento real: solo lo necesario para ver el campo sobre el teclado.
+  const ensureFocusedFieldVisible = (keyboardTop: number) => {
+    const input = focusedFieldRef.current === "identifier"
+      ? identifierRef.current
+      : focusedFieldRef.current === "password"
+        ? passwordRef.current
+        : null;
+    if (!input) return;
+
+    input.measureInWindow((_x, y, _width, height) => {
+      const overlap = y + height + 24 - keyboardTop;
+      if (overlap > 0) {
+        scrollRef.current?.scrollTo({
+          y: Math.max(0, scrollOffsetRef.current + overlap),
+          animated: true,
+        });
+      }
+    });
+  };
+
+  useEffect(() => {
+    const show = Keyboard.addListener("keyboardDidShow", (event) => {
+      setKeyboardVisible(true);
+      // Esperar a que Android/iOS termine de recalcular el area util.
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          ensureFocusedFieldVisible(event.endCoordinates.screenY);
+        });
+      });
+    });
+    const hide = Keyboard.addListener("keyboardDidHide", () => {
+      setKeyboardVisible(false);
+      focusedFieldRef.current = null;
+      scrollOffsetRef.current = 0;
+      scrollRef.current?.scrollTo({ y: 0, animated: false });
+    });
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
 
   useEffect(() => {
     Animated.parallel([
@@ -285,7 +339,7 @@ export const LoginForm = () => {
     <SafeAreaView
       style={[styles.safeArea, { backgroundColor: themeColors.background }]}
     >
-      <View style={styles.headerTopBar}>
+      <View style={[styles.headerTopBar, { paddingHorizontal: windowWidth < 360 ? 14 : 24 }]}>
         <View
           style={[
             styles.themeToggle,
@@ -345,20 +399,60 @@ export const LoginForm = () => {
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         style={styles.container}
       >
+        {/* Logo compacto fijo sobre el formulario mientras está abierto el teclado. El logo queda fuera del ScrollView, así no desaparece al desplazar los inputs. */}
+        {activeView === "login" && keyboardVisible && (
+          <View
+            style={{
+              width: "100%",
+              flexShrink: 0,
+              alignItems: "center",
+              justifyContent: "center",
+              paddingTop: 2,
+              paddingBottom: 4,
+            }}
+          >
+            <Image
+              source={isDark
+                ? require("../../../../assets/images/logo-dark.png")
+                : require("../../../../assets/images/logo.png")}
+              style={{
+                width: "100%",
+                height: Math.max(118, Math.min(windowWidth * 0.42, 160)),
+              }}
+              resizeMode="contain"
+              accessibilityLabel="SaborExpress"
+            />
+          </View>
+        )}
+
         <ScrollView
-          contentContainerStyle={styles.scrollContainer}
+          ref={scrollRef}
+          onScroll={(event) => {
+            scrollOffsetRef.current = event.nativeEvent.contentOffset.y;
+          }}
+          scrollEventThrottle={16}
+          contentContainerStyle={[
+            styles.scrollContainer,
+            {
+              justifyContent: keyboardVisible ? "flex-start" : "center",
+              paddingTop: keyboardVisible ? 4 : 0,
+              paddingHorizontal: windowWidth < 360 ? 12 : 20,
+              paddingBottom: keyboardVisible ? 24 : 36,
+            },
+          ]}
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
           showsVerticalScrollIndicator={false}
         >
-          {activeView === "login" && (
+          {activeView === "login" && !keyboardVisible && (
             <Animated.View
-              style={[styles.logoContainer, { opacity: fadeAnim }]}
+              style={[styles.logoContainer, { opacity: fadeAnim, marginBottom: 8 }]}
             >
               <Image
                 source={isDark
                   ? require("../../../../assets/images/logo-dark.png")
                   : require("../../../../assets/images/logo.png")}
-                style={styles.logo}
+                style={[styles.logo, { height: Math.min(windowWidth * 0.68, 250), marginBottom: 0 }]}
                 resizeMode="contain"
               />
             </Animated.View>
@@ -367,6 +461,7 @@ export const LoginForm = () => {
           <Animated.View
             style={[
               styles.formContainer,
+              { maxWidth: 520, alignSelf: "center", padding: windowWidth < 360 ? 18 : windowWidth < 420 ? 24 : 28 },
               {
                 backgroundColor: themeColors.surface,
                 shadowColor: isDark ? "#000" : "#E61C24",
@@ -388,6 +483,15 @@ export const LoginForm = () => {
                   label={t.identifierLabel || t.usernameLabel}
                   placeholder={t.identifierPlaceholder || t.usernamePlaceholder}
                   value={identifier}
+                  inputRef={identifierRef}
+                  onFocus={() => {
+                    focusedFieldRef.current = "identifier";
+                    const metrics =
+  typeof Keyboard.metrics === "function"
+    ? Keyboard.metrics()
+    : undefined;
+                    if (metrics) requestAnimationFrame(() => ensureFocusedFieldVisible(metrics.screenY));
+                  }}
                   onChangeText={setIdentifier}
                   error={!!error}
                   themeColors={themeColors}
@@ -396,6 +500,15 @@ export const LoginForm = () => {
                   label={t.passwordLabel}
                   placeholder={t.passwordPlaceholder}
                   value={password}
+                  inputRef={passwordRef}
+                  onFocus={() => {
+                    focusedFieldRef.current = "password";
+                    const metrics =
+  typeof Keyboard.metrics === "function"
+    ? Keyboard.metrics()
+    : undefined;
+                    if (metrics) requestAnimationFrame(() => ensureFocusedFieldVisible(metrics.screenY));
+                  }}
                   onChangeText={setPassword}
                   secureTextEntry={!showPassword}
                   showPasswordToggle={true}

@@ -114,6 +114,21 @@ export function OrderTrackingModal({
     load();
   }, [visible, load, refreshKey]);
 
+  // Mientras el mapa esté abierto, consulta de respaldo cada 15 segundos.
+  // Sólo el pedido del cliente autorizado; el backend controla la propiedad.
+  useEffect(() => {
+    if (!visible || !order || order.orderType !== OrderType.Delivery) return;
+    const timer = setInterval(() => { void load(true); }, 15000);
+    return () => clearInterval(timer);
+  }, [visible, order?.id, order?.orderType, load]);
+
+  // Fallback de actualización cuando se interrumpe SignalR; nunca muestra GPS vencido.
+  useEffect(() => {
+    if (!visible || order?.orderType !== OrderType.Delivery) return;
+    const interval = setInterval(() => void load(true), 15_000);
+    return () => clearInterval(interval);
+  }, [visible, order?.id, order?.orderType, load]);
+
   useRealtimeEvents(
     [DELIVERY_LOCATION_UPDATED, "OrdersChanged", "DeliveriesChanged", "RealtimeConnected"],
     (eventName, payload) => {
@@ -260,6 +275,14 @@ export function OrderTrackingModal({
               {isDriverPositionLive
                 ? `${t("onTheWay")} · ${t("gpsTrackingLive")}`
                 : `${t("onTheWay")} · ${t("gpsWaiting")}`}
+            </Text>
+          </View>
+        )}
+
+        {delivery?.status === DeliveryStatus.Assigned && !cancelled && (
+          <View style={{ paddingHorizontal: 16, paddingVertical: 10, backgroundColor: "#EFF6FF" }}>
+            <Text style={{ color: "#1D4ED8", fontSize: 12, fontWeight: "600" }}>
+              Repartidor asignado. Verás su ubicación cuando inicie el recorrido.
             </Text>
           </View>
         )}
