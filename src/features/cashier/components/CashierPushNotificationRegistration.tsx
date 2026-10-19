@@ -8,6 +8,7 @@ import {
   type CashierPushDeviceSettings,
 } from "@/features/notifications/services/pushDeviceService";
 import { useCashierContext } from "../context/CashierContext";
+import { subscribeToNetworkRecovery } from "@/features/shared/services/networkStatus";
 import type { LanguageCode } from "@/locales/CashierTranslations";
 
 type NotificationsModule = typeof import("expo-notifications");
@@ -106,13 +107,15 @@ async function configureAndroidChannels(
 export function CashierPushNotificationRegistration() {
   const { user } = useAuth();
   const preferences = useCashierContext();
+  const { setPushStatus } = preferences;
   const expoPushTokenRef = useRef<string | null>(null);
   const preferencesRef = useRef(preferences);
   preferencesRef.current = preferences;
 
   useEffect(() => {
     if (!user?.token || !preferences.hydrated) return;
-    if (isExpoGo) {
+    if (isExpoGo || Platform.OS === "web" || !Device.isDevice) {
+      setPushStatus("unavailable");
       if (__DEV__) {
         console.info(
           "Push remoto desactivado en Expo Go; usa un development build para recibir alertas de caja con la app cerrada.",
@@ -123,6 +126,7 @@ export function CashierPushNotificationRegistration() {
 
     let active = true;
     let registering = false;
+    setPushStatus("checking");
 
     const register = async () => {
       if (registering || Platform.OS === "web" || !Device.isDevice) return;
@@ -134,7 +138,10 @@ export function CashierPushNotificationRegistration() {
         if (!permission.granted && permission.canAskAgain) {
           permission = await Notifications.requestPermissionsAsync();
         }
-        if (!permission.granted) return;
+        if (!permission.granted) {
+          if (active) setPushStatus("permission-denied");
+          return;
+        }
 
         const projectId =
           Constants.expoConfig?.extra?.eas?.projectId ??
@@ -147,6 +154,7 @@ export function CashierPushNotificationRegistration() {
         expoPushTokenRef.current = pushToken.data;
         await syncPreferences(pushToken.data);
       } catch (error) {
+        if (active) setPushStatus("error");
         if (__DEV__)
           console.warn("No se pudo registrar el push del cajero:", error);
       } finally {
@@ -196,7 +204,9 @@ export function CashierPushNotificationRegistration() {
       const Notifications = await loadNotifications();
       await configureAndroidChannels(Notifications, current.language);
       await registerCashierPushDevice(settings);
+      setPushStatus("enabled");
     } catch (error) {
+      setPushStatus("error");
       if (__DEV__)
         console.warn(
           "No se pudieron guardar las preferencias push del cajero:",
@@ -204,6 +214,14 @@ export function CashierPushNotificationRegistration() {
         );
     }
   }
+
+  useEffect(
+    () => subscribeToNetworkRecovery(() => {
+      const token = expoPushTokenRef.current;
+      if (token) void syncPreferences(token);
+    }),
+    [],
+  );
 
   return null;
 }

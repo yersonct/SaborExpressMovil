@@ -51,8 +51,6 @@ export const DeliveryOrdersList = () => {
   const [mapModalVisible, setMapModalVisible] = useState(false);
   const [isSheetExpanded, setIsSheetExpanded] = useState(true);
   const [startError, setStartError] = useState<string | null>(null);
-  const [activatingAvailability, setActivatingAvailability] = useState(false);
-  const [pausingAvailability, setPausingAvailability] = useState(false);
   const [gpsError, setGpsError] = useState<string | null>(null);
   const hasInTransitDelivery = deliveries.some(
     (delivery) => delivery.status === DeliveryStatus.InTransit,
@@ -255,43 +253,42 @@ export const DeliveryOrdersList = () => {
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (state) => {
       if (state !== "active") return;
-      void fetchDeliveries(true);
+      void employeeService.setAvailability(true)
+        .then(() => fetchDeliveries(true))
+        .catch(() => undefined);
       void refetchProfile();
     });
     return () => subscription.remove();
   }, [fetchDeliveries, refetchProfile]);
 
-  const handlePauseAvailability = async () => {
-    if (!profile?.isAvailable || pausingAvailability) return;
-    setPausingAvailability(true);
-    try {
-      await employeeService.setAvailability(false);
-      await refetchProfile();
-    } catch (error: any) {
-      Alert.alert(t.errorTitle, error?.message ?? t.availabilitySaveError);
-    } finally {
-      setPausingAvailability(false);
-    }
-  };
-
-  const handleEnableAvailability = async () => {
-    setActivatingAvailability(true);
-    try {
-      // El backend guarda la disponibilidad y reintenta asignar domicilios
-      // confirmados que hayan quedado pendientes en esta sede.
-      await reportDriverLocation(true);
-      await employeeService.setAvailability(true);
-      await refetchProfile();
-      await fetchDeliveries();
-    } catch (err: any) {
-      Alert.alert(
-        t.errorTitle,
-        err?.message ?? "No se pudo activar la disponibilidad.",
-      );
-    } finally {
-      setActivatingAvailability(false);
-    }
-  };
+  // Presencia automática: el repartidor no necesita un botón de activación.
+  // Un latido sin GPS cada minuto permite asignar incluso si denegó ubicación.
+  // Al cerrar/suspender la app, el backend deja de considerarlo online tras 3 min.
+  useFocusEffect(
+    useCallback(() => {
+      if (!profile?.id) return;
+      let mounted = true;
+      let busy = false;
+      const keepAlive = async () => {
+        if (busy || AppState.currentState !== "active") return;
+        busy = true;
+        try {
+          await employeeService.setAvailability(true);
+          if (mounted && !profile.isAvailable) await refetchProfile();
+        } catch {
+          // No falsear el estado: el próximo latido reintentará al recuperar red.
+        } finally {
+          busy = false;
+        }
+      };
+      void keepAlive();
+      const heartbeat = setInterval(() => void keepAlive(), 60_000);
+      return () => {
+        mounted = false;
+        clearInterval(heartbeat);
+      };
+    }, [profile?.id, profile?.isAvailable, refetchProfile]),
+  );
 
   // Mantiene el modal abierto sincronizado con el último refresco de la lista
   useEffect(() => {
@@ -550,23 +547,6 @@ export const DeliveryOrdersList = () => {
           paddingTop: 4,
         }}
       >
-        {profile && (
-          <TouchableOpacity
-            accessibilityRole="button"
-            onPress={profile.isAvailable ? handlePauseAvailability : handleEnableAvailability}
-            disabled={pausingAvailability || activatingAvailability}
-            style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 12, gap: 6 }}
-          >
-            <Ionicons
-              name={profile.isAvailable ? "pause-circle-outline" : "play-circle-outline"}
-              size={18}
-              color={colors.muted}
-            />
-            <Text style={{ color: colors.muted, fontSize: 12, fontWeight: "700" }}>
-              {profile.isAvailable ? t.pauseAssignments : t.receiveOrders}
-            </Text>
-          </TouchableOpacity>
-        )}
         <NotificationBell
           colors={colors}
           t={(key) => t[key] ?? key}
@@ -613,45 +593,9 @@ export const DeliveryOrdersList = () => {
             <Text style={[styles.emptyText, { color: colors.muted }]}>
               {t.noAssignedOrders}
             </Text>
-            {profile && !profile.isAvailable && (
-              <>
-                <Text
-                  style={{
-                    color: colors.muted,
-                    textAlign: "center",
-                    marginTop: 12,
-                    paddingHorizontal: 24,
-                  }}
-                >
-                  {t.enableAvailabilityHint}
-                </Text>
-                <TouchableOpacity
-                  onPress={handleEnableAvailability}
-                  disabled={activatingAvailability}
-                  style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    gap: 8,
-                    backgroundColor: colors.btnPrimary,
-                    paddingHorizontal: 18,
-                    paddingVertical: 12,
-                    borderRadius: 10,
-                    marginTop: 14,
-                    opacity: activatingAvailability ? 0.65 : 1,
-                  }}
-                >
-                  {activatingAvailability ? (
-                    <ActivityIndicator color="#FFFFFF" />
-                  ) : (
-                    <Ionicons name="radio-button-on-outline" size={18} color="#FFFFFF" />
-                  )}
-                  <Text style={{ color: "#FFFFFF", fontWeight: "700" }}>
-                    {activatingAvailability ? t.searchingOrders : t.receiveOrders}
-                  </Text>
-                </TouchableOpacity>
-              </>
-            )}
+            <Text style={{ color: colors.muted, textAlign: "center", marginTop: 12, paddingHorizontal: 24 }}>
+              Los pedidos pendientes se asignarán automáticamente cuando haya cupo en tu turno.
+            </Text>
           </View>
         }
       />

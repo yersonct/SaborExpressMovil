@@ -11,10 +11,13 @@
       "bundleIdentifier": "com.yersonct.saborexpress"
     },
     "android": {
+      "softwareKeyboardLayoutMode": "resize",
       "package": "com.yersonct.saborexpress",
       "googleServicesFile": "./google-services.json",
       "permissions": [
         "android.permission.VIBRATE",
+        "android.permission.BLUETOOTH_SCAN",
+        "android.permission.BLUETOOTH_CONNECT",
         "android.permission.POST_NOTIFICATIONS",
         "android.permission.CAMERA",
         "android.permission.MODIFY_AUDIO_SETTINGS",
@@ -33,6 +36,13 @@
     },
     "plugins": [
       "expo-router",
+      [
+        "@sfourdrinier/react-native-ble-plx",
+        {
+          "isBackgroundEnabled": false,
+          "neverForLocation": true
+        }
+      ],
       "expo-notifications",
       [
         "expo-splash-screen",
@@ -61,7 +71,21 @@
       "expo-web-browser",
       "expo-status-bar",
       "expo-asset",
-      "expo-sharing"
+      "expo-sharing",
+      [
+        "@ricka7x/expo-thermal-printer",
+        {
+          "bluetoothPermission": "SaborExpress necesita Bluetooth para imprimir recibos."
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

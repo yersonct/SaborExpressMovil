@@ -14,7 +14,8 @@ type Props = {
   mutedColor?: string;
 };
 
-// Muestra el impuesto desglosado como información; el total lo pone cada pantalla.
+// Muestra el impuesto separado; en pedidos nuevos se suma al total del backend.
+// Los pedidos previos con impuesto incluido conservan su desglose informativo.
 export function BreakdownRows({
   subTotal,
   tax,
@@ -27,8 +28,8 @@ export function BreakdownRows({
   mutedColor = "#64748B",
 }: Props) {
   const l = getBreakdownLabels(lang);
-  // Usar la tasa y el precio final para el impuesto incluido. La columna
-  // tax recibida puede proceder de pedidos creados antes de corregir el backend.
+  // Solo extraer el impuesto cuando el pedido histórico marcó precio inclusivo.
+  // Para pedidos nuevos, usar el importe adicional exacto devuelto por la API.
   const inclusiveTax = taxIncludedInPrice && taxRate > 0
     ? Math.round(((subTotal * taxRate) / (100 + taxRate)) * 100) / 100
     : 0;

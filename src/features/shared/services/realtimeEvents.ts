@@ -7,6 +7,8 @@ export const DELIVERIES_CHANGED = "DeliveriesChanged";
 export const PAYMENTS_CHANGED = "PaymentsChanged";
 export const REVIEWS_CHANGED = "ReviewsChanged";
 export const ADMIN_DATA_CHANGED = "AdminDataChanged";
+export const PUBLIC_BRANCHES_CHANGED = "PublicBranchesChanged";
+export const EMPLOYEE_SCHEDULES_CHANGED = "EmployeeSchedulesChanged";
 export const RECEIVE_NOTIFICATION = "ReceiveNotification";
 export const NOTIFICATIONS_CHANGED = "NotificationsChanged";
 export const DELIVERY_LOCATION_UPDATED = "DeliveryLocationUpdated";
@@ -24,6 +26,8 @@ export const REALTIME_HUB_EVENTS = [
   REVIEWS_CHANGED,
   BRANCH_OPERATIONAL_SETTINGS_CHANGED,
   ADMIN_DATA_CHANGED,
+  EMPLOYEE_SCHEDULES_CHANGED,
+  PUBLIC_BRANCHES_CHANGED,
 ] as const;
 
 type RealtimeListener = (...args: unknown[]) => void;

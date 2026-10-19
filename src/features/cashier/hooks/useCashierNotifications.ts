@@ -82,7 +82,7 @@ export function useCashierNotifications(
         const notification = raw as CashierNotification;
         const type = normalizeNotificationType(notification.type);
         const isIncomingOrder =
-          type === "OrderCreated" && notification.title === "Pedido nuevo";
+          type === "OrderCreated";
         if (!isIncomingOrder && type !== "PaymentConfirmed") return;
 
         if (soundEnabledRef.current && preferenceRef.current) {
@@ -93,7 +93,16 @@ export function useCashierNotifications(
             // Un fallo de audio no debe interrumpir la notificaciÃ³n.
           }
         }
-        if (vibrationPreferenceRef.current) Vibration.vibrate(250);
+        // Sonido y vibracion son preferencias INDEPENDIENTES.
+        // Vibrar aunque el sonido de alertas este apagado.
+        if (vibrationPreferenceRef.current && Platform.OS !== "web") {
+          try {
+            Vibration.cancel();
+            Vibration.vibrate([0, 300, 150, 300]);
+          } catch {
+            // Un fallo de vibracion no debe interrumpir la notificacion.
+          }
+        }
 
         scheduleRefresh();
         callbackRef.current?.({ ...notification, type });
