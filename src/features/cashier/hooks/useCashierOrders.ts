@@ -120,10 +120,10 @@ export function useCashierOrders(branchId: number | null) {
 // Es habitual en pedidos anteriores a la migración de sesiones.
 // Para decidir si Caja debe ofrecer "Liberar", la API es la fuente de
 // verdad; el listado de pedidos del mesero NO equivale a una mesa saldada.
-const occupiedTableIds = new Set(
+const occupiedTableSessions = new Map(
   tables
     .filter((table) => table.status === "Occupied")
-    .map((table) => Number(table.id)),
+    .map((table) => [Number(table.id), table.currentSessionId] as const),
 );
       setPaidOrders(
         summaries
@@ -144,7 +144,9 @@ const occupiedTableIds = new Set(
       const blockingTableOrders = summaries.filter(
         (order) =>
           order.tableId != null &&
-          occupiedTableIds.has(Number(order.tableId)) &&
+          occupiedTableSessions.has(Number(order.tableId)) &&
+          // Un pedido histórico no puede bloquear una nueva sesión de mesa.
+          order.tableSessionId === occupiedTableSessions.get(Number(order.tableId)) &&
           isWaitingForTableRelease(order),
       );
       setTablesWithBlockingOrders(

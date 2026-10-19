@@ -26,7 +26,9 @@ import { PaidOrdersPanel } from "./PaidOrdersPanel";
 import { useMyBranch } from "@/features/employees/hooks/useMyBranch";
 import { useCashierOrders } from "../hooks/useCashierOrders";
 import { useTables } from "@/features/tables/hooks/useTables";
-import { TableStatus } from "@/features/tables/types/table.types";
+import { type TableReleaseReview } from "@/features/tables/types/table.types";
+import { tableService } from "@/features/tables/services/tableService";
+import { useRealtimeEvents } from "@/features/shared/hooks/useRealtimeEvents";
 import { useCashierNotifications } from "../hooks/useCashierNotifications";
 import { cashClosureService, type CashClosurePreview } from "@/features/payments/services/cashClosureService";
 import { useAuth } from "@/features/auth/context/AuthContext";
@@ -86,23 +88,33 @@ export default function CashierDashboard() {
     orders,
     setOrders,
     loading: ordersLoading,
-    error: ordersError,
     markAsPaid,
     paidOrdersAwaitingDelivery,
     paidOrders,
-    tablesWithBlockingOrders,
   } = useCashierOrders(branchId);
 
-  const { tables, setTableStatus } = useTables(branchId);
+  const { refetch: refetchTables } = useTables(branchId);
+  const [previousTableReviews, setPreviousTableReviews] = useState<TableReleaseReview[]>([]);
+  const [reviewLoading, setReviewLoading] = useState(false);
 
-  const tablesWithoutOrder = tables.filter(
-    (tb) =>
-      !ordersLoading &&
-      !ordersError &&
-      tb.status === TableStatus.Occupied &&
-      !tablesWithBlockingOrders.has(tb.id) &&
-      !orders.some((o) => o.table === tb.number),
-  );
+  const loadPreviousReviews = useCallback(async () => {
+    if (!branchId) {
+      setPreviousTableReviews([]);
+      return;
+    }
+    try {
+      const reviews = await tableService.getPreviousReleaseReviews(branchId);
+      setPreviousTableReviews(reviews);
+    } catch {
+      // El botón no debe ofrecer liberación sin la validación del backend.
+      setPreviousTableReviews([]);
+    }
+  }, [branchId]);
+
+  useEffect(() => { void loadPreviousReviews(); }, [loadPreviousReviews]);
+  useRealtimeEvents(["OrdersChanged", "PaymentsChanged", "TablesChanged", "RealtimeConnected"],
+    () => { void loadPreviousReviews(); });
+
   const ordersToday = orders.filter((o) => belongsToToday(o.createdAt));
   const ordersPrevious = orders.filter((o) => !belongsToToday(o.createdAt));
   const ordersOnScreen = showOlderOrders ? ordersPrevious : ordersToday;
@@ -111,24 +123,39 @@ export default function CashierDashboard() {
     paidOrdersAwaitingDelivery.filter((o) => belongsToToday(o.createdAt)).length;
   const paidTodayCount = paidOrders.filter((o) => belongsToToday(o.paidAt ?? o.createdAt)).length;
 
-  const [tableToRelease, setTableToRelease] = useState<{
-    id: number;
-    number: number;
-  } | null>(null);
+  const [tableToRelease, setTableToRelease] = useState<TableReleaseReview | null>(null);
   const [releasing, setReleasing] = useState(false);
 
-  const handleReleaseTable = (tableId: number, tableNumber: number) => {
-    setTableToRelease({ id: tableId, number: tableNumber });
+  const handleReleaseTable = async (review: TableReleaseReview) => {
+    setReviewLoading(true);
+    try {
+      // Revisar otra vez justo antes del diálogo: no confiar en un listado antiguo.
+      const current = await tableService.getReleaseReview(review.tableId);
+      if (!current.isPreviousDay || !current.canReleaseNormally) {
+        showToast("Esta mesa tiene cuentas pendientes o ya cambió su sesión. Consulta al administrador.");
+        void loadPreviousReviews();
+        return;
+      }
+      setTableToRelease(current);
+    } catch (err: any) {
+      showToast(err?.message ?? "No se pudo consultar el estado de la mesa.");
+    } finally {
+      setReviewLoading(false);
+    }
   };
 
   const confirmReleaseTable = async () => {
-    if (!tableToRelease) return;
+    if (!tableToRelease || releasing) return;
     const target = tableToRelease;
     setReleasing(true);
-    setTableToRelease(null);
     try {
-      await setTableStatus(target.id, TableStatus.Available);
-      showToast(t.tableReleased.replace("{table}", String(target.number)));
+      await tableService.releasePrevious(target.tableId, {
+        expectedSessionId: target.currentSessionId,
+        administrative: false,
+      });
+      setTableToRelease(null);
+      showToast(t.tableReleased.replace("{table}", String(target.tableNumber)));
+      await Promise.all([refetchTables(true), loadPreviousReviews()]);
     } catch (err: any) {
       showToast(t.releaseTableFailed.replace("{error}", err?.message ?? ""));
     } finally {
@@ -485,63 +512,43 @@ export default function CashierDashboard() {
       </View>
 
       <View style={styles.content}>
-        {activeTab === "mesa" && tablesWithoutOrder.length > 0 && (
-          <View
-            style={{
-              maxHeight: 190,
-              margin: 16,
-              marginBottom: 0,
-              borderRadius: 12,
-              borderWidth: 1,
-              borderColor: "#F59E0B",
-              backgroundColor: isDark ? "#451a03" : "#FEF3C7",
-              padding: 12,
-            }}
-          >
-            <Text
-              style={{
-                color: isDark ? "#fde68a" : "#92400E",
-                fontWeight: "800",
-                marginBottom: 8,
-              }}
-            >
-              {t.tablesOccupiedNoOrder.replace(
-                "{count}",
-                String(tablesWithoutOrder.length),
-              )}
+        {activeTab === "mesa" && previousTableReviews.length > 0 && (
+          <View style={{
+            maxHeight: 240, margin: 16, marginBottom: 0, borderRadius: 12,
+            borderWidth: 1, borderColor: "#F59E0B",
+            backgroundColor: isDark ? "#451a03" : "#FEF3C7", padding: 12,
+          }}>
+            <Text style={{ color: isDark ? "#fde68a" : "#92400E", fontWeight: "800", marginBottom: 8 }}>
+              Mesas ocupadas desde jornadas anteriores ({previousTableReviews.length})
             </Text>
             <ScrollView>
-              {tablesWithoutOrder.map((tb) => (
-                <View
-                  key={tb.id}
-                  style={{
-                    flexDirection: "row",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    paddingVertical: 6,
-                  }}
-                >
-                  <Text
-                    style={{
-                      color: isDark ? "#fde68a" : "#92400E",
-                      fontWeight: "600",
-                    }}
-                  >
-                    {t.tableNumber.replace("{number}", String(tb.number))}
-                  </Text>
-                  <TouchableOpacity
-                    onPress={() => handleReleaseTable(tb.id, tb.number)}
-                    style={{
-                      backgroundColor: colors.buttonDark,
-                      paddingHorizontal: 14,
-                      paddingVertical: 8,
-                      borderRadius: 8,
-                    }}
-                  >
-                    <Text style={{ color: "#FFFFFF", fontWeight: "bold" }}>
-                      {t.release}
+              {previousTableReviews.map((review) => (
+                <View key={review.tableId} style={{
+                  flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+                  gap: 10, paddingVertical: 8,
+                }}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ color: isDark ? "#fde68a" : "#92400E", fontWeight: "700" }}>
+                      Mesa {review.tableNumber}
                     </Text>
-                  </TouchableOpacity>
+                    <Text style={{ color: isDark ? "#fcd34d" : "#92400E", fontSize: 12 }}>
+                      {review.canReleaseNormally
+                        ? "Pedidos pagados y entregados"
+                        : `Pendientes: ${review.orders.length} pedido(s). Requiere administración.`}
+                    </Text>
+                  </View>
+                  {review.canReleaseNormally && (
+                    <TouchableOpacity
+                      accessibilityRole="button"
+                      accessibilityLabel={`Liberar mesa ${review.tableNumber} de jornada anterior`}
+                      disabled={reviewLoading || releasing}
+                      onPress={() => void handleReleaseTable(review)}
+                      style={{ backgroundColor: colors.buttonDark, paddingHorizontal: 14, paddingVertical: 9, borderRadius: 8,
+                        opacity: reviewLoading || releasing ? 0.6 : 1 }}
+                    >
+                      <Text style={{ color: "#FFFFFF", fontWeight: "bold" }}>Liberar</Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
               ))}
             </ScrollView>
@@ -850,7 +857,7 @@ export default function CashierDashboard() {
             >
               {t.releaseTableTitle.replace(
                 "{number}",
-                String(tableToRelease?.number ?? ""),
+                String(tableToRelease?.tableNumber ?? ""),
               )}
             </Text>
             <Text
@@ -861,7 +868,8 @@ export default function CashierDashboard() {
                 marginBottom: 18,
               }}
             >
-              {t.releaseTableMessage}
+              Se liberará una mesa de jornada anterior cuyos pedidos están entregados y pagados.
+              Los pedidos se conservarán en el historial.
             </Text>
             <View style={{ flexDirection: "row", gap: 10 }}>
               <TouchableOpacity
