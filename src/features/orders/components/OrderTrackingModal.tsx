@@ -122,13 +122,6 @@ export function OrderTrackingModal({
     return () => clearInterval(timer);
   }, [visible, order?.id, order?.orderType, load]);
 
-  // Fallback de actualización cuando se interrumpe SignalR; nunca muestra GPS vencido.
-  useEffect(() => {
-    if (!visible || order?.orderType !== OrderType.Delivery) return;
-    const interval = setInterval(() => void load(true), 15_000);
-    return () => clearInterval(interval);
-  }, [visible, order?.id, order?.orderType, load]);
-
   useRealtimeEvents(
     [DELIVERY_LOCATION_UPDATED, "OrdersChanged", "DeliveriesChanged", "RealtimeConnected"],
     (eventName, payload) => {

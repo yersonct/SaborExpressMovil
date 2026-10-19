@@ -1,12 +1,12 @@
-// El INC informativo se calcula solo sobre los productos. El domicilio queda
-// separado y se suma al total sin formar parte de la base del impuesto.
+// Fix21: el impoconsumo se agrega al subtotal de productos.
+// El domicilio se suma aparte y no hace parte de la base gravable.
 export function calcBreakdown(
   subTotal: number,
   taxRate: number,
   deliveryFee: number,
 ) {
   const fee = subTotal > 0 ? deliveryFee : 0;
-  const exactTax = taxRate > 0 ? (subTotal * taxRate) / (100 + taxRate) : 0;
+  const exactTax = taxRate > 0 ? (subTotal * taxRate) / 100 : 0;
   const taxCents = exactTax * 100;
   const tax =
     Math.round(
@@ -17,9 +17,9 @@ export function calcBreakdown(
     subTotal,
     taxRate,
     tax,
-    taxIncludedInPrice: true,
+    taxIncludedInPrice: false,
     deliveryFee: fee,
-    total: subTotal + fee,
+    total: subTotal + tax + fee,
   };
 }
 
@@ -43,29 +43,29 @@ const LABELS = {
   es: {
     subtotal: "Subtotal (productos)",
     taxBase: "Base gravable (comida/bebida)",
-    taxIncluded: "Impoconsumo sobre productos",
-    taxLegacy: "Impuesto registrado",
+    taxIncluded: "Impoconsumo incluido en el precio",
+    taxLegacy: "Impoconsumo adicional",
     delivery: "Domicilio",
   },
   en: {
     subtotal: "Subtotal (products)",
     taxBase: "Taxable base (food/drinks)",
-    taxIncluded: "Consumption tax on products",
-    taxLegacy: "Recorded tax",
+    taxIncluded: "Consumption tax included in price",
+    taxLegacy: "Additional consumption tax",
     delivery: "Delivery",
   },
   pt: {
     subtotal: "Subtotal (produtos)",
     taxBase: "Base tributável (comida/bebida)",
-    taxIncluded: "Imposto sobre consumo dos produtos",
-    taxLegacy: "Imposto registrado",
+    taxIncluded: "Imposto sobre consumo incluído no preço",
+    taxLegacy: "Imposto sobre consumo adicional",
     delivery: "Entrega",
   },
   fr: {
     subtotal: "Sous-total (produits)",
     taxBase: "Base imposable (repas/boissons)",
-    taxIncluded: "Taxe sur les produits",
-    taxLegacy: "Taxe enregistrée",
+    taxIncluded: "Taxe incluse dans le prix",
+    taxLegacy: "Taxe additionnelle sur la consommation",
     delivery: "Livraison",
   },
 } as const;

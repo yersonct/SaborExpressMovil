@@ -86,7 +86,7 @@ export const WaiterThemeProvider = ({ children, storageScope }: { children: Reac
   useEffect(() => {
     if (!hydrated) return;
     AsyncStorage.setItem(storageKey, mode).catch(() => undefined);
-    globalThis.localStorage?.setItem(storageKey, mode);
+    try { globalThis.localStorage?.setItem(storageKey, mode); } catch { /* AsyncStorage is primary. */ }
   }, [mode, hydrated, storageKey]);
 
   const value = useMemo<WaiterTheme>(() => {

@@ -25,7 +25,7 @@ import {
 } from "@/features/payments/types/payment.types";
 import { paymentService } from "@/features/payments/services/paymentService";
 import { invoiceService } from "@/features/invoices/services/invoiceService";
-import { generateAndShareInvoicePdf } from "@/features/invoices/services/invoicePdfService";
+import { printInvoiceOrPdf } from "@/features/printer/pd01Service";
 import type { Invoice } from "@/features/invoices/types/invoice.types";
 import type { Order } from "./CashierData";
 import { useCashierContext } from "../context/CashierContext";
@@ -219,7 +219,7 @@ export function PaidOrdersPanel({ orders, isDark, loading }: Props) {
               ? t.tabDelivery
               : t.catalogTakeaway;
 
-        await generateAndShareInvoicePdf(
+        await printInvoiceOrPdf(
           invoice,
           printableOrder,
           paymentMethodLabel,

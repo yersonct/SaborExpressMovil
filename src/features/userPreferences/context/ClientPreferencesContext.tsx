@@ -281,6 +281,7 @@ export function ClientPreferencesProvider({ children }: { children: React.ReactN
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const queue = useRef<Promise<void>>(Promise.resolve());
+  const settingsVersion = useRef(0);
   const settingsTouched = useRef(false);
   const languageTouched = useRef(false);
 
@@ -367,6 +368,7 @@ export function ClientPreferencesProvider({ children }: { children: React.ReactN
   const updateSettings = useCallback((changes: Partial<ClientSettingsUpdate>) => {
     const next = { ...settingsRef.current, ...changes };
     settingsTouched.current = true;
+    const version = ++settingsVersion.current;
     settingsRef.current = next;
     setSettings(next);
     void AsyncStorage.setItem(cacheKey, JSON.stringify({ settings: next, language: languageRef.current })).catch(() => {});
@@ -381,11 +383,22 @@ export function ClientPreferencesProvider({ children }: { children: React.ReactN
         soundNotifications: current.soundNotifications,
         timeZone: current.timeZone,
       });
-      settingsRef.current = { ...settingsRef.current, ...saved };
-      setSettings(settingsRef.current);
+      // Una respuesta anterior no debe revertir interruptores modificados mientras se guardaba.
+      if (version === settingsVersion.current) {
+        settingsRef.current = { ...settingsRef.current, ...saved };
+        setSettings(settingsRef.current);
+        setError(null);
+        void AsyncStorage.setItem(cacheKey, JSON.stringify({
+          settings: settingsRef.current,
+          language: languageRef.current,
+        })).catch(() => undefined);
+      }
     }).catch((err: unknown) => {
-      setError(err instanceof Error ? err.message : "No se pudieron guardar las preferencias.");
-    }).finally(() => setSaving(false));
+      if (version === settingsVersion.current)
+        setError(err instanceof Error ? err.message : "No se pudieron guardar las preferencias.");
+    }).finally(() => {
+      if (version === settingsVersion.current) setSaving(false);
+    });
     return queue.current;
   }, [cacheKey]);
 

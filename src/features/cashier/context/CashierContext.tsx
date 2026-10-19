@@ -30,6 +30,9 @@ import {
 
 type CashierContextType = CashierPreferences & {
   hydrated: boolean;
+  preferencesError: string | null;
+  pushStatus: "checking" | "enabled" | "unavailable" | "permission-denied" | "error";
+  setPushStatus: (status: CashierContextType["pushStatus"]) => void;
   setLanguage: (lang: LanguageCode) => void;
   setIsDark: (dark: boolean) => void;
   setNotificationSound: (on: boolean) => void;
@@ -51,11 +54,15 @@ export const CashierProvider: React.FC<{ children: ReactNode }> = ({
   const storageKey = getCashierStorageKey(userScope);
   const [preferences, setPreferences] = useState(DEFAULT_CASHIER_PREFERENCES);
   const [hydrated, setHydrated] = useState(false);
+  const [preferencesError, setPreferencesError] = useState<string | null>(null);
+  const [pushStatus, setPushStatus] = useState<CashierContextType["pushStatus"]>("checking");
 
   useEffect(() => {
     let active = true;
     const languageSelectedBeforeLogin = getApiLanguage();
     setHydrated(false);
+    setPreferencesError(null);
+    setPushStatus("checking");
     setPreferences(DEFAULT_CASHIER_PREFERENCES);
 
     const loadPreferences = async () => {
@@ -117,9 +124,9 @@ export const CashierProvider: React.FC<{ children: ReactNode }> = ({
 
   useEffect(() => {
     if (!hydrated) return;
-    void persistCashierPreferences(storageKey, preferences).catch(
-      () => undefined,
-    );
+    void persistCashierPreferences(storageKey, preferences)
+      .then(() => setPreferencesError(null))
+      .catch(() => setPreferencesError("No se pudieron guardar los ajustes del cajero en este dispositivo."));
   }, [hydrated, preferences, storageKey]);
 
   useEffect(() => {
@@ -152,6 +159,9 @@ export const CashierProvider: React.FC<{ children: ReactNode }> = ({
     () => ({
       ...preferences,
       hydrated,
+      preferencesError,
+      pushStatus,
+      setPushStatus,
       setLanguage,
       setIsDark,
       setNotificationSound,
@@ -161,6 +171,9 @@ export const CashierProvider: React.FC<{ children: ReactNode }> = ({
     [
       preferences,
       hydrated,
+      preferencesError,
+      pushStatus,
+      setPushStatus,
       setLanguage,
       setIsDark,
       setNotificationSound,

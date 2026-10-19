@@ -10,6 +10,7 @@ type WaiterNotificationPreferences = {
 type WaiterNotificationPreferencesContextValue = WaiterNotificationPreferences & {
   isWaiterPanel: boolean;
   hydrated: boolean;
+  preferencesError: string | null;
   setSoundNotifications: (enabled: boolean) => void;
   setVibrationNotifications: (enabled: boolean) => void;
 };
@@ -32,6 +33,7 @@ export function WaiterNotificationPreferencesProvider({
   const [preferences, setPreferences] =
     useState<WaiterNotificationPreferences>(DEFAULT_PREFERENCES);
   const [hydrated, setHydrated] = useState(false);
+  const [preferencesError, setPreferencesError] = useState<string | null>(null);
   const storageKey = waiterPreferenceStorageKey("notifications", storageScope);
 
   useEffect(() => {
@@ -68,9 +70,9 @@ export function WaiterNotificationPreferencesProvider({
 
   useEffect(() => {
     if (!hydrated) return;
-    AsyncStorage.setItem(storageKey, JSON.stringify(preferences)).catch(
-      () => undefined,
-    );
+    void AsyncStorage.setItem(storageKey, JSON.stringify(preferences))
+      .then(() => setPreferencesError(null))
+      .catch(() => setPreferencesError("No se pudieron guardar los ajustes de notificaciones del mesero."));
     try {
       globalThis.localStorage?.setItem(storageKey, JSON.stringify(preferences));
     } catch {
@@ -83,12 +85,13 @@ export function WaiterNotificationPreferencesProvider({
       ...preferences,
       isWaiterPanel: true,
       hydrated,
+      preferencesError,
       setSoundNotifications: (soundNotifications) =>
         setPreferences((current) => ({ ...current, soundNotifications })),
       setVibrationNotifications: (vibrationNotifications) =>
         setPreferences((current) => ({ ...current, vibrationNotifications })),
     }),
-    [hydrated, preferences],
+    [hydrated, preferences, preferencesError],
   );
 
   return (
@@ -105,6 +108,7 @@ export function useWaiterNotificationPreferences() {
       ...DEFAULT_PREFERENCES,
       isWaiterPanel: false,
       hydrated: true,
+      preferencesError: null,
       setSoundNotifications: () => undefined,
       setVibrationNotifications: () => undefined,
     }
