@@ -32,7 +32,7 @@ import { useWompiPolling } from "@/features/payments/hooks/useWompiPolling";
 import { buildWompiCheckoutUrl } from "@/features/payments/utils/wompiUrl";
 import QRCode from "react-native-qrcode-svg";
 import { invoiceService } from "@/features/invoices/services/invoiceService";
-import { generateAndShareInvoicePdf } from "@/features/invoices/services/invoicePdfService";
+import { printInvoiceOrPdf } from "@/features/printer/pd01Service";
 import type { Invoice } from "@/features/invoices/types/invoice.types";
 import { orderService } from "@/features/orders/services/orderService";
 import { useProducts } from "@/features/products/hooks/useProducts";
@@ -254,7 +254,7 @@ export const OrdersFeature = ({
       if (!autoPrint) return;
 
       try {
-        await generateAndShareInvoicePdf(invoice, order, methodLabel, {
+        await printInvoiceOrPdf(invoice, order, methodLabel, {
           title: t.invoicePdfTitle,
           invoiceNumber: t.invoicePdfNumberLabel,
           date: t.invoicePdfDateLabel,

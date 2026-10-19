@@ -238,6 +238,15 @@ async function executeAuthedRequest(
     return res;
   }
 
+  // El cierre de jornada es un rechazo de negocio explícito del backend.
+  // No reintentar pagos/órdenes ni pedir refresh: terminar el turno en UI.
+  if (!skipAuth && res.status === 423) {
+    let code: string | undefined;
+    try { code = (await res.clone().json())?.code; } catch { /* no JSON */ }
+    if (code === "BRANCH_CLOSED") notifySessionExpired("shift_changed");
+    return res;
+  }
+
   // Renueva ante 401 y 403 para actualizar claims de rol si cambiaron.
   // El propio recurso puede devolver 403 por permisos insuficientes; eso no
   // significa que la sesión completa deba cerrarse.

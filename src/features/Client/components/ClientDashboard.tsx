@@ -36,6 +36,9 @@ import { Image as ExpoImage } from "expo-image";
   import { useCatalog } from "@/features/catalog/hooks/useCatalog";
   import { useNearestBranch } from "@/features/branches/hooks/useNearestBranch";
 import type { PublicBranch } from "@/features/branches/types/branch.types";
+import { usePublicBranches } from "@/features/branches/hooks/usePublicBranches";
+import { branchAvailabilityLabel, branchHoursLabel, branchIsUnavailable } from "@/features/branches/utils/branchAvailability";
+import { showAppAlert } from "@/features/shared/services/alertEvents";
   import { useBranchSettings } from "@/features/branches/hooks/useBranchSettings";
   import {
     calcBreakdown,
@@ -148,7 +151,19 @@ import { OrderTrackingModal } from "@/features/orders/components/OrderTrackingMo
       loading: loadingBranch,
       error: branchError,
     } = useNearestBranch(coordsForBranch?.latitude, coordsForBranch?.longitude);
-    const deliveryBranch = manualBranch ?? nearestBranch;
+    const selectedDeliveryBranch = manualBranch ?? nearestBranch;
+    const { branches: publicBranches } = usePublicBranches();
+    const deliveryBranch = publicBranches.find(b => b.id === selectedDeliveryBranch?.id)
+      ?? selectedDeliveryBranch;
+    const branchUnavailable = branchIsUnavailable(deliveryBranch);
+    const branchClosedMessage = deliveryBranch
+      ? (deliveryBranch.unavailableReason || branchHoursLabel(deliveryBranch, language))
+      : "No se pudo verificar la sede.";
+    const ensureBranchOpen = () => {
+      if (!branchUnavailable) return true;
+      showAppAlert("Sede no disponible", branchClosedMessage);
+      return false;
+    };
 
     const { settings: branchSettings, loading: loadingSettings } =
       useBranchSettings(deliveryBranch?.id);
@@ -451,13 +466,13 @@ import { OrderTrackingModal } from "@/features/orders/components/OrderTrackingMo
 
     const proceedToCheckout = () => {
       if (cart.length === 0 || loadingSettings) return;
-      if (!validateDeliveryCoverage()) return;
+      if (!ensureBranchOpen() || !validateDeliveryCoverage()) return;
       LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
       setIsCheckingOut(true);
     };
 
     const handlePaymentNextStep = () => {
-      if (!validateDeliveryCoverage()) return;
+      if (!ensureBranchOpen() || !validateDeliveryCoverage()) return;
       if (!paymentMethod)
         return Alert.alert(
           t("selectPaymentTitle"),
@@ -549,7 +564,7 @@ import { OrderTrackingModal } from "@/features/orders/components/OrderTrackingMo
     });
     const submitFinalOrder = async () => {
       if (submitting || polling) return;
-      if (!validateDeliveryCoverage()) return;
+      if (!ensureBranchOpen() || !validateDeliveryCoverage()) return;
       if (!selectedAddressId) {
         Alert.alert(
           t("selectAddressTitle"),
@@ -976,6 +991,20 @@ import { OrderTrackingModal } from "@/features/orders/components/OrderTrackingMo
             </View>
           </View>
         </Modal>
+        {branchUnavailable && deliveryBranch && (
+          <View style={{ marginHorizontal: 16, marginBottom: 8, padding: 12,
+            borderRadius: 10, backgroundColor: "#FEF2F2", borderColor: "#FCA5A5", borderWidth: 1 }}>
+            <Text style={{ color: "#991B1B", fontWeight: "800" }}>
+              {branchAvailabilityLabel(deliveryBranch, language)}
+            </Text>
+            <Text style={{ marginTop: 3, color: "#991B1B", fontSize: 12 }}>
+              {branchHoursLabel(deliveryBranch, language)}
+            </Text>
+            <Text style={{ marginTop: 3, color: "#991B1B", fontSize: 12 }}>
+              {branchClosedMessage}
+            </Text>
+          </View>
+        )}
         {outOfRadius && !cartModalVisible && (
           <View
             style={{
@@ -1325,6 +1354,7 @@ import { OrderTrackingModal } from "@/features/orders/components/OrderTrackingMo
           orderPaid={orderPaid}
           stopWaiting={handleStopWaiting}
           outOfRadius={outOfRadius}
+          branchUnavailable={branchUnavailable}
           radiusTitle={radiusMsgs.radiusTitle}
           radiusText={radiusText}
         />

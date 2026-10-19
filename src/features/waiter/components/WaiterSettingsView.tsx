@@ -31,6 +31,7 @@ export const WaiterSettingsView = () => {
     soundNotifications,
     vibrationNotifications,
     hydrated: notificationPreferencesHydrated,
+    preferencesError,
     setSoundNotifications,
     setVibrationNotifications,
   } = useWaiterNotificationPreferences();
@@ -110,6 +111,11 @@ export const WaiterSettingsView = () => {
         contentContainerStyle={[styles.container, { backgroundColor: colors.background }]}
         showsVerticalScrollIndicator={false}
       >
+        {preferencesError && (
+          <Text accessibilityRole="alert" style={{ color: "#B91C1C", backgroundColor: "#FEE2E2", padding: 12, borderRadius: 10, marginBottom: 12 }}>
+            {preferencesError}
+          </Text>
+        )}
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: colors.mutedText }]}>
             {t.kitchenNotificationsTitle || "Notificaciones de Cocina"}
