@@ -3,6 +3,7 @@ import { useRememberedUiState } from "@/features/shared/hooks/useRememberedUiSta
 import {
   View,
   Text,
+  TextInput,
   TouchableOpacity,
   Animated,
   Platform,
@@ -27,9 +28,9 @@ import { useCashierOrders } from "../hooks/useCashierOrders";
 import { useTables } from "@/features/tables/hooks/useTables";
 import { TableStatus } from "@/features/tables/types/table.types";
 import { useCashierNotifications } from "../hooks/useCashierNotifications";
-import { paymentService } from "@/features/payments/services/paymentService";
+import { cashClosureService, type CashClosurePreview } from "@/features/payments/services/cashClosureService";
+import { useAuth } from "@/features/auth/context/AuthContext";
 import { orderService, OrderStatus, OrderType } from "@/features/orders";
-import type { CashierShiftSummary } from "@/features/payments/types/payment.types";
 import { isReadyForCashier } from "./DeliveryOrdersPanel";
 import { useMyProfile } from "@/features/employees/hooks/useMyProfile";
 import { getColombiaDayKey } from "@/features/shared/utils/colombia-date";
@@ -51,6 +52,7 @@ export default function CashierDashboard() {
     autoPrint,
   } = useCashierContext();
   const { profile: cashierProfile } = useMyProfile();
+  const { handleLogout } = useAuth();
   const cashierName = [cashierProfile?.name, cashierProfile?.lastName]
     .filter(Boolean)
     .join(" ")
@@ -186,10 +188,13 @@ export default function CashierDashboard() {
     },
   ]);
   const [closeRegisterModal, setCloseRegisterModal] = useState(false);
-  const [shiftSummary, setShiftSummary] = useState<CashierShiftSummary | null>(
-    null,
-  );
+  const [shiftSummary, setShiftSummary] = useState<CashClosurePreview | null>(null);
   const [loadingShiftSummary, setLoadingShiftSummary] = useState(false);
+  const [countedCash, setCountedCash] = useState("");
+  const [closureNotes, setClosureNotes] = useState("");
+  const [closureError, setClosureError] = useState<string | null>(null);
+  const [closingShift, setClosingShift] = useState(false);
+  const [confirmClosure, setConfirmClosure] = useState(false);
 
   const [toastMessage, setToastMessage] = useState("");
   const toastAnim = useRef(new Animated.Value(-100)).current;
@@ -258,27 +263,56 @@ export default function CashierDashboard() {
   const handleOpenCloseRegister = async () => {
     setCloseRegisterModal(true);
     setLoadingShiftSummary(true);
+    setShiftSummary(null);
+    setCountedCash("");
+    setClosureNotes("");
+    setClosureError(null);
+    setConfirmClosure(false);
     try {
-      const summary = await paymentService.getMyShift();
-      setShiftSummary(summary);
-    } catch {
-      // Silencioso: si falla, el modal muestra $0 en vez de romperse.
-      // El cajero puede cerrar y reintentar.
+      setShiftSummary(await cashClosureService.preview());
+    } catch (error: any) {
+      setClosureError(error?.message ?? "No se pudo consultar el turno y sus pagos.");
     } finally {
       setLoadingShiftSummary(false);
     }
   };
 
-  const handleCloseRegister = () => {
-    setCloseRegisterModal(false);
-    showToast(t.toastShiftClosed);
+  const parsedCash = countedCash.trim() !== "" && /^\d{1,12}$/.test(countedCash)
+    ? Number(countedCash)
+    : null;
+  const difference = parsedCash === null ? null : parsedCash - (shiftSummary?.cashExpected ?? 0);
+  const fmtCash = (amount: number) => `$${amount.toLocaleString("es-CO")}`;
+  const handleCloseRegister = async () => {
+    if (closingShift || !shiftSummary || shiftSummary.isClosed || parsedCash === null) return;
+    if (!confirmClosure) {
+      setConfirmClosure(true);
+      return;
+    }
+    setClosingShift(true);
+    setClosureError(null);
+    try {
+      const closed = await cashClosureService.close(parsedCash, closureNotes);
+      setCloseRegisterModal(false);
+      Alert.alert(
+        t.cashClosureSuccessTitle,
+        t.cashClosureSuccessBody.replace("{difference}", fmtCash(closed.cashDifference)),
+        [{ text: t.cashClosureOK, onPress: () => { void handleLogout(); } }],
+        { cancelable: false },
+      );
+    } catch (error: any) {
+      setClosureError(error?.message ?? "No se pudo registrar el cierre. No se ha terminado el turno.");
+      setConfirmClosure(false);
+    } finally {
+      setClosingShift(false);
+    }
   };
 
-  // Reemplaza los totales locales falsos por los reales del backend.
-  const totalEfectivo = shiftSummary?.totalCash ?? 0;
-  const totalTransferencia = shiftSummary?.totalTransfer ?? 0;
-  const totalDatafono = shiftSummary?.totalCard ?? 0;
-  const totalGlobal = shiftSummary?.totalAmount ?? 0;
+  // Solo ventas registradas por el cajero en ESTE turno, calculadas por backend.
+  const totalEfectivo = shiftSummary?.cashExpected ?? 0;
+  const totalTransferencia = shiftSummary?.transferTotal ?? 0;
+  const totalWompi = shiftSummary?.wompiTotal ?? 0;
+  const totalDatafono = shiftSummary?.cardTotal ?? 0;
+  const totalGlobal = shiftSummary?.totalSales ?? 0;
 
   return (
     <SafeAreaView
@@ -584,6 +618,9 @@ export default function CashierDashboard() {
               </TouchableOpacity>
             </View>
 
+            {closureError && (
+              <Text accessibilityRole="alert" style={{ color: "#DC2626", paddingBottom: 8, fontSize: 13 }}>{closureError}</Text>
+            )}
             <ScrollView
               style={{ flexShrink: 1 }}
               contentContainerStyle={{ paddingBottom: 4 }}
@@ -611,7 +648,7 @@ export default function CashierDashboard() {
                   <View style={styles.summaryItem}>
                     <Ionicons name="cash-outline" size={24} color="#10B981" />
                     <Text style={[styles.summaryLabel, { color: colors.text }]}>
-                      {t.cashInDrawer}
+                      {t.cashClosureExpected}
                     </Text>
                   </View>
                   <Text
@@ -670,6 +707,10 @@ export default function CashierDashboard() {
                     ${totalDatafono.toLocaleString("es-CO")}
                   </Text>
                 </View>
+                <View style={[styles.summaryRow, isNarrowScreen && { flexWrap: "wrap", gap: 6 }]}>
+                  <Text style={{ color: colors.text, fontWeight: "600" }}>{t.cashClosureWompi}</Text>
+                  <Text style={{ color: colors.text, fontWeight: "700" }}>{fmtCash(totalWompi)}</Text>
+                </View>
                 {loadingShiftSummary && (
                   <Text
                     style={{
@@ -706,15 +747,66 @@ export default function CashierDashboard() {
                 </View>
               </View>
 
+              {shiftSummary && (
+                <View style={{ paddingVertical: 14, gap: 8 }}>
+                  <Text style={{ color: colors.text, fontWeight: "700" }}>
+                    {t.cashClosureBranch}: {shiftSummary.branchName} · {t.cashClosureShift} #{shiftSummary.scheduleId}
+                  </Text>
+                  <Text style={{ color: colors.muted, fontSize: 12 }}>
+                    {shiftSummary.paymentsCount} {t.cashClosurePaymentCountNote}
+                  </Text>
+                  <Text style={{ color: colors.text, fontWeight: "700", marginTop: 5 }}>{t.cashClosureCounted}</Text>
+                  <TextInput
+                    accessibilityLabel="Efectivo contado físicamente en caja"
+                    value={countedCash}
+                    onChangeText={(v) => { setCountedCash(v.replace(/\D/g, "")); setConfirmClosure(false); }}
+                    editable={!closingShift && !shiftSummary.isClosed}
+                    keyboardType="number-pad"
+                    placeholder={t.cashClosureCountedPlaceholder}
+                    placeholderTextColor={colors.muted}
+                    style={{ borderWidth: 1, borderColor: colors.border, backgroundColor: colors.background,
+                      color: colors.text, paddingHorizontal: 14, paddingVertical: 12, borderRadius: 12 }}
+                  />
+                  {difference !== null && (
+                    <Text style={{ color: difference === 0 ? "#16A34A" : "#DC2626", fontWeight: "700" }}>
+                      {t.cashClosureDiff}: {difference > 0 ? "+" : ""}{fmtCash(difference)}
+                      {difference === 0 ? ` · ${t.cashClosureBalanced}` : difference < 0 ? ` · ${t.cashClosureShortage}` : ` · ${t.cashClosureOverage}`}
+                    </Text>
+                  )}
+                  <Text style={{ color: colors.text, fontWeight: "700", marginTop: 5 }}>{t.cashClosureNotes}</Text>
+                  <TextInput
+                    accessibilityLabel="Observaciones del cierre"
+                    value={closureNotes}
+                    onChangeText={(v) => { setClosureNotes(v.slice(0, 500)); setConfirmClosure(false); }}
+                    editable={!closingShift && !shiftSummary.isClosed}
+                    multiline
+                    maxLength={500}
+                    placeholder={t.cashClosureNotesPlaceholder}
+                    placeholderTextColor={colors.muted}
+                    style={{ borderWidth: 1, borderColor: colors.border, backgroundColor: colors.background,
+                      color: colors.text, paddingHorizontal: 14, paddingVertical: 12, borderRadius: 12, minHeight: 64 }}
+                  />
+                  {confirmClosure && (
+                    <View style={{ backgroundColor: isDark ? "#422006" : "#FEF3C7", borderRadius: 10, padding: 12 }}>
+                      <Text style={{ color: isDark ? "#FDE68A" : "#92400E", fontSize: 13 }}>
+                        {t.cashClosureWarning}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              )}
               <TouchableOpacity
+                disabled={loadingShiftSummary || closingShift || !shiftSummary || shiftSummary.isClosed || parsedCash === null}
                 style={[
                   styles.closeShiftBtn,
-                  { backgroundColor: colors.buttonDark },
+                  { backgroundColor: colors.buttonDark,
+                    opacity: loadingShiftSummary || closingShift || !shiftSummary || shiftSummary.isClosed || parsedCash === null ? 0.5 : 1 },
                 ]}
-                onPress={handleCloseRegister}
+                onPress={() => { void handleCloseRegister(); }}
               >
                 <Text style={styles.closeShiftBtnText}>
-                  {t.approveAndCloseShift}
+                  {closingShift ? t.cashClosureSaving : shiftSummary?.isClosed
+                    ? t.cashClosureAlreadyClosed : confirmClosure ? t.cashClosureConfirm : t.cashClosureReview}
                 </Text>
               </TouchableOpacity>
             </ScrollView>

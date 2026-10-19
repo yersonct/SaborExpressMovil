@@ -70,7 +70,7 @@ export const WaiterLanguageProvider = ({ children, storageScope }: { children: R
     setApiLanguage(language);
     if (!hydrated) return;
     AsyncStorage.setItem(storageKey, language).catch(() => undefined);
-    globalThis.localStorage?.setItem(storageKey, language);
+    try { globalThis.localStorage?.setItem(storageKey, language); } catch { /* AsyncStorage is primary. */ }
   }, [language, hydrated, storageKey]);
 
   const value = useMemo<WaiterLanguageContextValue>(() => {
