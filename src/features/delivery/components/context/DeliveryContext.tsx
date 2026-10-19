@@ -21,6 +21,9 @@ type DeliveryContextType = {
   vibrationNotifications: boolean;
   setVibrationNotifications: (enabled: boolean) => void;
   preferencesHydrated: boolean;
+  preferencesError: string | null;
+  pushStatus: "checking" | "enabled" | "unavailable" | "permission-denied" | "error" | "disabled";
+  setPushStatus: (status: DeliveryContextType["pushStatus"]) => void;
 };
 
 const DeliveryContext = createContext<DeliveryContextType | undefined>(undefined);
@@ -49,11 +52,16 @@ export const DeliveryProvider: React.FC<{
 }> = ({ children, storageScope = 'anonymous' }) => {
   const [preferences, setPreferences] = useState<DeliveryPreferences>(DEFAULT_PREFERENCES);
   const [preferencesHydrated, setPreferencesHydrated] = useState(false);
+  const [preferencesError, setPreferencesError] = useState<string | null>(null);
+  const [pushStatus, setPushStatus] = useState<DeliveryContextType["pushStatus"]>("checking");
   const storageKey = `saborexpress-delivery:${encodeURIComponent(storageScope)}:preferences`;
 
   useEffect(() => {
     let active = true;
     const languageSelectedBeforeLogin = getApiLanguage();
+    setPreferencesHydrated(false);
+    setPreferencesError(null);
+    setPushStatus("checking");
     const loadPreferences = async () => {
       let cached: Partial<DeliveryPreferences> = {};
       try {
@@ -109,7 +117,9 @@ export const DeliveryProvider: React.FC<{
   useEffect(() => {
     if (!preferencesHydrated) return;
     const serialized = JSON.stringify(preferences);
-    AsyncStorage.setItem(storageKey, serialized).catch(() => undefined);
+    void AsyncStorage.setItem(storageKey, serialized)
+      .then(() => setPreferencesError(null))
+      .catch(() => setPreferencesError("No se pudieron guardar las preferencias de reparto en este dispositivo."));
     try {
       globalThis.localStorage?.setItem(storageKey, serialized);
     } catch {
@@ -120,6 +130,9 @@ export const DeliveryProvider: React.FC<{
   const value: DeliveryContextType = {
     ...preferences,
     preferencesHydrated,
+    preferencesError,
+    pushStatus,
+    setPushStatus,
     setLanguage: (language) => {
       setApiLanguage(language);
       void saveUserLanguagePreference(language).catch(() => undefined);

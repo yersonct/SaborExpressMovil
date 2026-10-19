@@ -22,6 +22,14 @@ import {
   LanguageCode,
 } from "../../../locales/DeliveryTranslations";
 
+
+const PUSH_STATUS_COPY = {
+  es: { unavailable: "Para recibir alertas con la app cerrada, instala una APK o un development build.", denied: "Habilita las notificaciones en Ajustes de Android > Aplicaciones > SaborExpress.", error: "No se pudo registrar el teléfono; se reintentará al reconectar.", checking: "Comprobando el registro de notificaciones remotas...", save: "No se pudieron guardar las preferencias de reparto en este dispositivo." },
+  en: { unavailable: "Background alerts require an APK or development build.", denied: "Enable notifications in Android Settings > Apps > SaborExpress.", error: "Phone registration failed; it will retry after reconnecting.", checking: "Checking remote notification registration...", save: "Delivery preferences could not be saved on this device." },
+  pt: { unavailable: "Alertas em segundo plano exigem APK ou build de desenvolvimento.", denied: "Ative as notificações em Configurações do Android > Apps > SaborExpress.", error: "Falha ao registrar o telefone; nova tentativa ao reconectar.", checking: "Verificando registro de notificações remotas...", save: "Não foi possível salvar as preferências de entrega neste dispositivo." },
+  fr: { unavailable: "Les alertes en arrière-plan nécessitent un APK ou une version de développement.", denied: "Activez les notifications dans Paramètres Android > Applications > SaborExpress.", error: "Impossible d’enregistrer le téléphone; nouvel essai après reconnexion.", checking: "Vérification des notifications distantes...", save: "Impossible d’enregistrer les préférences de livraison sur cet appareil." },
+} as const;
+
 // En web, RN usa una perilla verde al encender; la forzamos a blanco.
 const switchWebProps = { activeThumbColor: "#FFFFFF" } as object;
 
@@ -39,8 +47,11 @@ export const DeliverySettingsView = () => {
     vibrationNotifications,
     setVibrationNotifications,
     preferencesHydrated,
+    preferencesError,
+    pushStatus,
   } = useDeliveryContext();
   const t = TRANSLATIONS[language] || TRANSLATIONS.es;
+  const pushCopy = PUSH_STATUS_COPY[language] || PUSH_STATUS_COPY.es;
   const handleToggleVibration = (enabled: boolean) => {
     setVibrationNotifications(enabled);
     if (enabled && Platform.OS !== "web") Vibration.vibrate([0, 100]);
@@ -91,6 +102,19 @@ export const DeliverySettingsView = () => {
         contentContainerStyle={styles.container}
         showsVerticalScrollIndicator={false}
       >
+        {preferencesError && (
+          <Text accessibilityRole="alert" style={{ color: "#B91C1C", backgroundColor: "#FEE2E2", padding: 12, borderRadius: 10, marginBottom: 12 }}>
+            {pushCopy.save}
+          </Text>
+        )}
+        {pushNotifications && pushStatus !== "enabled" && (
+          <Text accessibilityRole="alert" style={{ color: colors.mutedText, marginBottom: 12, lineHeight: 20 }}>
+            {pushStatus === "unavailable" ? pushCopy.unavailable
+              : pushStatus === "permission-denied" ? pushCopy.denied
+              : pushStatus === "error" ? pushCopy.error
+              : pushCopy.checking}
+          </Text>
+        )}
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: colors.mutedText }]}>
             {t.notificationsTitle}

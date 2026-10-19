@@ -43,6 +43,13 @@ const translations = require("../../../locales/translations.json") as Record<
 >;
 type LanguageCode = "es" | "en" | "pt" | "fr";
 
+const serverDownTitles: Record<LanguageCode, string> = {
+  es: "Sin conexión con el sistema",
+  en: "Unable to connect to the service",
+  pt: "Sem conexão com o sistema",
+  fr: "Connexion au service impossible",
+};
+
 export const LoginForm = () => {
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
@@ -493,7 +500,7 @@ export const LoginForm = () => {
                     if (metrics) requestAnimationFrame(() => ensureFocusedFieldVisible(metrics.screenY));
                   }}
                   onChangeText={setIdentifier}
-                  error={!!error}
+                  error={!!error && errorCode !== "SERVER_DOWN"}
                   themeColors={themeColors}
                 />
                 <AuthInput
@@ -513,7 +520,7 @@ export const LoginForm = () => {
                   secureTextEntry={!showPassword}
                   showPasswordToggle={true}
                   onTogglePassword={() => setShowPassword(!showPassword)}
-                  error={!!error}
+                  error={!!error && errorCode !== "SERVER_DOWN"}
                   themeColors={themeColors}
                 />
 
@@ -525,7 +532,7 @@ export const LoginForm = () => {
                   <Text style={styles.forgotText}>{t.forgotPassword}</Text>
                 </TouchableOpacity>
 
-                {error ? <Text style={styles.errorText}>{error}</Text> : null}
+                {error && errorCode !== "SERVER_DOWN" ? <Text style={styles.errorText}>{error}</Text> : null}
 
                 {loading ? (
                   <ActivityIndicator
@@ -661,7 +668,7 @@ export const LoginForm = () => {
                 textAlign: "center",
               }}
             >
-              {t.errorTitle || "Sesión cerrada"}
+              {serverDownTitles[selectedLanguage]}
             </Text>
             <Text
               style={{

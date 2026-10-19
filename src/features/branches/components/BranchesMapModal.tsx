@@ -17,6 +17,8 @@ import type { MapCircle } from "./leafletShared";
 import { useDeliveryCoverage } from "../hooks/useDeliveryCoverage";
 import { haversineKm } from "@/features/orders/utils/orderBreakdown";
 import { useClientPreferences } from "@/features/userPreferences/context/ClientPreferencesContext";
+import { branchAvailabilityLabel, branchHoursLabel, branchIsUnavailable } from "../utils/branchAvailability";
+import { showAppAlert } from "@/features/shared/services/alertEvents";
 
 type Props = {
   visible: boolean;
@@ -35,8 +37,8 @@ export function BranchesMapModal({
   userLocation,
   onSelectBranch,
 }: Props) {
-  const { colors, t } = useClientPreferences();
-  const { branches, loading } = usePublicBranches();
+  const { colors, t, language } = useClientPreferences();
+  const { branches, loading } = usePublicBranches(visible);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [focus, setFocus] = useState<{
     latitude: number;
@@ -108,8 +110,8 @@ export function BranchesMapModal({
       latitude: b.latitude as number,
       longitude: b.longitude as number,
       title: b.name,
-      description: b.address ?? undefined,
-      color: b.id === selectedId ? "#10B981" : "#E61C24",
+      description: `${b.address ?? ""} · ${branchAvailabilityLabel(b, language)} · ${branchHoursLabel(b, language)}`,
+      color: branchIsUnavailable(b) ? "#94A3B8" : b.id === selectedId ? "#10B981" : "#E61C24",
       alwaysShowLabel: true,
     }));
     if (userLocation) {
@@ -122,7 +124,7 @@ export function BranchesMapModal({
       });
     }
     return list;
-  }, [located, selectedId, userLocation?.latitude, userLocation?.longitude, t]);
+  }, [located, selectedId, userLocation?.latitude, userLocation?.longitude, t, language]);
 
   const circles = useMemo<MapCircle[]>(() => located.flatMap((b) => {
     const radius = radii[b.id];
@@ -241,6 +243,13 @@ export function BranchesMapModal({
                     <Text style={{ fontSize: 12, color: colors.muted }}>
                       {b.address}
                     </Text>
+                    <Text style={{ fontWeight: "700", fontSize: 12, marginTop: 5,
+                      color: branchIsUnavailable(b) ? "#DC2626" : "#16A34A" }}>
+                      {branchAvailabilityLabel(b, language)}
+                    </Text>
+                    <Text style={{ fontSize: 12, color: colors.muted, marginTop: 2 }}>
+                      {branchHoursLabel(b, language)}
+                    </Text>
                     <Text style={{ fontSize: 12, color: colors.muted, marginTop: 4 }}>
                       {coverageLoading
                         ? "Consultando radio de entrega..."
@@ -259,6 +268,11 @@ export function BranchesMapModal({
             {selectedBranch && onSelectBranch && (
               <TouchableOpacity
                 onPress={() => {
+                  if (branchIsUnavailable(selectedBranch)) {
+                    showAppAlert("Sede cerrada", selectedBranch.unavailableReason ||
+                      branchHoursLabel(selectedBranch, language));
+                    return;
+                  }
                   if (coverageLoading || radii[selectedBranch.id] == null) {
                     Alert.alert("Radio no disponible", "No se pudo verificar el radio de entrega de esta sede.");
                     return;
@@ -279,12 +293,14 @@ export function BranchesMapModal({
                   borderRadius: 12,
                   alignItems: "center",
                   justifyContent: "center",
-                  backgroundColor: colors.accent,
+                  backgroundColor: branchIsUnavailable(selectedBranch) ? "#94A3B8" : colors.accent,
                 }}
                 accessibilityRole="button"
               >
                 <Text style={{ color: "#FFFFFF", fontWeight: "800" }}>
-                  {t("useThisBranch")}
+                  {branchIsUnavailable(selectedBranch)
+                    ? branchAvailabilityLabel(selectedBranch, language)
+                    : t("useThisBranch")}
                 </Text>
               </TouchableOpacity>
             )}

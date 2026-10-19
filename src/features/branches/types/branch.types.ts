@@ -4,4 +4,10 @@ export interface PublicBranch {
   address: string;
   latitude?: number | null;
   longitude?: number | null;
+  isActive?: boolean;
+  isOpen?: boolean;
+  hasSchedule?: boolean;
+  openingTime?: string;
+  closingTime?: string;
+  unavailableReason?: string | null;
 }

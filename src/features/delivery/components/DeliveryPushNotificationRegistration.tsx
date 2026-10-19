@@ -83,6 +83,7 @@ async function configureAndroidChannels(
 export function DeliveryPushNotificationRegistration() {
   const { user } = useAuth();
   const preferences = useDeliveryContext();
+  const { setPushStatus } = preferences;
   const expoPushTokenRef = useRef<string | null>(null);
   const preferencesRef = useRef(preferences);
   preferencesRef.current = preferences;
@@ -102,8 +103,12 @@ export function DeliveryPushNotificationRegistration() {
       await registerDeliveryPushDevice(settings);
       if (!preferencesRef.current.pushNotifications) {
         await unregisterPushDevice(5000);
+        setPushStatus("disabled");
+      } else {
+        setPushStatus("enabled");
       }
     } catch (error) {
+      setPushStatus("error");
       if (__DEV__) console.warn("No se pudieron guardar las preferencias push del repartidor:", error);
     }
   }, []);
@@ -111,11 +116,13 @@ export function DeliveryPushNotificationRegistration() {
   useEffect(() => {
     if (!user?.token || !preferences.preferencesHydrated) return;
     if (!preferences.pushNotifications) {
+      setPushStatus("disabled");
       expoPushTokenRef.current = null;
       void unregisterPushDevice(5000).catch(() => undefined);
       return;
     }
-    if (isExpoGo) {
+    if (isExpoGo || Platform.OS === "web" || !Device.isDevice) {
+      setPushStatus("unavailable");
       if (__DEV__) {
         console.info(
           "Las notificaciones remotas del repartidor requieren instalar un development build; Expo Go no las recibe en Android.",
@@ -126,6 +133,7 @@ export function DeliveryPushNotificationRegistration() {
 
     let active = true;
     let registering = false;
+    setPushStatus("checking");
 
     const register = async () => {
       if (registering || Platform.OS === "web" || !Device.isDevice) return;
@@ -138,6 +146,7 @@ export function DeliveryPushNotificationRegistration() {
           permission = await Notifications.requestPermissionsAsync();
         }
         if (!permission.granted) {
+          if (active) setPushStatus("permission-denied");
           if (__DEV__) {
             console.warn(
               "No se registró el push del repartidor porque Android no concedió permiso para mostrar notificaciones.",
@@ -156,6 +165,7 @@ export function DeliveryPushNotificationRegistration() {
         expoPushTokenRef.current = pushToken.data;
         await syncPreferences(pushToken.data);
       } catch (error) {
+        if (active) setPushStatus("error");
         if (__DEV__) console.warn("No se pudo registrar el push del repartidor:", error);
       } finally {
         registering = false;

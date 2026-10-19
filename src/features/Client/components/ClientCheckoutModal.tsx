@@ -41,6 +41,7 @@ export const ClientCheckoutModal = ({
   stopWaiting,
   orderPaid,
   outOfRadius,
+  branchUnavailable = false,
   radiusTitle,
   radiusText,
 }: any) => {
@@ -209,27 +210,27 @@ export const ClientCheckoutModal = ({
                     styles.confirmOrderBtn,
                     (submitting || waitingPayment) &&
                       styles.confirmOrderBtnDisabled,
-                    outOfRadius && {
+                    (outOfRadius || branchUnavailable) && {
                       backgroundColor: "#E2E8F0",
                       shadowOpacity: 0,
                     },
                     { marginTop: 20, marginBottom: 20 },
                   ]}
                   onPress={submitFinalOrder}
-                  disabled={submitting || waitingPayment || outOfRadius}
+                  disabled={submitting || waitingPayment || outOfRadius || branchUnavailable}
                 >
                   <Ionicons
                     name={
                       paymentMethod === "efectivo" ? "bicycle" : "lock-closed"
                     }
                     size={20}
-                    color={outOfRadius ? "#475569" : "#FFF"}
+                    color={outOfRadius || branchUnavailable ? "#475569" : "#FFF"}
                     style={{ marginRight: 8 }}
                   />
                   <Text
                     style={[
                       styles.confirmOrderBtnText,
-                      outOfRadius && { color: "#475569" },
+                      (outOfRadius || branchUnavailable) && { color: "#475569" },
                     ]}
                   >
                     {submitting
@@ -367,18 +368,18 @@ export const ClientCheckoutModal = ({
                     styles.confirmOrderBtn,
                     (!paymentMethod || outOfRadius) &&
                       styles.confirmOrderBtnDisabled,
-                    outOfRadius && {
+                    (outOfRadius || branchUnavailable) && {
                       backgroundColor: "#E2E8F0",
                       shadowOpacity: 0,
                     },
                   ]}
                   onPress={handlePaymentNextStep}
-                  disabled={!paymentMethod || outOfRadius}
+                  disabled={!paymentMethod || outOfRadius || branchUnavailable}
                 >
                   <Text
                     style={[
                       styles.confirmOrderBtnText,
-                      outOfRadius && { color: "#475569" },
+                      (outOfRadius || branchUnavailable) && { color: "#475569" },
                     ]}
                   >
                     {t("continue")}
@@ -386,7 +387,7 @@ export const ClientCheckoutModal = ({
                   <Ionicons
                     name="arrow-forward"
                     size={20}
-                    color={outOfRadius ? "#475569" : "#FFF"}
+                    color={outOfRadius || branchUnavailable ? "#475569" : "#FFF"}
                     style={{ marginLeft: 8 }}
                   />
                 </TouchableOpacity>
@@ -474,18 +475,18 @@ export const ClientCheckoutModal = ({
                   <TouchableOpacity
                     style={[
                       styles.confirmOrderBtn,
-                      outOfRadius && {
+                      (outOfRadius || branchUnavailable) && {
                         backgroundColor: "#E2E8F0",
                         shadowOpacity: 0,
                       },
                     ]}
                     onPress={proceedToCheckout}
-                    disabled={outOfRadius}
+                    disabled={outOfRadius || branchUnavailable}
                   >
                     <Text
                       style={[
                         styles.confirmOrderBtnText,
-                        outOfRadius && { color: "#475569" },
+                        (outOfRadius || branchUnavailable) && { color: "#475569" },
                       ]}
                     >
                       {t("continueToPayment")}
@@ -493,7 +494,7 @@ export const ClientCheckoutModal = ({
                     <Ionicons
                       name="arrow-forward"
                       size={20}
-                      color={outOfRadius ? "#475569" : "#FFF"}
+                      color={outOfRadius || branchUnavailable ? "#475569" : "#FFF"}
                       style={{ marginLeft: 8 }}
                     />
                   </TouchableOpacity>
