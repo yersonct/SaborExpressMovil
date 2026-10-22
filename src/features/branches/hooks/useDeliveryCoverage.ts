@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { branchSettingsService } from "../services/branchSettingsService";
 import type { PublicBranch } from "../types/branch.types";
+import { deferEffect } from "@/features/shared/utils/deferEffect";
 
 /** Radio operativo real de cada sede. null = no configurado/no disponible. */
 export function useDeliveryCoverage(branches: PublicBranch[], enabled: boolean) {
@@ -8,7 +9,7 @@ export function useDeliveryCoverage(branches: PublicBranch[], enabled: boolean) 
   const [radii, setRadii] = useState<Record<number, number | null>>({});
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
+  useEffect(() => deferEffect(() => {
     if (!enabled || !ids) {
       setRadii({});
       setLoading(false);
@@ -32,7 +33,7 @@ export function useDeliveryCoverage(branches: PublicBranch[], enabled: boolean) 
       if (alive) setLoading(false);
     });
     return () => { alive = false; };
-  }, [ids, enabled]);
+  }), [ids, enabled]);
 
   return { radii, loading };
 }

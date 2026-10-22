@@ -24,13 +24,14 @@ import {
   OrderType,
   OrderSummary,
 } from "@/features/orders/types/order.types";
-import { styles } from "../style/CashierStyles";
 import { useCashierContext } from "../context/CashierContext";
 import { TRANSLATIONS } from "@/locales/CashierTranslations";
+import { translateMobileCopy } from "../../../locales/mobileCopy";
 import {
   formatColombiaTime,
   getColombiaDayKey,
 } from "@/features/shared/utils/colombia-date";
+import { deferEffect } from "@/features/shared/utils/deferEffect";
 
 interface Props {
   branchId: number | null;
@@ -144,12 +145,12 @@ export function DeliveryOrdersPanel({
         setLoading(false);
       }
     },
-    [branchId, language, showOlderOrders, todayKey],
+    [branchId, showOlderOrders, todayKey, t.deliveryLoadError, t.errorTitle],
   );
 
-  useEffect(() => {
+  useEffect(() => deferEffect(() => {
     fetchPendingDeliveries();
-  }, [fetchPendingDeliveries, refreshKey]);
+  }), [fetchPendingDeliveries, refreshKey]);
 
   const handleConfirm = async (order: OrderSummary) => {
     setConfirmingId(order.id);
@@ -210,7 +211,9 @@ export function DeliveryOrdersPanel({
           style={{ padding: 12, borderRadius: 10,
             backgroundColor: isDark ? "#1E293B" : "#E2E8F0" }}>
           <Text style={{ color: colors.text, textAlign: "center", fontWeight: "700" }}>
-            {showOlderOrders ? "Volver a domicilios de hoy" : `Ver domicilios pendientes anteriores (${olderCount})`}
+            {showOlderOrders
+              ? translateMobileCopy("Volver a domicilios de hoy")
+              : translateMobileCopy("Ver domicilios pendientes anteriores ({{count}})", { count: olderCount })}
           </Text>
         </TouchableOpacity>
       ) : null}
@@ -308,7 +311,9 @@ export function DeliveryOrdersPanel({
         <View style={{ alignItems: "center", paddingVertical: 40 }}>
           <Ionicons name="bicycle-outline" size={56} color={colors.muted} />
           <Text style={{ color: colors.muted, marginTop: 12, fontSize: 15 }}>
-            {showOlderOrders ? "No hay domicilios pendientes anteriores." : t.emptyPendingDeliveries}
+            {showOlderOrders
+              ? translateMobileCopy("No hay domicilios pendientes anteriores.")
+              : t.emptyPendingDeliveries}
           </Text>
         </View>
       }

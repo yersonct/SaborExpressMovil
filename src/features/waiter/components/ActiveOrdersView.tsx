@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { FlatList, Text, TouchableOpacity, View, LayoutAnimation, Modal, Platform, TextInput, Alert } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { FlatList, Text, TouchableOpacity, View, LayoutAnimation, Modal } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { styles } from './style/WaiterDashboardStyles';
 import { localStyles, modalStyles } from './style/ActiveOrdersStyles';
@@ -7,6 +7,7 @@ import { useWaiterLanguage } from '@/features/waiter/context/WaiterLanguageConte
 import { useWaiterTheme } from '@/features/waiter/context/WaiterThemeContext';
 import { OrderType } from '@/features/orders/types/order.types';
 import { BreakdownRows } from "@/features/orders/components/BreakdownRows";
+import { translateMobileCopy } from "../../../locales/mobileCopy";
 
 export const ActiveOrdersView = ({
   activeOrders,
@@ -18,6 +19,12 @@ export const ActiveOrdersView = ({
 }: any) => {
   const { t } = useWaiterLanguage();
   const { colors } = useWaiterTheme();
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(timer);
+  }, []);
 
   const [isCancelModalVisible, setIsCancelModalVisible] = useState(false);
   const [selectedOrderToCancel, setSelectedOrderToCancel] = useState<any>(null);
@@ -44,7 +51,7 @@ export const ActiveOrdersView = ({
   
   const getElapsedLabel = (createdAt: string) => {
     const minutes = Math.floor(
-      (Date.now() - new Date(createdAt).getTime()) / 60000,
+      (now - new Date(createdAt).getTime()) / 60000,
     );
     if (minutes < 1) return t.elapsedJustNow;
     if (minutes < 60) return t.elapsedMinutes.replace("{count}", String(minutes));
@@ -281,7 +288,7 @@ export const ActiveOrdersView = ({
                       mutedColor={colors.mutedText}
                     />
                     <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                      <Text style={{ color: colors.text, fontWeight: '800' }}>Total</Text>
+                      <Text style={{ color: colors.text, fontWeight: '800' }}>{translateMobileCopy("Total")}</Text>
                       <Text style={{ color: colors.accent, fontWeight: '800' }}>
                         ${Math.round(item.total).toLocaleString('es-CO')}
                       </Text>
@@ -307,7 +314,7 @@ export const ActiveOrdersView = ({
                           style={{ marginRight: 8 }}
                         />
                         <Text style={[localStyles.addMoreBtnText, { color: colors.text }]}>
-                          {t.ordersAddMore || "Agregar productos a la mesa"}
+                          {t.ordersAddMore || translateMobileCopy("Agregar productos a la mesa")}
                         </Text>
                       </TouchableOpacity>
                     )}

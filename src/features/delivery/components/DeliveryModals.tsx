@@ -17,6 +17,7 @@ import {
 } from "@/features/branches/components/LeafletMap";
 import { useDeliveryRoute } from "@/features/branches/hooks/useDeliveryRoute";
 import { useDriverLocation } from "../hooks/useDriverLocation";
+import { translateMobileCopy } from "../../../locales/mobileCopy";
 
 import { useDeliveryContext } from "./context/DeliveryContext";
 import { getDeliveryTheme } from "./context/deliveryTheme";
@@ -24,6 +25,7 @@ import {
   TRANSLATIONS,
   LanguageCode,
 } from "../../../locales/DeliveryTranslations";
+import { deferEffect } from "@/features/shared/utils/deferEffect";
 
 interface DeliveryModalsProps {
   mapModalVisible: boolean;
@@ -55,9 +57,9 @@ export const DeliveryModals = ({
 const [confirmVisible, setConfirmVisible] = useState(false);
 const [finishing, setFinishing] = useState(false);
 
-useEffect(() => {
+useEffect(() => deferEffect(() => {
   setConfirmVisible(false);
-}, [selectedDelivery?.id]);
+}), [selectedDelivery?.id]);
 
 const onConfirmDelivery = async () => {
   setFinishing(true);
@@ -145,7 +147,7 @@ const onConfirmDelivery = async () => {
               { color: colors.text, textShadowColor: isDark ? "#000" : "#FFF" },
             ]}
           >
-            {t.onWayToCustomer || "En camino al cliente"}
+            {t.onWayToCustomer || translateMobileCopy("En camino al cliente")}
             {durationMin != null && distanceKm != null
               ? ` · ${durationMin} min · ${distanceKm.toFixed(1)} km`
               : ""}
@@ -193,15 +195,15 @@ const onConfirmDelivery = async () => {
             />
             <Text style={[styles.dragText, { color: colors.muted }]}>
               {isSheetExpanded
-                ? t.hideDetails || "Ocultar detalles"
-                : t.viewOrderDetails || "Ver detalles del pedido"}
+                ? t.hideDetails || translateMobileCopy("Ocultar detalles")
+                : t.viewOrderDetails || translateMobileCopy("Ver detalles del pedido")}
             </Text>
           </TouchableOpacity>
 
           {selectedDelivery && (
             <ScrollView showsVerticalScrollIndicator={false} bounces={false}>
               <Text style={[styles.deliverToText, { color: colors.muted }]}>
-                {t.deliverTo || "Entregar a:"}
+                {t.deliverTo || translateMobileCopy("Entregar a:")}
               </Text>
 
               <View style={styles.customerInfoRow}>
@@ -209,7 +211,7 @@ const onConfirmDelivery = async () => {
                   <Text
                     style={[styles.customerNameLarge, { color: colors.text }]}
                   >
-                    {selectedDelivery.customerName ?? "Cliente"}
+                    {selectedDelivery.customerName ?? translateMobileCopy("Cliente")}
                   </Text>
                   <Text
                     style={[
@@ -249,7 +251,7 @@ const onConfirmDelivery = async () => {
                       ]}
                     >
                       <Text style={[styles.phoneText, { color: colors.text }]}>
-                        {t.tel || "Tel:"} {selectedDelivery.customerPhone}
+                        {t.tel || translateMobileCopy("Tel:")} {selectedDelivery.customerPhone}
                       </Text>
                     </View>
                   )}
@@ -272,7 +274,7 @@ const onConfirmDelivery = async () => {
                         },
                       ]}
                     >
-                      {t.paymentStatus || "Pago:"}
+                      {t.paymentStatus || translateMobileCopy("Pago:")}
                     </Text>
                     <Text
                       style={[
@@ -284,8 +286,8 @@ const onConfirmDelivery = async () => {
                         },
                       ]}
                     >
-                      {selectedDelivery.paymentMethod ?? "Pendiente"} ·{" "}
-                      {selectedDelivery.paymentStatus ?? "Sin registrar"}
+                      {translateMobileCopy(selectedDelivery.paymentMethod ?? "Pendiente")} ·{" "}
+                      {translateMobileCopy(selectedDelivery.paymentStatus ?? "Sin registrar")}
                     </Text>
                   </View>
 
@@ -358,7 +360,7 @@ const onConfirmDelivery = async () => {
                         textAlign: "right",
                       }}
                     >
-                      Total: {money(selectedDelivery.total ?? 0)}
+                      {translateMobileCopy("Total:")} {money(selectedDelivery.total ?? 0)}
                     </Text>
                   </View>
 
@@ -370,8 +372,7 @@ const onConfirmDelivery = async () => {
                         marginBottom: 8,
                       }}
                     >
-                      La cocina aún no termina este pedido. No puedes cobrar ni
-                      entregar todavía.
+                      {translateMobileCopy("La cocina aún no termina este pedido. No puedes cobrar ni entregar todavía.")}
                     </Text>
                   )}
 
@@ -406,8 +407,8 @@ const onConfirmDelivery = async () => {
                   >
                     <Text style={styles.finishDeliveryText}>
                       {isCashPending
-                        ? `${t.btnMarkDelivered || "Marcar como Entregado"} · ${money(selectedDelivery.amountPending)}`
-                        : t.btnMarkDelivered || "Marcar como Entregado"}
+                        ? `${t.btnMarkDelivered || translateMobileCopy("Marcar como Entregado")} · ${money(selectedDelivery.amountPending)}`
+                        : t.btnMarkDelivered || translateMobileCopy("Marcar como Entregado")}
                     </Text>
                   </TouchableOpacity>
                 </View>

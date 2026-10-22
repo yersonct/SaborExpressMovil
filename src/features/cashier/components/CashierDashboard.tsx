@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useRememberedUiState } from "@/features/shared/hooks/useRememberedUiState";
 import {
   View,
@@ -7,7 +7,6 @@ import {
   TouchableOpacity,
   Animated,
   Platform,
-  LayoutAnimation,
   Modal,
   ScrollView,
   Alert,
@@ -15,13 +14,12 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { useNavigation } from "expo-router";
 import { styles } from "../style/CashierStyles";
 import { useCashierContext } from "../context/CashierContext";
 
-import { STAFF_TODAY, Employee, Order } from "./CashierData";
+import { Order } from "./CashierData";
 import { OrdersFeature } from "./OrdersFeature";
-import { DeliveryOrdersPanel } from "./DeliveryOrdersPanel";
+import { DeliveryOrdersPanel , isReadyForCashier } from "./DeliveryOrdersPanel";
 import { PaidOrdersPanel } from "./PaidOrdersPanel";
 import { useMyBranch } from "@/features/employees/hooks/useMyBranch";
 import { useCashierOrders } from "../hooks/useCashierOrders";
@@ -33,25 +31,25 @@ import { useCashierNotifications } from "../hooks/useCashierNotifications";
 import { cashClosureService, type CashClosurePreview } from "@/features/payments/services/cashClosureService";
 import { useAuth } from "@/features/auth/context/AuthContext";
 import { orderService, OrderStatus, OrderType } from "@/features/orders";
-import { isReadyForCashier } from "./DeliveryOrdersPanel";
+
 import { useMyProfile } from "@/features/employees/hooks/useMyProfile";
 import { getColombiaDayKey } from "@/features/shared/utils/colombia-date";
+import { translateMobileCopy } from "../../../locales/mobileCopy";
 
 import {
   TRANSLATIONS,
   LanguageCode,
 } from "./../../../locales/CashierTranslations";
+import { deferEffect } from "@/features/shared/utils/deferEffect";
 
 export default function CashierDashboard() {
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
   const isNarrowScreen = screenWidth < 390;
-  const navigation = useNavigation();
   const {
     language,
     isDark,
     notificationSound,
     vibrationNotifications,
-    autoPrint,
   } = useCashierContext();
   const { profile: cashierProfile } = useMyProfile();
   const { handleLogout } = useAuth();
@@ -111,7 +109,7 @@ export default function CashierDashboard() {
     }
   }, [branchId]);
 
-  useEffect(() => { void loadPreviousReviews(); }, [loadPreviousReviews]);
+  useEffect(() => deferEffect(() => { void loadPreviousReviews(); }), [loadPreviousReviews]);
   useRealtimeEvents(["OrdersChanged", "PaymentsChanged", "TablesChanged", "RealtimeConnected"],
     () => { void loadPreviousReviews(); });
 
@@ -196,14 +194,13 @@ export default function CashierDashboard() {
     }
   }, [branchId, todayKey]);
 
-  useEffect(() => {
+  useEffect(() => deferEffect(() => {
     fetchDeliveryCount();
-  }, [fetchDeliveryCount]);
+  }), [fetchDeliveryCount]);
 
-  const [staff, setStaff] = useState<Employee[]>(STAFF_TODAY);
   // ⚠️ Sigue siendo un historial local/de ejemplo — se conecta a pagos reales
   // en el paso de "cierre de caja real" (paso 3 de la lista).
-  const [paidHistory, setPaidHistory] = useState<Order[]>([
+  const [, setPaidHistory] = useState<Order[]>([
     {
       id: "ORD-099",
       type: "mesa",
@@ -224,7 +221,7 @@ export default function CashierDashboard() {
   const [confirmClosure, setConfirmClosure] = useState(false);
 
   const [toastMessage, setToastMessage] = useState("");
-  const toastAnim = useRef(new Animated.Value(-100)).current;
+  const [toastAnim] = useState(() => new Animated.Value(-100));
 
   const showToast = (message: string) => {
     setToastMessage(message);
@@ -519,7 +516,7 @@ export default function CashierDashboard() {
             backgroundColor: isDark ? "#451a03" : "#FEF3C7", padding: 12,
           }}>
             <Text style={{ color: isDark ? "#fde68a" : "#92400E", fontWeight: "800", marginBottom: 8 }}>
-              Mesas ocupadas desde jornadas anteriores ({previousTableReviews.length})
+              {translateMobileCopy("Mesas ocupadas desde jornadas anteriores ({{count}})", { count: previousTableReviews.length })}
             </Text>
             <ScrollView>
               {previousTableReviews.map((review) => (
@@ -529,12 +526,12 @@ export default function CashierDashboard() {
                 }}>
                   <View style={{ flex: 1 }}>
                     <Text style={{ color: isDark ? "#fde68a" : "#92400E", fontWeight: "700" }}>
-                      Mesa {review.tableNumber}
+                      {translateMobileCopy("Mesa")} {review.tableNumber}
                     </Text>
                     <Text style={{ color: isDark ? "#fcd34d" : "#92400E", fontSize: 12 }}>
                       {review.canReleaseNormally
-                        ? "Pedidos pagados y entregados"
-                        : `Pendientes: ${review.orders.length} pedido(s). Requiere administración.`}
+                        ? translateMobileCopy("Pedidos pagados y entregados")
+                        : translateMobileCopy("Pendientes: {{count}} pedido(s). Requiere administración.", { count: review.orders.length })}
                     </Text>
                   </View>
                   {review.canReleaseNormally && (
@@ -546,7 +543,7 @@ export default function CashierDashboard() {
                       style={{ backgroundColor: colors.buttonDark, paddingHorizontal: 14, paddingVertical: 9, borderRadius: 8,
                         opacity: reviewLoading || releasing ? 0.6 : 1 }}
                     >
-                      <Text style={{ color: "#FFFFFF", fontWeight: "bold" }}>Liberar</Text>
+                      <Text style={{ color: "#FFFFFF", fontWeight: "bold" }}>{translateMobileCopy("Liberar")}</Text>
                     </TouchableOpacity>
                   )}
                 </View>
@@ -561,7 +558,9 @@ export default function CashierDashboard() {
             style={{ padding: 12, marginHorizontal: 16, marginTop: 10, borderRadius: 10,
               backgroundColor: isDark ? "#1E293B" : "#E2E8F0" }}>
             <Text style={{ color: colors.text, textAlign: "center", fontWeight: "700" }}>
-              {showOlderOrders ? "Volver a pedidos de hoy" : `Ver pendientes anteriores (${oldInTab})`}
+              {showOlderOrders
+                ? translateMobileCopy("Volver a pedidos de hoy")
+                : translateMobileCopy("Ver pendientes anteriores ({{count}})", { count: oldInTab })}
             </Text>
           </TouchableOpacity>
         )}
@@ -576,7 +575,6 @@ export default function CashierDashboard() {
             setActiveTab={setActiveTab}
             lang={language}
             isDark={isDark}
-            autoPrint={autoPrint}
           />
         )}
         {activeTab === "delivery" && (
@@ -764,16 +762,18 @@ export default function CashierDashboard() {
                   </Text>
                   <Text style={{ color: colors.text, fontWeight: "700", marginTop: 5 }}>{t.cashClosureCounted}</Text>
                   <TextInput
-                    accessibilityLabel="Efectivo contado físicamente en caja"
+                    accessibilityLabel={translateMobileCopy("Efectivo contado físicamente en caja")}
                     value={countedCash}
-                    onChangeText={(v) => { setCountedCash(v.replace(/\D/g, "")); setConfirmClosure(false); }}
+                    onChangeText={(v) => { setCountedCash(v.replace(/\D/g, "").slice(0, 12)); setConfirmClosure(false); setClosureError(null); }}
                     editable={!closingShift && !shiftSummary.isClosed}
                     keyboardType="number-pad"
+                    maxLength={12}
                     placeholder={t.cashClosureCountedPlaceholder}
                     placeholderTextColor={colors.muted}
                     style={{ borderWidth: 1, borderColor: colors.border, backgroundColor: colors.background,
                       color: colors.text, paddingHorizontal: 14, paddingVertical: 12, borderRadius: 12 }}
                   />
+                  {!shiftSummary.isClosed && <Text style={{ color: colors.muted, fontSize: 11 }}>{t.cashClosureCashHint}</Text>}
                   {difference !== null && (
                     <Text style={{ color: difference === 0 ? "#16A34A" : "#DC2626", fontWeight: "700" }}>
                       {t.cashClosureDiff}: {difference > 0 ? "+" : ""}{fmtCash(difference)}
@@ -782,9 +782,9 @@ export default function CashierDashboard() {
                   )}
                   <Text style={{ color: colors.text, fontWeight: "700", marginTop: 5 }}>{t.cashClosureNotes}</Text>
                   <TextInput
-                    accessibilityLabel="Observaciones del cierre"
+                    accessibilityLabel={translateMobileCopy("Observaciones del cierre")}
                     value={closureNotes}
-                    onChangeText={(v) => { setClosureNotes(v.slice(0, 500)); setConfirmClosure(false); }}
+                    onChangeText={(v) => { setClosureNotes(v.slice(0, 500)); setConfirmClosure(false); setClosureError(null); }}
                     editable={!closingShift && !shiftSummary.isClosed}
                     multiline
                     maxLength={500}
@@ -868,8 +868,7 @@ export default function CashierDashboard() {
                 marginBottom: 18,
               }}
             >
-              Se liberará una mesa de jornada anterior cuyos pedidos están entregados y pagados.
-              Los pedidos se conservarán en el historial.
+              {translateMobileCopy("Se liberará una mesa de jornada anterior cuyos pedidos están entregados y pagados. Los pedidos se conservarán en el historial.")}
             </Text>
             <View style={{ flexDirection: "row", gap: 10 }}>
               <TouchableOpacity

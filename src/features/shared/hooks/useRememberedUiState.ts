@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from 
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useAuth } from "@/features/auth/context/AuthContext";
 import { getUserIdFromToken } from "@/features/auth/services/decodeToken";
+import { deferEffect } from "@/features/shared/utils/deferEffect";
 
 /** Persiste solo selección visual simple por usuario, sin datos de pago ni PII. */
 export function useRememberedUiState<T extends string | boolean>(
@@ -17,25 +18,33 @@ export function useRememberedUiState<T extends string | boolean>(
   const [value, setValue] = useState<T>(initial);
   const [loadedKey, setLoadedKey] = useState<string | null>(null);
   const changedDuringLoad = useRef(false);
+  const initialRef = useRef(initial);
+  const validatorRef = useRef(isAllowed);
 
   useEffect(() => {
+    initialRef.current = initial;
+    validatorRef.current = isAllowed;
+  }, [initial, isAllowed]);
+
+  useEffect(() => deferEffect(() => {
     let active = true;
     changedDuringLoad.current = false;
     setLoadedKey(null);
-    setValue(initial);
+    setValue(initialRef.current);
     void AsyncStorage.getItem(key)
       .then((saved) => {
         if (!active || changedDuringLoad.current || saved == null) return;
         const restored: unknown = JSON.parse(saved);
-        const valid = isAllowed
-          ? isAllowed(restored)
-          : typeof restored === typeof initial;
+        const validator = validatorRef.current;
+        const valid = validator
+          ? validator(restored)
+          : typeof restored === typeof initialRef.current;
         if (valid) setValue(restored as T);
       })
       .catch(() => undefined)
       .finally(() => { if (active) setLoadedKey(key); });
     return () => { active = false; };
-  }, [key]);
+  }), [key]);
 
   useEffect(() => {
     if (loadedKey !== key || !user) return;

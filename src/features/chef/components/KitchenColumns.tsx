@@ -13,6 +13,7 @@ import { useChefTheme } from "../context/ChefThemeContext";
 import { useAuth } from "@/features/auth/context/AuthContext";
 import type { KitchenBatch } from "./ChefOrders";
 import { getColombiaDayKey } from "@/features/shared/utils/colombia-date";
+import { translateMobileCopy } from "../../../locales/mobileCopy";
 
 const COLUMNS: {
   status: OrderDetailStatus;
@@ -78,7 +79,9 @@ export default function KitchenColumns({
       style={{ padding: 10, backgroundColor: colors.header,
         borderBottomColor: colors.border, borderBottomWidth: 1 }}>
       <Text style={{ textAlign: "center", color: colors.text, fontWeight: "700" }}>
-        {showOlderBatches ? "Volver a cocina de hoy" : `Ver pedidos anteriores abiertos (${olderBatches.length})`}
+        {showOlderBatches
+          ? translateMobileCopy("Volver a cocina de hoy")
+          : translateMobileCopy("Ver pedidos anteriores abiertos ({{count}})", { count: olderBatches.length })}
       </Text>
     </TouchableOpacity>
   ) : null;
@@ -122,7 +125,7 @@ export default function KitchenColumns({
           {list.length === 0 ? (
             <View style={boardStyles.emptyColumn}>
               <Text style={{ color: colors.mutedText, fontSize: 12 }}>
-                Sin pedidos
+                {translateMobileCopy("Sin pedidos")}
               </Text>
             </View>
           ) : (

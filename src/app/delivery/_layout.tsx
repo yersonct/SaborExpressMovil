@@ -1,7 +1,9 @@
-﻿import React from "react";
+import React from "react";
 import { StyleSheet, Platform, View, ActivityIndicator, StatusBar } from "react-native";
 import { Tabs, useRouter, Redirect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { MOBILE_TYPOGRAPHY } from "@/features/shared/theme/mobileTypography";
 
 import {
   DeliveryProvider,
@@ -9,7 +11,7 @@ import {
 } from "../../features/delivery/components/context/DeliveryContext";
 import { TRANSLATIONS, LanguageCode } from "../../locales/DeliveryTranslations";
 import { useAuth } from "../../features/auth/context/AuthContext";
-import { resolveEffectiveRole, resolvePrimaryRole } from "../../features/auth/services/roleMap";
+import { resolveEffectiveRole } from "../../features/auth/services/roleMap";
 import { ROLE_NAMES } from "../../features/auth/types/role";
 import { UserNotificationsProvider } from "../../features/notifications/context/UserNotificationsContext";
 import { getUserIdFromToken } from "@/features/auth/services/decodeToken";
@@ -17,6 +19,7 @@ import { DeliveryPushNotificationRegistration } from "@/features/delivery/compon
 import { getDeliveryTheme } from "../../features/delivery/components/context/deliveryTheme";
 
 function DeliveryTabs() {
+  const insets = useSafeAreaInsets();
   const router = useRouter();
   const { handleLogout } = useAuth();
   const { language, isDark } = useDeliveryContext();
@@ -31,7 +34,12 @@ function DeliveryTabs() {
         headerShown: false,
         tabBarStyle: [
           styles.tabBar,
-          { backgroundColor: colors.surface, borderTopColor: colors.border },
+          {
+            backgroundColor: colors.surface,
+            borderTopColor: colors.border,
+            height: 60 + insets.bottom,
+            paddingBottom: Math.max(insets.bottom, 8),
+          },
         ],
         tabBarActiveTintColor: colors.accent,
         tabBarInactiveTintColor: isDark ? colors.muted : "#94A3B8",
@@ -91,7 +99,7 @@ function DeliveryTabs() {
 }
 
 function DeliveryReadyContent() {
-  const { language, isDark, preferencesHydrated } = useDeliveryContext();
+  const { isDark, preferencesHydrated } = useDeliveryContext();
   const colors = getDeliveryTheme(isDark);
   if (!preferencesHydrated) {
     return (
@@ -162,9 +170,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 10,
   },
-  tabLabel: {
-    fontSize: 12,
-    fontWeight: "600",
-  },
+  tabLabel: { ...MOBILE_TYPOGRAPHY.tabLabel },
 });
 

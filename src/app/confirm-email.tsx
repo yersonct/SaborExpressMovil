@@ -3,6 +3,8 @@ import { View, Text, TouchableOpacity, ActivityIndicator } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { authService } from "../features/auth/services/authService";
+import { translateMobileCopy } from "../locales/mobileCopy";
+import { deferEffect } from "@/features/shared/utils/deferEffect";
 
 export default function ConfirmEmailScreen() {
   const params = useLocalSearchParams<{ token?: string | string[] }>();
@@ -15,11 +17,11 @@ export default function ConfirmEmailScreen() {
   const [message, setMessage] = useState("");
   const called = useRef(false); // evita doble llamada en modo desarrollo
 
-  useEffect(() => {
+  useEffect(() => deferEffect(() => {
     if (called.current) return;
     if (!token) {
       setStatus("error");
-      setMessage("El enlace no es válido.");
+      setMessage(translateMobileCopy("El enlace no es válido."));
       return;
     }
     called.current = true;
@@ -29,10 +31,10 @@ export default function ConfirmEmailScreen() {
         setStatus("success");
       } catch (err: any) {
         setStatus("error");
-        setMessage(err?.message || "El enlace es inválido o ya expiró.");
+        setMessage(translateMobileCopy(err?.message || "El enlace es inválido o ya expiró."));
       }
     })();
-  }, [token]);
+  }), [token]);
 
   return (
     <View
@@ -59,7 +61,7 @@ export default function ConfirmEmailScreen() {
               marginTop: 16,
             }}
           >
-            ¡Cuenta activada!
+            {translateMobileCopy("¡Cuenta activada!")}
           </Text>
           <Text
             style={{
@@ -69,7 +71,7 @@ export default function ConfirmEmailScreen() {
               textAlign: "center",
             }}
           >
-            Tu correo fue confirmado. Ya puedes iniciar sesión.
+            {translateMobileCopy("Tu correo fue confirmado. Ya puedes iniciar sesión.")}
           </Text>
         </>
       )}
@@ -85,7 +87,7 @@ export default function ConfirmEmailScreen() {
               marginTop: 16,
             }}
           >
-            No se pudo activar
+            {translateMobileCopy("No se pudo activar")}
           </Text>
           <Text
             style={{
@@ -95,7 +97,7 @@ export default function ConfirmEmailScreen() {
               textAlign: "center",
             }}
           >
-            {message} Inicia sesión para pedir un nuevo enlace.
+            {message} {translateMobileCopy("Inicia sesión para pedir un nuevo enlace.")}
           </Text>
         </>
       )}
@@ -112,7 +114,7 @@ export default function ConfirmEmailScreen() {
           }}
         >
           <Text style={{ color: "#FFFFFF", fontWeight: "700" }}>
-            Ir a iniciar sesión
+            {translateMobileCopy("Ir a iniciar sesión")}
           </Text>
         </TouchableOpacity>
       )}

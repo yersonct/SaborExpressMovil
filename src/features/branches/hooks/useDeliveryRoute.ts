@@ -1,17 +1,27 @@
 import { useEffect, useState } from "react";
 import { fetchWithNetworkHandling } from "@/features/shared/services/networkStatus";
+import { deferEffect } from "@/features/shared/utils/deferEffect";
 
 type Coords = { latitude: number; longitude: number };
 
 export function useDeliveryRoute(from: Coords | null, to: Coords | null) {
+  const fromLatitude = from?.latitude;
+  const fromLongitude = from?.longitude;
+  const toLatitude = to?.latitude;
+  const toLongitude = to?.longitude;
   const [route, setRoute] = useState<Coords[]>([]);
   const [distanceKm, setDistanceKm] = useState<number | null>(null);
   const [durationMin, setDurationMin] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState(false);
 
-  useEffect(() => {
-    if (!from || !to) {
+  useEffect(() => deferEffect(() => {
+    if (
+      fromLatitude == null ||
+      fromLongitude == null ||
+      toLatitude == null ||
+      toLongitude == null
+    ) {
       setRoute([]);
       setDistanceKm(null);
       setDurationMin(null);
@@ -26,7 +36,7 @@ export function useDeliveryRoute(from: Coords | null, to: Coords | null) {
       try {
         const url =
           `https://router.project-osrm.org/route/v1/driving/` +
-          `${from.longitude},${from.latitude};${to.longitude},${to.latitude}` +
+          `${fromLongitude},${fromLatitude};${toLongitude},${toLatitude}` +
           `?overview=full&geometries=geojson`;
         const res = await fetchWithNetworkHandling(url);
         const json = await res.json();
@@ -57,7 +67,7 @@ export function useDeliveryRoute(from: Coords | null, to: Coords | null) {
     return () => {
       cancelled = true;
     };
-  }, [from?.latitude, from?.longitude, to?.latitude, to?.longitude]);
+  }), [fromLatitude, fromLongitude, toLatitude, toLongitude]);
 
   return { route, distanceKm, durationMin, loading, failed };
 }

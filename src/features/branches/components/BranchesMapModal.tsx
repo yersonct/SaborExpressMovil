@@ -19,6 +19,8 @@ import { haversineKm } from "@/features/orders/utils/orderBreakdown";
 import { useClientPreferences } from "@/features/userPreferences/context/ClientPreferencesContext";
 import { branchAvailabilityLabel, branchHoursLabel, branchIsUnavailable } from "../utils/branchAvailability";
 import { showAppAlert } from "@/features/shared/services/alertEvents";
+import { translateMobileCopy } from "../../../locales/mobileCopy";
+import { deferEffect } from "@/features/shared/utils/deferEffect";
 
 type Props = {
   visible: boolean;
@@ -62,21 +64,24 @@ export function BranchesMapModal({
   const { radii, loading: coverageLoading } = useDeliveryCoverage(located, visible);
 
   // Al abrir, conserva la sede activa; si aún no hay selección, usa la más cercana.
-  useEffect(() => {
+  useEffect(() => deferEffect(() => {
     if (visible) setSelectedId(selectedBranchId ?? nearestBranchId ?? null);
-  }, [visible, nearestBranchId, selectedBranchId]);
+  }), [visible, nearestBranchId, selectedBranchId]);
 
   const selectedBranch = useMemo(
     () => located.find((b) => b.id === selectedId) ?? null,
     [located, selectedId],
   );
 
-  const branchCoords = selectedBranch
-    ? {
-        latitude: selectedBranch.latitude as number,
-        longitude: selectedBranch.longitude as number,
-      }
-    : null;
+  const branchCoords = useMemo(
+    () => selectedBranch
+      ? {
+          latitude: selectedBranch.latitude as number,
+          longitude: selectedBranch.longitude as number,
+        }
+      : null,
+    [selectedBranch],
+  );
 
   const {
     route,
@@ -98,10 +103,8 @@ export function BranchesMapModal({
   }, [
     route,
     failed,
-    branchCoords?.latitude,
-    branchCoords?.longitude,
-    userLocation?.latitude,
-    userLocation?.longitude,
+    branchCoords,
+    userLocation,
   ]);
 
   const markers = useMemo<MapMarker[]>(() => {
@@ -124,7 +127,7 @@ export function BranchesMapModal({
       });
     }
     return list;
-  }, [located, selectedId, userLocation?.latitude, userLocation?.longitude, t, language]);
+  }, [located, selectedId, userLocation, t, language]);
 
   const circles = useMemo<MapCircle[]>(() => located.flatMap((b) => {
     const radius = radii[b.id];
@@ -210,7 +213,14 @@ export function BranchesMapModal({
                   {loadingRoute
                     ? t("routeCalculating")
                     : distanceKm != null
-                      ? `${selectedBranch.name}: ${distanceKm.toFixed(1)} km por calles · ~${durationMin} min`
+                      ? translateMobileCopy(
+                          "{{branch}}: {{distance}} km por calles · ~{{minutes}} min",
+                          {
+                            branch: selectedBranch.name,
+                            distance: distanceKm.toFixed(1),
+                            minutes: durationMin ?? "",
+                          },
+                        )
                       : `${selectedBranch.name} (${t("routeNoStreet")})`}
                 </Text>
               </View>
@@ -252,13 +262,13 @@ export function BranchesMapModal({
                     </Text>
                     <Text style={{ fontSize: 12, color: colors.muted, marginTop: 4 }}>
                       {coverageLoading
-                        ? "Consultando radio de entrega..."
+                          ? translateMobileCopy("Consultando radio de entrega...")
                         : radii[b.id] == null
-                          ? "Radio no disponible"
-                          : "Radio: " + radii[b.id] + " km" + (userLocation
-                            ? " · " + haversineKm(userLocation.latitude, userLocation.longitude, Number(b.latitude), Number(b.longitude)).toFixed(1)
-                              + " km en línea recta · " + (haversineKm(userLocation.latitude, userLocation.longitude, Number(b.latitude), Number(b.longitude)) <= radii[b.id]!
-                                ? "Dentro de cobertura" : "Fuera de cobertura")
+                          ? translateMobileCopy("Radio no disponible")
+                          : translateMobileCopy("Radio:") + " " + radii[b.id] + " km" + (userLocation
+                              ? " · " + haversineKm(userLocation.latitude, userLocation.longitude, Number(b.latitude), Number(b.longitude)).toFixed(1)
+                                + translateMobileCopy(" km en línea recta · ") + (haversineKm(userLocation.latitude, userLocation.longitude, Number(b.latitude), Number(b.longitude)) <= radii[b.id]!
+                                ? translateMobileCopy("Dentro de cobertura") : translateMobileCopy("Fuera de cobertura"))
                             : "")}
                     </Text>
                   </TouchableOpacity>
@@ -274,12 +284,12 @@ export function BranchesMapModal({
                     return;
                   }
                   if (coverageLoading || radii[selectedBranch.id] == null) {
-                    Alert.alert("Radio no disponible", "No se pudo verificar el radio de entrega de esta sede.");
+                    Alert.alert(translateMobileCopy("Radio no disponible"), translateMobileCopy("No se pudo verificar el radio de entrega de esta sede."));
                     return;
                   }
                   if (userLocation && haversineKm(userLocation.latitude, userLocation.longitude,
                         Number(selectedBranch.latitude), Number(selectedBranch.longitude)) > radii[selectedBranch.id]!) {
-                    Alert.alert("Fuera de cobertura", "La dirección elegida está fuera del radio de entrega de " + selectedBranch.name + ". Elige otra sede o dirección.");
+                    Alert.alert(translateMobileCopy("Fuera de cobertura"), translateMobileCopy("La dirección elegida está fuera del radio de entrega de {{branch}}. Elige otra sede o dirección.", { branch: selectedBranch.name }));
                     return;
                   }
                   onSelectBranch(selectedBranch);

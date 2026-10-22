@@ -6,6 +6,7 @@ import {
   REALTIME_CONNECTED,
   subscribeRealtimeEvent,
 } from "@/features/shared/services/realtimeEvents";
+import { deferEffect } from "@/features/shared/utils/deferEffect";
 
 export function useProducts() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -25,9 +26,9 @@ export function useProducts() {
     }
   }, []);
 
-  useEffect(() => {
+  useEffect(() => deferEffect(() => {
     fetchProducts();
-  }, [fetchProducts]);
+  }), [fetchProducts]);
 
   useEffect(() => {
     const refresh = () => void fetchProducts(true);

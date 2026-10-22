@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { translateMobileCopy } from "../locales/mobileCopy";
 
 type LanguageOption = {
     label: string;
@@ -26,7 +27,7 @@ export const LanguageDropdown = ({ label = 'Idioma', value, options, onChange, c
                 {label ? <Text style={[styles.label, colors && { color: colors.mutedText }]}>{label}</Text> : null}
                 <TouchableOpacity style={[styles.trigger, compact && styles.triggerCompact, colors && { backgroundColor: colors.surface, borderColor: colors.border }]} onPress={() => setVisible(true)} activeOpacity={0.9}>
                     <View style={styles.triggerContent}>
-                        <Text style={[styles.triggerText, colors && { color: colors.text }]}>{selectedOption?.label ?? 'Seleccionar'}</Text>
+                        <Text style={[styles.triggerText, colors && { color: colors.text }]}>{selectedOption?.label ?? translateMobileCopy("Seleccionar")}</Text>
                         <Text style={[styles.arrow, colors && { color: colors.accent }]}>▾</Text>
                     </View>
                 </TouchableOpacity>

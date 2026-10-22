@@ -3,6 +3,7 @@ import { View, Text } from "react-native";
 import { OrderSummary, OrderStatus } from "@/features/orders/types/order.types";
 import { chefStyles } from "./style/ChefStyles";
 import { useChefTheme } from "../context/ChefThemeContext";
+import { translateMobileCopy } from "../../../locales/mobileCopy";
 
 export default function SidebarMetricas({
   orders,
@@ -27,7 +28,7 @@ export default function SidebarMetricas({
         ]}
       >
         <Text style={[chefStyles.metricLabel, { color: colors.mutedText }]}>
-          Por preparar
+          {translateMobileCopy("Por preparar")}
         </Text>
         <Text style={[chefStyles.metricValue, { color: "#f97316" }]}>
           {pendientes}
@@ -40,7 +41,7 @@ export default function SidebarMetricas({
         ]}
       >
         <Text style={[chefStyles.metricLabel, { color: colors.mutedText }]}>
-          En preparación
+          {translateMobileCopy("En preparación")}
         </Text>
         <Text style={[chefStyles.metricValue, { color: "#3b82f6" }]}>
           {enPreparacion}
@@ -53,7 +54,7 @@ export default function SidebarMetricas({
         ]}
       >
         <Text style={[chefStyles.metricLabel, { color: colors.mutedText }]}>
-          Listos
+          {translateMobileCopy("Listos")}
         </Text>
         <Text style={[chefStyles.metricValue, { color: "#22c55e" }]}>
           {listos}

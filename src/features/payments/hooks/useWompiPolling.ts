@@ -80,7 +80,7 @@ export function useWompiPolling() {
         job.onTimeout?.();
       }, MAX_WAIT_MS);
     },
-    [check, stopPolling],
+    [stopPolling],
   );
 
   // Wompi informa al backend por webhook/sincronización. El backend publica

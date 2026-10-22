@@ -22,6 +22,7 @@ import { styles as globalStyles } from './style/WaiterDashboardStyles'; // Asumo
 import { localStyles } from './style/OrderTakingStyles';
 import { useWaiterTheme } from '@/features/waiter/context/WaiterThemeContext';
 import { useWaiterLanguage } from '@/features/waiter/context/WaiterLanguageContext';
+import { localizeMobileCatalogText } from '@/locales/mobileCopy';
 
 import { useProducts } from "@/features/products/hooks/useProducts";
 import type { Product } from "@/features/products/types/product.types";
@@ -50,7 +51,7 @@ export const OrderTakingView = ({
   taxRate = 0,
 }: any) => {
   const { colors } = useWaiterTheme();
-  const { t } = useWaiterLanguage();
+  const { t, language } = useWaiterLanguage();
   const { height: screenHeight } = useWindowDimensions();
   const baseFontFamily = Platform.select({
     web: "system-ui, -apple-system, sans-serif",
@@ -67,6 +68,43 @@ export const OrderTakingView = ({
     loading: productsLoading,
     error: productsError,
   } = useProducts(); // 👈 nuevo
+
+  const localizeProductName = (product: Product) =>
+    localizeMobileCatalogText(
+      product.name,
+      { en: product.nameEn, pt: product.namePt, fr: product.nameFr },
+      language,
+    );
+  const localizeProductCategory = (product: Product) =>
+    localizeMobileCatalogText(
+      product.categoryName,
+      {
+        en: product.categoryNameEn,
+        pt: product.categoryNamePt,
+        fr: product.categoryNameFr,
+      },
+      language,
+    );
+  const localizeProductDescription = (product: Product) =>
+    localizeMobileCatalogText(
+      product.description,
+      {
+        en: product.descriptionEn,
+        pt: product.descriptionPt,
+        fr: product.descriptionFr,
+      },
+      language,
+    );
+  const localizeCategoryName = (categoryName: string) => {
+    const product = products.find((candidate) => candidate.categoryName === categoryName);
+    return product ? localizeProductCategory(product) : categoryName;
+  };
+  const localizeCartItemName = (item: any) => {
+    const product = products.find(
+      (candidate) => candidate.id === (item.productId ?? item.id),
+    );
+    return product ? localizeProductName(product) : item.name;
+  };
 
   const [isNoteModalVisible, setIsNoteModalVisible] = useState(false);
   const [selectedCartItem, setSelectedCartItem] = useState<any>(null);
@@ -217,7 +255,7 @@ export const OrderTakingView = ({
               >
                 {cat === ALL_CATEGORY
                   ? t.categoriesAllLabel || "⭐ Todas"
-                  : t["category" + cat] || cat}
+                  : t["category" + cat] || localizeCategoryName(cat)}
               </Text>
             </TouchableOpacity>
           ))}
@@ -288,7 +326,7 @@ export const OrderTakingView = ({
                     style={[localStyles.gridItemName, { color: colors.text }]}
                     numberOfLines={2}
                   >
-                    {item.name}
+                    {localizeProductName(item)}
                   </Text>
                   <Text
                     style={[localStyles.gridItemPrice, { color: colors.text }]}
@@ -390,7 +428,7 @@ export const OrderTakingView = ({
                         >
                           {item.quantity}x{" "}
                         </Text>
-                        {item.name}
+                        {localizeCartItemName(item)}
                         {item.alreadySubmitted && (
                           <Text
                             style={{
@@ -708,12 +746,12 @@ export const OrderTakingView = ({
                 </View>
 
                 <Text style={[localStyles.modalTitle, { color: colors.text }]}>
-                  {selectedProduct.name}
+                  {localizeProductName(selectedProduct)}
                 </Text>
                 <Text
                   style={[localStyles.modalCategory, { color: colors.accent }]}
                 >
-                  {selectedProduct.categoryName}
+                  {localizeProductCategory(selectedProduct)}
                 </Text>
 
                 <View
@@ -726,7 +764,7 @@ export const OrderTakingView = ({
                 <Text
                   style={[localStyles.modalDesc, { color: colors.mutedText }]}
                 >
-                  {selectedProduct.description}
+                  {localizeProductDescription(selectedProduct)}
                 </Text>
 
                 <View style={localStyles.modalPriceRow}>

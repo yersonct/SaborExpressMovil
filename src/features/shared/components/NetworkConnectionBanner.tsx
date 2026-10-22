@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { subscribeToNetworkStatus } from "../services/networkStatus";
 import { getApiLanguage } from "@/features/auth/services/apiLanguage";
 import { subscribeBackendRecovery, dismissBackendRecovery } from "../services/backendRecoveryWatch";
+import { translateMobileCopy } from "../../../locales/mobileCopy";
 
 const recoveryTexts = {
   es: "Conexión recuperada. Ya puedes iniciar sesión nuevamente.",
@@ -35,7 +36,7 @@ export function NetworkConnectionBanner() {
         <Text style={styles.message}>{bannerText}</Text>
         <TouchableOpacity
           accessibilityRole="button"
-          accessibilityLabel="Cerrar aviso de conexión"
+          accessibilityLabel={translateMobileCopy("Cerrar aviso de conexión")}
           hitSlop={10}
           onPress={close}
         >

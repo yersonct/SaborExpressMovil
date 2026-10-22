@@ -8,6 +8,7 @@ import {
   getUserLanguagePreference,
   saveUserLanguagePreference,
 } from '@/features/userPreferences/services/userLanguageService';
+import { deferEffect } from "@/features/shared/utils/deferEffect";
 
 type DeliveryContextType = {
   language: LanguageCode;
@@ -56,7 +57,7 @@ export const DeliveryProvider: React.FC<{
   const [pushStatus, setPushStatus] = useState<DeliveryContextType["pushStatus"]>("checking");
   const storageKey = `saborexpress-delivery:${encodeURIComponent(storageScope)}:preferences`;
 
-  useEffect(() => {
+  useEffect(() => deferEffect(() => {
     let active = true;
     const languageSelectedBeforeLogin = getApiLanguage();
     setPreferencesHydrated(false);
@@ -107,7 +108,7 @@ export const DeliveryProvider: React.FC<{
     void loadPreferences();
 
     return () => { active = false; };
-  }, [storageKey]);
+  }), [storageKey]);
 
   useEffect(() => {
     setNetworkErrorLanguage(preferences.language);
