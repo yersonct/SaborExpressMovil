@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, Modal, Image, ActivityIndicator, Animated, StyleSheet } from 'react-native';
 
 interface AnimatedSuccessModalProps {
@@ -8,8 +8,8 @@ interface AnimatedSuccessModalProps {
 }
 
 export const AnimatedSuccessModal: React.FC<AnimatedSuccessModalProps> = ({ visible, title, text }) => {
-    const scaleAnim = useRef(new Animated.Value(0.5)).current;
-    const opacityAnim = useRef(new Animated.Value(0)).current;
+    const [scaleAnim] = useState(() => new Animated.Value(0.5));
+    const [opacityAnim] = useState(() => new Animated.Value(0));
 
     useEffect(() => {
         if (visible) {
@@ -21,7 +21,7 @@ export const AnimatedSuccessModal: React.FC<AnimatedSuccessModalProps> = ({ visi
             scaleAnim.setValue(0.5);
             opacityAnim.setValue(0);
         }
-    }, [visible]);
+    }, [opacityAnim, scaleAnim, visible]);
 
     return (
         <Modal transparent={true} visible={visible} animationType="fade">

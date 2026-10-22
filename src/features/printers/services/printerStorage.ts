@@ -2,6 +2,19 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { SavedPrinter } from '../types';
 
 const STORAGE_KEY = '@saborexpress/pos/impresora-preferida/v1';
+const SELECTION_KEY = '@saborexpress/pos/impresora-seleccionada/v1';
+
+export type PrinterSelection = 'classic' | 'pd01';
+
+export async function loadPrinterSelection(): Promise<PrinterSelection | null> {
+  const value = await AsyncStorage.getItem(SELECTION_KEY);
+  return value === 'classic' || value === 'pd01' ? value : null;
+}
+
+export async function savePrinterSelection(value: PrinterSelection | null): Promise<void> {
+  if (value) await AsyncStorage.setItem(SELECTION_KEY, value);
+  else await AsyncStorage.removeItem(SELECTION_KEY);
+}
 
 /** Preferencia local POR DISPOSITIVO; no se sincroniza entre empleados. */
 export async function loadSavedPrinter(): Promise<SavedPrinter | null> {

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { AppState, Platform } from "react-native";
 import Constants, { ExecutionEnvironment } from "expo-constants";
 import * as Device from "expo-device";
@@ -110,7 +110,32 @@ export function CashierPushNotificationRegistration() {
   const { setPushStatus } = preferences;
   const expoPushTokenRef = useRef<string | null>(null);
   const preferencesRef = useRef(preferences);
-  preferencesRef.current = preferences;
+  useEffect(() => {
+    preferencesRef.current = preferences;
+  }, [preferences]);
+
+  const syncPreferences = useCallback(async (expoPushToken: string) => {
+    const current = preferencesRef.current;
+    const settings: CashierPushDeviceSettings = {
+      expoPushToken,
+      platform: Platform.OS,
+      soundEnabled: current.notificationSound,
+      vibrationEnabled: current.vibrationNotifications,
+    };
+    try {
+      const Notifications = await loadNotifications();
+      await configureAndroidChannels(Notifications, current.language);
+      await registerCashierPushDevice(settings);
+      setPushStatus("enabled");
+    } catch (error) {
+      setPushStatus("error");
+      if (__DEV__)
+        console.warn(
+          "No se pudieron guardar las preferencias push del cajero:",
+          error,
+        );
+    }
+  }, [setPushStatus]);
 
   useEffect(() => {
     if (!user?.token || !preferences.hydrated) return;
@@ -180,7 +205,7 @@ export function CashierPushNotificationRegistration() {
       appStateSubscription.remove();
       expoPushTokenRef.current = null;
     };
-  }, [user?.token, preferences.hydrated]);
+  }, [user?.token, preferences.hydrated, setPushStatus, syncPreferences]);
 
   useEffect(() => {
     const token = expoPushTokenRef.current;
@@ -190,37 +215,15 @@ export function CashierPushNotificationRegistration() {
     preferences.hydrated,
     preferences.notificationSound,
     preferences.vibrationNotifications,
+    syncPreferences,
   ]);
-
-  async function syncPreferences(expoPushToken: string) {
-    const current = preferencesRef.current;
-    const settings: CashierPushDeviceSettings = {
-      expoPushToken,
-      platform: Platform.OS,
-      soundEnabled: current.notificationSound,
-      vibrationEnabled: current.vibrationNotifications,
-    };
-    try {
-      const Notifications = await loadNotifications();
-      await configureAndroidChannels(Notifications, current.language);
-      await registerCashierPushDevice(settings);
-      setPushStatus("enabled");
-    } catch (error) {
-      setPushStatus("error");
-      if (__DEV__)
-        console.warn(
-          "No se pudieron guardar las preferencias push del cajero:",
-          error,
-        );
-    }
-  }
 
   useEffect(
     () => subscribeToNetworkRecovery(() => {
       const token = expoPushTokenRef.current;
       if (token) void syncPreferences(token);
     }),
-    [],
+    [syncPreferences],
   );
 
   return null;

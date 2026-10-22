@@ -18,6 +18,7 @@
         "android.permission.VIBRATE",
         "android.permission.BLUETOOTH_SCAN",
         "android.permission.BLUETOOTH_CONNECT",
+        "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.POST_NOTIFICATIONS",
         "android.permission.CAMERA",
         "android.permission.MODIFY_AUDIO_SETTINGS",

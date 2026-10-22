@@ -19,6 +19,7 @@ import { useAuth } from "@/features/auth/context/AuthContext";
 import { useClientPreferences, useClientThemedStyles } from "@/features/userPreferences/context/ClientPreferencesContext";
 import { getCustomerIdFromToken } from "@/features/auth/services/decodeToken";
 import { useAddresses } from "../hooks/useAddresses";
+import { translateMobileCopy } from "../../../locales/mobileCopy";
 import type { Address } from "../types/address.types";
 
 export default function AddressesView() {
@@ -46,6 +47,8 @@ export default function AddressesView() {
   const [isDefault, setIsDefault] = useState(false);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
+  const [addressFieldError, setAddressFieldError] = useState("");
+  const [locationFieldError, setLocationFieldError] = useState("");
 
   const resetForm = () => {
     setAddressLine("");
@@ -54,6 +57,8 @@ export default function AddressesView() {
     setLongitude(null);
     setIsDefault(true); // la última dirección creada pasa a ser la predeterminada
     setFormError("");
+    setAddressFieldError("");
+    setLocationFieldError("");
   };
 
   const openForm = () => {
@@ -63,11 +68,12 @@ export default function AddressesView() {
 
   const handleUseCurrentLocation = async () => {
     setFormError("");
+    setLocationFieldError("");
     setLocatingGps(true);
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== "granted") {
-        setFormError(
+        setLocationFieldError(
           t("locationPermission"),
         );
         return;
@@ -78,6 +84,7 @@ export default function AddressesView() {
       });
       setLatitude(position.coords.latitude);
       setLongitude(position.coords.longitude);
+      setLocationFieldError("");
 
       // Rellena el texto automáticamente a partir del GPS, pero el cliente
       // puede seguir editándolo si quiere aclarar algo (ej. número de apto).
@@ -89,8 +96,8 @@ export default function AddressesView() {
         const parts = [place.street, place.name, place.city].filter(Boolean);
         setAddressLine(parts.join(", "));
       }
-    } catch (err) {
-      setFormError(t("locationFetchError"));
+    } catch {
+      setLocationFieldError(t("locationFetchError"));
     } finally {
       setLocatingGps(false);
     }
@@ -98,11 +105,15 @@ export default function AddressesView() {
 
   const handleSave = async () => {
     if (!addressLine.trim()) {
-      setFormError(t("addressRequired"));
+      setAddressFieldError(t("addressRequired"));
+      return;
+    }
+    if (addressLine.trim().length > 255) {
+      setAddressFieldError(translateMobileCopy("La dirección no puede superar 255 caracteres."));
       return;
     }
     if (latitude === null || longitude === null) {
-      setFormError(
+      setLocationFieldError(
         t("captureAddressLocation"),
       );
       return;
@@ -110,6 +121,8 @@ export default function AddressesView() {
 
     setSaving(true);
     setFormError("");
+    setAddressFieldError("");
+    setLocationFieldError("");
     try {
       await createAddress({
         addressLine: addressLine.trim(),
@@ -119,8 +132,8 @@ export default function AddressesView() {
         isDefault,
       });
       setIsFormOpen(false);
-    } catch (err: any) {
-      setFormError(err?.message ?? t("addressSaveError"));
+    } catch (err: unknown) {
+      setFormError(translateMobileCopy(err instanceof Error ? err.message : t("addressSaveError")));
     } finally {
       setSaving(false);
     }
@@ -248,15 +261,18 @@ export default function AddressesView() {
               <TextInput
                 style={styles.input}
                 value={addressLine}
-                onChangeText={setAddressLine}
+                onChangeText={(value) => { setAddressLine(value); setAddressFieldError(""); }}
+                maxLength={255}
                 placeholder={t("streetPlaceholder")}
               />
+              {addressFieldError ? <Text accessibilityRole="alert" style={styles.errorText}>{addressFieldError}</Text> : null}
 
               <Text style={styles.inputLabel}>{t("reference")}</Text>
               <TextInput
                 style={styles.input}
                 value={reference}
                 onChangeText={setReference}
+                maxLength={255}
                 placeholder={t("referencePlaceholder")}
               />
 
@@ -284,12 +300,13 @@ export default function AddressesView() {
                   ]}
                 >
                   {locatingGps
-                    ? "Obteniendo ubicación..."
+                    ? translateMobileCopy("Obteniendo ubicación...")
                     : latitude !== null
-                      ? "Ubicación capturada"
+                      ? translateMobileCopy("Ubicación capturada")
                       : t("useGps")}
                 </Text>
               </TouchableOpacity>
+              {locationFieldError ? <Text accessibilityRole="alert" style={styles.errorText}>{locationFieldError}</Text> : null}
 
               <TouchableOpacity
                 style={styles.checkboxRow}

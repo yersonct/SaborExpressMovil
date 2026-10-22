@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
 import { AppState } from "react-native";
 import { router } from "expo-router";
 import type { LoginCredentials, ApiError, AuthResponse } from "../types";
@@ -12,10 +12,11 @@ import {
 } from "../services/tokenStorage";
 import {
   setSessionExpiredHandler,
+  setSessionUpdatedHandler,
   notifySessionExpired,
 } from "../services/authEvents";
-import { refreshAccessToken } from "../services/apiClient";
-import { fetchAuthed } from "../services/apiClient";
+import { refreshAccessToken , fetchAuthed } from "../services/apiClient";
+
 import { AUTH_ENDPOINTS } from "../services/authEndpoints";
 import { isServerAlive } from "../services/serverHealth";
 import { startBackendRecoveryWatch, stopBackendRecoveryWatch } from "@/features/shared/services/backendRecoveryWatch";
@@ -36,6 +37,26 @@ import {
   registerRealtimeInvoker,
   setRealtimeConnectionState,
 } from "@/features/shared/services/realtimeEvents";
+
+const OFF_SHIFT_RECHECK_MS = 5 * 60 * 1000;
+
+function millisecondsUntilColombiaTime(time: string): number | null {
+  const [hours, minutes, seconds = "0"] = time.split(":");
+  const values = [hours, minutes, seconds].map(Number);
+  if (values.some((value) => !Number.isInteger(value))) return null;
+
+  // Colombia mantiene UTC-5; el cálculo no depende de la zona horaria del móvil.
+  const colombiaNow = new Date(Date.now() - 5 * 60 * 60 * 1000);
+  const targetWallTime = Date.UTC(
+    colombiaNow.getUTCFullYear(),
+    colombiaNow.getUTCMonth(),
+    colombiaNow.getUTCDate(),
+    values[0],
+    values[1],
+    values[2],
+  );
+  return targetWallTime - colombiaNow.getTime();
+}
 
 interface AuthContextValue {
   user: AuthResponse | null;
@@ -67,6 +88,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   const [error, setError] = useState<string | null>(null);
   const [errorCode, setErrorCode] = useState<string | null>(null);
   const [pendingIdentifier, setPendingIdentifier] = useState("");
+
+  const refreshShiftStatus = useCallback(async (session: AuthResponse) => {
+    const employeeId = getEmployeeIdFromToken(session.token);
+    if (!employeeId) return null;
+
+    const shift = await scheduleService.getCurrentShift(employeeId);
+    if (!shift) return null;
+
+    const currentSession = await loadSession();
+    if (!currentSession || getEmployeeIdFromToken(currentSession.token) !== employeeId) return null;
+
+    const updated: AuthResponse = {
+      ...currentSession,
+      hasActiveShift: shift.hasActiveShift,
+      activeShiftRoleName: shift.hasActiveShift ? shift.roleName : null,
+    };
+
+    setUser(updated);
+    await saveSession(updated);
+    return shift;
+  }, []);
 
   useEffect(() => {
     (async () => {
@@ -112,27 +154,62 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         setInitializing(false);
       }
     })();
-  }, []);
+  }, [refreshShiftStatus]);
 
-  const refreshShiftStatus = async (session: AuthResponse) => {
-    const employeeId = getEmployeeIdFromToken(session.token);
+
+
+  const userToken = user?.token;
+
+  // Actualiza la sesión en el límite del turno y al volver a abrir la app.
+  useEffect(() => {
+    if (!userToken) return;
+    const employeeId = getEmployeeIdFromToken(userToken);
     if (!employeeId) return;
 
-    const shift = await scheduleService.getCurrentShift(employeeId);
-    if (!shift) return;
+    let disposed = false;
+    let checking = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
 
-    const currentSession = await loadSession();
-    if (!currentSession || currentSession.token !== session.token) return;
+    const check = async () => {
+      if (disposed || checking) return;
+      checking = true;
+      try {
+        const session = await loadSession();
+        if (!session || getEmployeeIdFromToken(session.token) !== employeeId) return;
 
-    const updated: AuthResponse = {
-      ...session,
-      hasActiveShift: shift.hasActiveShift,
-      activeShiftRoleName: shift.roleName,
+        const shift = await refreshShiftStatus(session);
+        if (disposed) return;
+        const untilEnd = shift?.hasActiveShift && shift.endTime
+          ? millisecondsUntilColombiaTime(shift.endTime)
+          : null;
+        const nextCheck = untilEnd !== null && untilEnd > 0
+          ? untilEnd + 500
+          : OFF_SHIFT_RECHECK_MS;
+        timer = setTimeout(() => { void check(); }, nextCheck);
+      } finally {
+        checking = false;
+      }
     };
 
-    setUser(updated);
-    await saveSession(updated);
-  };
+    const appStateSub = AppState.addEventListener("change", (state) => {
+      if (state !== "active" || disposed) return;
+      if (timer) clearTimeout(timer);
+      timer = null;
+      void check();
+    });
+
+    void check();
+    return () => {
+      disposed = true;
+      if (timer) clearTimeout(timer);
+      appStateSub.remove();
+    };
+  }, [userToken, refreshShiftStatus]);
+
+  useEffect(() => {
+    setSessionUpdatedHandler(setUser);
+    return () => setSessionUpdatedHandler(null);
+  }, []);
   useEffect(() => {
     setSessionExpiredHandler(async (reason) => {
       if (__DEV__) console.info("[Auth] Sesión finalizada:", reason);
@@ -343,7 +420,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     setErrorCode(null);
 
     if (!identifier || !password) {
-      setError("Por favor ingresa tu documento/correo y contraseña");
+      setError(!identifier ? "Ingresa tu correo electrónico." : "Ingresa tu contraseña.");
       return;
     }
 

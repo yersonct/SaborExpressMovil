@@ -9,6 +9,7 @@ import { branchAvailabilityLabel, branchHoursLabel, branchIsUnavailable } from "
 import { LeafletMap, type MapMarker } from "./LeafletMap";
 import { showAppAlert } from "@/features/shared/services/alertEvents";
 import { haversineKm } from "@/features/orders/utils/orderBreakdown";
+import { deferEffect } from "@/features/shared/utils/deferEffect";
 
 type Props = {
   visible: boolean;
@@ -28,9 +29,9 @@ export function BranchesMapModal({
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [focus, setFocus] = useState<{ latitude: number; longitude: number; nonce: number } | null>(null);
 
-  useEffect(() => {
+  useEffect(() => deferEffect(() => {
     if (visible) setSelectedId(selectedBranchId ?? nearestBranchId ?? null);
-  }, [visible, selectedBranchId, nearestBranchId]);
+  }), [visible, selectedBranchId, nearestBranchId]);
 
   const located = useMemo(() => branches.filter(b =>
     b.latitude != null && b.longitude != null &&
@@ -52,7 +53,7 @@ export function BranchesMapModal({
       title: t("yourDeliveryAddress"), color: "#2563EB",
     });
     return pins;
-  }, [located, selectedId, userLocation?.latitude, userLocation?.longitude, language, t]);
+  }, [located, selectedId, userLocation, language, t]);
 
   const choose = () => {
     if (!selected || !onSelectBranch) return;

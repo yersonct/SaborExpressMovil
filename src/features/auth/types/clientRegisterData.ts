@@ -4,5 +4,5 @@ export interface ClientRegisterData {
   email: string;
   password: string;
   document?: string;
-  phone: string; // 🔥 nuevo campo obligatorio
+  phone?: string;
 }

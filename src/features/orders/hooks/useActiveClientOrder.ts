@@ -14,6 +14,7 @@ import { useRealtimeEvents } from "@/features/shared/hooks/useRealtimeEvents";
     DeliveryStatus,
     type Delivery,
   } from "@/features/delivery/types/delivery.types";
+import { deferEffect } from "@/features/shared/utils/deferEffect";
 
   const ACTIVE_CLIENT_ORDER_STATUSES: OrderStatus[] = [
     OrderStatus.Pending,
@@ -95,7 +96,7 @@ import { useRealtimeEvents } from "@/features/shared/hooks/useRealtimeEvents";
       }
     }, []);
 
-    useEffect(() => {
+    useEffect(() => deferEffect(() => {
       void fetchActiveOrder();
       // Recuperación ante desconexiones de SignalR y suspensión de la app.
       const interval = setInterval(() => {
@@ -108,7 +109,7 @@ import { useRealtimeEvents } from "@/features/shared/hooks/useRealtimeEvents";
         clearInterval(interval);
         subscription.remove();
       };
-    }, [fetchActiveOrder]);
+    }), [fetchActiveOrder]);
 
     useRealtimeEvents(
       ["OrdersChanged", "DeliveriesChanged", "PaymentsChanged", "RealtimeConnected"],

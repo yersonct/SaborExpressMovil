@@ -4,6 +4,7 @@ import { getToken } from "@/features/auth/services/tokenStorage";
 import { getCustomerIdFromToken } from "@/features/auth/services/decodeToken";
 import type { OrderSummary } from "@/features/orders/types/order.types";
 import { useRealtimeEvents } from "@/features/shared/hooks/useRealtimeEvents";
+import { deferEffect } from "@/features/shared/utils/deferEffect";
 
 // Todos los pedidos del cliente (más recientes primero), para el resumen
 // y el historial del perfil.
@@ -35,9 +36,9 @@ export function useClientOrders() {
     }
   }, []);
 
-  useEffect(() => {
+  useEffect(() => deferEffect(() => {
     fetchOrders();
-  }, [fetchOrders]);
+  }), [fetchOrders]);
 
   useRealtimeEvents(
     ["OrdersChanged", "DeliveriesChanged", "PaymentsChanged", "RealtimeConnected"],

@@ -16,7 +16,7 @@ type WaiterLanguageContextValue = {
   hydrated: boolean;
   setLanguage: (language: WaiterLanguageCode) => void;
   t: Record<string, string>;
-  languageOptions: Array<{ label: string; value: WaiterLanguageCode }>;
+  languageOptions: { label: string; value: WaiterLanguageCode }[];
 };
 
 const DEFAULT_LANGUAGE: WaiterLanguageCode = 'es';

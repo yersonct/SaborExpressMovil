@@ -1,12 +1,11 @@
 import { Ionicons } from "@expo/vector-icons";
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 import { useRememberedUiState } from "@/features/shared/hooks/useRememberedUiState";
 import { BreakdownRows } from "@/features/orders/components/BreakdownRows";
 import {
   ActivityIndicator,
   Alert,
   FlatList,
-  Image,
   LayoutAnimation,
   Linking,
   Modal,
@@ -32,11 +31,10 @@ import { useWompiPolling } from "@/features/payments/hooks/useWompiPolling";
 import { buildWompiCheckoutUrl } from "@/features/payments/utils/wompiUrl";
 import QRCode from "react-native-qrcode-svg";
 import { invoiceService } from "@/features/invoices/services/invoiceService";
-import { printInvoiceOrPdf } from "@/features/printer/pd01Service";
-import type { Invoice } from "@/features/invoices/types/invoice.types";
 import { orderService } from "@/features/orders/services/orderService";
 import { useProducts } from "@/features/products/hooks/useProducts";
 import type { Product } from "@/features/products/types/product.types";
+import { localizeMobileCatalogText } from "../../../locales/mobileCopy";
 
 // 🔥 AÑADIMOS 'isDark' A LOS PROPS PARA ESCUCHAR EL MODO OSCURO
 export const OrdersFeature = ({
@@ -49,11 +47,16 @@ export const OrdersFeature = ({
   setActiveTab,
   lang = "es",
   isDark = false,
-  autoPrint = true,
 }: any) => {
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
-  const isNarrowScreen = screenWidth < 390;
   const t = TRANSLATIONS[lang as LanguageCode] || TRANSLATIONS["es"];
+  const catalogLanguage = lang as LanguageCode;
+  const localizedProductName = useCallback((item: Product) =>
+    localizeMobileCatalogText(
+      item.name,
+      { en: item.nameEn, pt: item.namePt, fr: item.nameFr },
+      catalogLanguage,
+    ), [catalogLanguage]);
 
   // 🔥 PALETA DE COLORES DINÁMICA COMPLETA PARA EL CAJERO 🔥
   const colors = {
@@ -116,10 +119,12 @@ export const OrdersFeature = ({
   } = useProducts();
 
   const filteredMenu = useMemo(() => {
+    const query = searchQuery.toLocaleLowerCase();
     return products.filter((item) =>
-      item.name.toLowerCase().includes(searchQuery.toLowerCase()),
+      [item.name, localizedProductName(item)]
+        .some((name) => name.toLocaleLowerCase().includes(query)),
     );
-  }, [products, searchQuery]);
+  }, [products, searchQuery, localizedProductName]);
 
   const openPaymentModal = async (order: Order) => {
     setSelectedOrder(order);
@@ -209,7 +214,7 @@ export const OrdersFeature = ({
       setSearchQuery("");
       setExtraItemForTakeaway(false);
       showToast(
-        t.toastItemAdded.replace("{item}", `${quantity}x ${item.name}`),
+        t.toastItemAdded.replace("{item}", `${quantity}x ${localizedProductName(item)}`),
       );
     } catch (err: any) {
       Alert.alert(
@@ -236,51 +241,12 @@ export const OrdersFeature = ({
 
   const createInvoiceForPaidPayment = (
     paymentId: number,
-    order: Order,
-    methodLabel: string,
     failureMessage: string,
   ) => {
-    void (async () => {
-      let invoice: Invoice;
-      try {
-        invoice = await invoiceService.create({ paymentId });
-      } catch (invoiceErr: any) {
-        showToast(
-          failureMessage.replace("{error}", invoiceErr?.message ?? ""),
-        );
-        return;
-      }
-
-      if (!autoPrint) return;
-
-      try {
-        await printInvoiceOrPdf(invoice, order, methodLabel, {
-          title: t.invoicePdfTitle,
-          invoiceNumber: t.invoicePdfNumberLabel,
-          date: t.invoicePdfDateLabel,
-          order: t.invoicePdfOrderLabel,
-          customer: t.customer,
-          orderType: t.orderTypeLabel,
-          orderTypeValue:
-            order.type === "mesa"
-              ? t.orderTable.replace("{table}", String(order.table ?? ""))
-              : t.catalogTakeaway,
-          payment: t.paymentMethod,
-          items: t.consumptionDetail,
-          subtotal: t.invoicePdfSubtotalLabel,
-          tax: t.invoicePdfTaxLabel,
-          taxLegacy: t.invoicePdfLegacyTaxLabel,
-          deliveryFee: t.deliveryFee.replace(/:\s*$/, ""),
-          total: t.invoicePdfTotalLabel,
-        });
-      } catch (pdfErr: any) {
-        const pdfErrorMessage =
-          pdfErr?.code === "NATIVE_PDF_MODULES_UNAVAILABLE"
-            ? t.invoicePdfModuleUnavailable
-            : t.invoicePdfOpenError.replace("{error}", pdfErr?.message ?? "");
-        showToast(pdfErrorMessage);
-      }
-    })();
+    void invoiceService.create({ paymentId }).catch((invoiceErr: unknown) => {
+      const message = invoiceErr instanceof Error ? invoiceErr.message : "";
+      showToast(failureMessage.replace("{error}", message));
+    });
   };
 
   const processPaymentAndCloseMesa = async () => {
@@ -311,12 +277,9 @@ export const OrdersFeature = ({
       // pedido quedó 100% pagado (ReleaseTableIfFullyPaidAsync) — no hace
       // falta hacer nada más aquí para eso.
 
-      // El pago ya quedó guardado: crear la factura y, si Configuración lo
-      // permite, generar y compartir su PDF en segundo plano.
+      // El pago quedó guardado. La factura puede imprimirse luego desde Pagados.
       createInvoiceForPaidPayment(
         payment.id,
-        selectedOrder,
-        cashierPaymentMethod === "efectivo" ? t.payCash : t.payCard,
         t.invoiceFailedAfterPayment,
       );
 
@@ -371,8 +334,6 @@ export const OrdersFeature = ({
     // Wompi ya confirmó el pago; no esperamos a que el cajero cierre el PDF.
     createInvoiceForPaidPayment(
       paymentId,
-      order,
-      "Wompi",
       t.invoiceFailedAfterWompi,
     );
 
@@ -540,6 +501,7 @@ export const OrdersFeature = ({
   const emptyText = filterType === "mesa" ? t.emptyTables : t.emptyOthers;
 
   return (
+    <>
     <View style={styles.content}>
       <FlatList
         data={visibleOrders}
@@ -1207,7 +1169,7 @@ export const OrdersFeature = ({
                       <Text
                         style={[styles.catalogItemName, { color: colors.text }]}
                       >
-                        {item.name}
+                        {localizedProductName(item)}
                       </Text>
                       <Text style={styles.catalogItemPrice}>
                         + ${item.price.toLocaleString("es-CO")}
@@ -1256,7 +1218,7 @@ export const OrdersFeature = ({
                   style={[styles.confirmProductName, { color: colors.text }]}
                   numberOfLines={2}
                 >
-                  {pendingProduct.name}
+                  {localizedProductName(pendingProduct)}
                 </Text>
                 <Text style={styles.confirmUnitPrice}>
                   ${pendingProduct.price.toLocaleString("es-CO")}
@@ -1345,5 +1307,6 @@ export const OrdersFeature = ({
         </View>
       </Modal>
     </View>
+    </>
   );
 };
