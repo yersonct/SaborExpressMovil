@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Modal, View, Text, TouchableOpacity } from "react-native";
 import { authService } from "../services/authService";
+import { translateMobileCopy } from "../../../locales/mobileCopy";
 
 interface EmailConfirmationModalProps {
   visible: boolean;
@@ -27,10 +28,10 @@ export const EmailConfirmationModal: React.FC<EmailConfirmationModalProps> = ({
     try {
       await authService.resendConfirmationCode({ identifier });
       setResendMessage(
-        "Si tu cuenta está pendiente, te enviamos un nuevo enlace.",
+        translateMobileCopy("Si tu cuenta está pendiente, te enviamos un nuevo enlace."),
       );
     } catch (err: any) {
-      setError(err.message || "No se pudo reenviar el enlace.");
+      setError(translateMobileCopy(err.message || "No se pudo reenviar el enlace."));
     } finally {
       setResendLoading(false);
     }
@@ -61,7 +62,7 @@ export const EmailConfirmationModal: React.FC<EmailConfirmationModalProps> = ({
               marginBottom: 8,
             }}
           >
-            Activa tu cuenta
+            {translateMobileCopy("Activa tu cuenta")}
           </Text>
           <Text
             style={{
@@ -70,9 +71,10 @@ export const EmailConfirmationModal: React.FC<EmailConfirmationModalProps> = ({
               marginBottom: 16,
             }}
           >
-            Tu cuenta ({identifier}) todavía no está activada. Revisa tu correo
-            y presiona el botón "Activar cuenta". Si no lo encuentras, revisa
-            spam o pide un nuevo enlace.
+            {translateMobileCopy(
+              'Tu cuenta ({{email}}) todavía no está activada. Revisa tu correo y presiona el botón "Activar cuenta". Si no lo encuentras, revisa spam o pide un nuevo enlace.',
+              { email: identifier },
+            )}
           </Text>
 
           {error ? (
@@ -96,7 +98,7 @@ export const EmailConfirmationModal: React.FC<EmailConfirmationModalProps> = ({
             }}
           >
             <Text style={{ color: themeColors.buttonText, fontWeight: "700" }}>
-              {resendLoading ? "Enviando..." : "Reenviar enlace"}
+              {resendLoading ? translateMobileCopy("Enviando...") : translateMobileCopy("Reenviar enlace")}
             </Text>
           </TouchableOpacity>
 
@@ -104,7 +106,7 @@ export const EmailConfirmationModal: React.FC<EmailConfirmationModalProps> = ({
             onPress={onCancel}
             style={{ marginTop: 16, alignItems: "center" }}
           >
-            <Text style={{ color: themeColors.mutedText }}>Cerrar</Text>
+            <Text style={{ color: themeColors.mutedText }}>{translateMobileCopy("Cerrar")}</Text>
           </TouchableOpacity>
         </View>
       </View>

@@ -1,10 +1,19 @@
 export type OrderType = 'mesa' | 'llevar';
 
+export interface CashierReceiptItem {
+  name: string;
+  quantity: number;
+  unitPrice: number;
+  total?: number;
+}
+
 export interface Order {
   id: string;
   type: OrderType;
+  orderSubtype?: 'DineIn' | 'ToGo' | 'Delivery' | 'Pickup';
   table?: number;
   items: string;
+  receiptItems?: CashierReceiptItem[];
   total: number;
   subTotal?: number;
   tax?: number;

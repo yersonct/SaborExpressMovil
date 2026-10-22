@@ -25,7 +25,9 @@ import {
 } from "@/features/payments/types/payment.types";
 import { paymentService } from "@/features/payments/services/paymentService";
 import { invoiceService } from "@/features/invoices/services/invoiceService";
-import { printInvoiceOrPdf } from "@/features/printer/pd01Service";
+import { printInvoiceOrPdf, type InvoicePrintTarget } from "@/features/printers/services/invoicePrintService";
+import { InvoicePrinterPicker } from "@/features/printers/components/InvoicePrinterPicker";
+import type { InvoicePdfLabels } from "@/features/invoices/services/invoicePdfTemplate";
 import type { Invoice } from "@/features/invoices/types/invoice.types";
 import type { Order } from "./CashierData";
 import { useCashierContext } from "../context/CashierContext";
@@ -70,17 +72,25 @@ function formatPaidDate(value: string, locale: string): string {
   }).format(date);
 }
 
+interface PendingInvoicePrint {
+  invoice: Invoice;
+  order: Order;
+  paymentMethod: string;
+  labels: InvoicePdfLabels;
+}
+
 export function PaidOrdersPanel({ orders, isDark, loading }: Props) {
   const { language } = useCashierContext();
   const t = TRANSLATIONS[language as LanguageCode] || TRANSLATIONS.es;
   const [printingOrderId, setPrintingOrderId] = useState<number | null>(null);
+  const [pendingInvoicePrint, setPendingInvoicePrint] = useState<PendingInvoicePrint | null>(null);
   const [selectedDate, setSelectedDate] = useRememberedUiState<string>(
     "cashier:paid-date", getColombiaDayKey() ?? "",
     (v): v is string => typeof v === "string" && isValidDateKey(v) && v <= (getColombiaDayKey() ?? ""),
   );
   const [selectedOrder, setSelectedOrder] = useState<OrderSummary | null>(null);
   const today = getColombiaDayKey() ?? "";
-  const validSelectedDate = isValidDateKey(selectedDate);
+  const validSelectedDate = isValidDateKey(selectedDate) && selectedDate <= today;
   const isHistoricalDate = validSelectedDate && selectedDate < today;
   const visibleOrders = useMemo(
     () =>
@@ -175,6 +185,7 @@ export function PaidOrdersPanel({ orders, isDark, loading }: Props) {
         const printableOrder: Order = {
           id: String(summary.id),
           type: summary.orderType === OrderType.DineIn ? "mesa" : "llevar",
+          orderSubtype: summary.orderType,
           table: summary.tableNumber ?? undefined,
           customerName: summary.customerName ?? undefined,
           employeeName: summary.employeeName ?? undefined,
@@ -190,6 +201,18 @@ export function PaidOrdersPanel({ orders, isDark, loading }: Props) {
                   `${detail.quantity}x ${detail.productName}${detail.notes ? ` (${detail.notes})` : ""}`,
               )
               .join("\n") || "—",
+          receiptItems: summary.orderDetails
+            .filter(
+              (detail) =>
+                detail.status !== OrderDetailStatus.Voided &&
+                detail.status !== OrderDetailStatus.Cancelled,
+            )
+            .map((detail) => ({
+              name: `${detail.productName}${detail.isToGo ? " (Para llevar)" : ""}${detail.notes ? ` (Nota: ${detail.notes})` : ""}`,
+              quantity: detail.quantity,
+              unitPrice: detail.unitPrice,
+              total: detail.subTotal,
+            })),
           total: summary.total,
           subTotal: summary.subTotal,
           tax: summary.tax,
@@ -219,27 +242,49 @@ export function PaidOrdersPanel({ orders, isDark, loading }: Props) {
               ? t.tabDelivery
               : t.catalogTakeaway;
 
-        await printInvoiceOrPdf(
+        setPendingInvoicePrint({
           invoice,
-          printableOrder,
-          paymentMethodLabel,
-          {
+          order: printableOrder,
+          paymentMethod: paymentMethodLabel,
+          labels: {
             title: t.invoicePdfTitle,
             invoiceNumber: t.invoicePdfNumberLabel,
             date: t.invoicePdfDateLabel,
             order: t.invoicePdfOrderLabel,
+            branchAddressLabel: t.invoicePdfBranchAddressLabel,
+            branchPhone: t.invoicePdfBranchPhoneLabel,
             customer: t.customer,
+            customerDocument: t.invoicePdfCustomerDocumentLabel,
+            customerEmail: t.invoicePdfCustomerEmailLabel,
+            deliveryAddress: t.invoicePdfDeliveryAddressLabel,
+            deliveryReference: t.invoicePdfDeliveryReferenceLabel,
+            cashier: t.invoicePdfCashierLabel,
             orderType: t.orderTypeLabel,
             orderTypeValue,
             payment: t.paymentMethod,
             items: t.consumptionDetail,
+            quantity: t.invoicePdfQuantityLabel,
+            unitPrice: t.invoicePdfUnitPriceLabel,
+            itemTotal: t.invoicePdfItemTotalLabel,
+            takeaway: t.invoicePdfTakeawayLabel,
             subtotal: t.invoicePdfSubtotalLabel,
             tax: t.invoicePdfTaxLabel,
             taxLegacy: t.invoicePdfLegacyTaxLabel,
             deliveryFee: t.deliveryFee.replace(/:\s*$/, ""),
             total: t.invoicePdfTotalLabel,
+            receiptNotice: t.invoicePdfReceiptNotice,
+            locale: language === "pt" ? "pt-BR" : language === "fr" ? "fr-FR" : language === "en" ? "en-US" : "es-CO",
+            table: t.invoicePdfTableLabel,
+            received: t.invoicePdfReceivedLabel,
+            change: t.invoicePdfChangeLabel,
+            discount: t.invoicePdfDiscountLabel,
+            paymentAmount: t.invoicePdfReceivedLabel,
+            printBusyError: t.invoicePdfPrintBusyError,
+            voidedError: t.invoicePdfVoidedError,
+            invalidError: t.invoicePdfInvalidError,
+            receiptFooter: t.invoicePdfReceiptFooter,
           },
-        );
+        });
       } catch (error: any) {
         const message =
           error?.code === "NATIVE_PDF_MODULES_UNAVAILABLE"
@@ -250,7 +295,7 @@ export function PaidOrdersPanel({ orders, isDark, loading }: Props) {
         setPrintingOrderId(null);
       }
     },
-    [t],
+    [language, t],
   );
 
   return (
@@ -300,11 +345,13 @@ export function PaidOrdersPanel({ orders, isDark, loading }: Props) {
               <TextInput
                 {...(dateInputWebProps as any)}
                 accessibilityLabel={t.paidOrdersDateFilter}
+                accessibilityHint={!validSelectedDate ? t.paidOrdersDateInvalid : undefined}
                 value={selectedDate}
                 onChangeText={setSelectedDate}
                 placeholder={t.paidOrdersDateHint}
                 maxLength={10}
                 keyboardType="numbers-and-punctuation"
+                accessibilityRole="search"
                 style={{
                   width: 158,
                   height: 42,
@@ -317,6 +364,7 @@ export function PaidOrdersPanel({ orders, isDark, loading }: Props) {
                   fontSize: 14,
                 }}
               />
+              {!validSelectedDate && <Text accessibilityRole="alert" style={{ width: "100%", color: "#DC2626", fontSize: 12 }}>{t.paidOrdersDateInvalid}</Text>}
               <TouchableOpacity
                 accessibilityRole="button"
                 onPress={() => setSelectedDate(today)}
@@ -488,6 +536,22 @@ export function PaidOrdersPanel({ orders, isDark, loading }: Props) {
             </View>
           );
         }}
+      />
+
+      <InvoicePrinterPicker
+        visible={pendingInvoicePrint !== null}
+        language={language as LanguageCode}
+        isDark={isDark}
+        onClose={() => setPendingInvoicePrint(null)}
+        onPrint={(target: InvoicePrintTarget) => pendingInvoicePrint
+          ? printInvoiceOrPdf(
+              pendingInvoicePrint.invoice,
+              pendingInvoicePrint.order,
+              pendingInvoicePrint.paymentMethod,
+              pendingInvoicePrint.labels,
+              target,
+            )
+          : Promise.resolve()}
       />
 
       <Modal

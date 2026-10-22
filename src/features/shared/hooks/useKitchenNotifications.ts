@@ -37,19 +37,22 @@ export function useKitchenNotifications(
 ) {
   const notificationPreferences = useWaiterNotificationPreferences();
   const notificationPreferencesRef = useRef(notificationPreferences);
-  notificationPreferencesRef.current = notificationPreferences;
   const onRefreshRef = useRef(onRefresh);
-  onRefreshRef.current = onRefresh;
   const onNotificationRef = useRef(onNotification);
-  onNotificationRef.current = onNotification;
   const waiterPlayer = useAudioPlayer(notifySound);
   const kitchenPlayer = useAudioPlayer(kitchenNotifySound);
   const waiterPlayerRef = useRef(waiterPlayer);
   const kitchenPlayerRef = useRef(kitchenPlayer);
-  waiterPlayerRef.current = waiterPlayer;
-  kitchenPlayerRef.current = kitchenPlayer;
   const [soundEnabled, setSoundEnabled] = useState(Platform.OS !== "web");
   const soundEnabledRef = useRef(soundEnabled);
+
+  useEffect(() => {
+    notificationPreferencesRef.current = notificationPreferences;
+    onRefreshRef.current = onRefresh;
+    onNotificationRef.current = onNotification;
+    waiterPlayerRef.current = waiterPlayer;
+    kitchenPlayerRef.current = kitchenPlayer;
+  }, [notificationPreferences, onNotification, onRefresh, waiterPlayer, kitchenPlayer]);
 
   useEffect(() => {
     soundEnabledRef.current = soundEnabled;

@@ -14,7 +14,7 @@ export const useAuth = () => {
     setErrorCode(null);
 
     if (!identifier || !password) {
-      setError("Por favor ingresa tu documento/correo y contraseña");
+      setError(!identifier ? "Ingresa tu correo electrónico." : "Ingresa tu contraseña.");
       return;
     }
 

@@ -6,7 +6,6 @@ export type CashierPreferences = {
   isDark: boolean;
   notificationSound: boolean;
   vibrationNotifications: boolean;
-  autoPrint: boolean;
 };
 
 export const DEFAULT_CASHIER_PREFERENCES: CashierPreferences = {
@@ -14,7 +13,6 @@ export const DEFAULT_CASHIER_PREFERENCES: CashierPreferences = {
   isDark: false,
   notificationSound: true,
   vibrationNotifications: true,
-  autoPrint: true,
 };
 
 export const CASHIER_LANGUAGE_OPTIONS: LanguageCode[] = [

@@ -1,4 +1,4 @@
-  import React, { useState, useRef, useEffect } from "react";
+  import React, { useState, useRef, useEffect, useMemo, useCallback } from "react";
   import {
     View,
     Text,
@@ -17,7 +17,6 @@
   import { useCompleteProfile } from "@/features/customers/hooks/useCompleteProfile";
   import {
     PaymentStatus,
-    PaymentMethod,
   } from "@/features/payments/types/payment.types";
   import { useWompiPolling } from "@/features/payments/hooks/useWompiPolling";
   import { buildWompiCheckoutUrl } from "@/features/payments/utils/wompiUrl";
@@ -34,6 +33,7 @@ import { Image as ExpoImage } from "expo-image";
   import { styles as baseStyles } from "./style/ClientStyles";
   import { getClientLocale, useClientPreferences, useClientThemedStyles } from "@/features/userPreferences/context/ClientPreferencesContext";
   import { useCatalog } from "@/features/catalog/hooks/useCatalog";
+import { localizeMobileCatalogText } from "@/locales/mobileCopy";
   import { useNearestBranch } from "@/features/branches/hooks/useNearestBranch";
 import type { PublicBranch } from "@/features/branches/types/branch.types";
 import { usePublicBranches } from "@/features/branches/hooks/usePublicBranches";
@@ -59,6 +59,7 @@ import { NotificationBell } from "@/features/notifications/components/Notificati
 import { useNotificationListener } from "@/features/notifications/context/UserNotificationsContext";
 import { DeliveryStatus } from "@/features/delivery/types/delivery.types";
 import { OrderTrackingModal } from "@/features/orders/components/OrderTrackingModal";
+import { deferEffect } from "@/features/shared/utils/deferEffect";
 
 
   export default function ClientDashboard() {
@@ -89,6 +90,7 @@ import { OrderTrackingModal } from "@/features/orders/components/OrderTrackingMo
       createAddress,
       setDefaultAddress,
     } = useAddresses(customerId);
+    const { cart, addItem, removeItem, clearCart } = useCart();
     const [selectedAddressId, setSelectedAddressId] = useState<number | null>(
       null,
     );
@@ -101,21 +103,6 @@ import { OrderTrackingModal } from "@/features/orders/components/OrderTrackingMo
     const [showDeliveryOptions, setShowDeliveryOptions] = useState(false);
     const [trackingOrderId, setTrackingOrderId] = useState<number | null>(null);
     const [manualBranch, setManualBranch] = useState<PublicBranch | null>(null);
-    useEffect(() => {
-      if (loadingAddresses) return;
-      if (
-        selectedAddressId &&
-        addresses.some((a) => a.id === selectedAddressId)
-      )
-        return;
-      if (addresses.length > 0) {
-        setSelectedAddressId(addresses[0].id);
-        // Si el cliente ya tiene una dirección real guardada, dejamos de usar
-        // el GPS "de bienvenida" y volvemos al flujo normal por dirección.
-        setLiveLocation(null);
-      }
-    }, [loadingAddresses, addresses]);
-
     // La sede se calcula normalmente a partir de la dirección guardada
     // seleccionada, pero el cliente puede pedir usar su GPS en vivo en
     // su lugar (útil si está en un sitio distinto al de la dirección).
@@ -143,6 +130,21 @@ import { OrderTrackingModal } from "@/features/orders/components/OrderTrackingMo
       longitude: number;
     } | null>(null);
     const [locatingGps, setLocatingGps] = useState(false);
+
+    useEffect(() => deferEffect(() => {
+      if (loadingAddresses) return;
+      if (
+        selectedAddressId &&
+        addresses.some((a) => a.id === selectedAddressId)
+      )
+        return;
+      if (addresses.length > 0) {
+        setSelectedAddressId(addresses[0].id);
+        // Si el cliente ya tiene una dirección real guardada, dejamos de usar
+        // el GPS "de bienvenida" y volvemos al flujo normal por dirección.
+        setLiveLocation(null);
+      }
+    }), [loadingAddresses, addresses, selectedAddressId]);
 
     const coordsForBranch = liveLocation ?? selectedAddress ?? null;
 
@@ -183,7 +185,7 @@ import { OrderTrackingModal } from "@/features/orders/components/OrderTrackingMo
       (addresses.length > 0 && !coordsForBranch);
     // Convierte unas coordenadas en dirección guardada y la deja seleccionada
     // como dirección de entrega del pedido.
-    const saveLocationAsAddress = async (
+    const saveLocationAsAddress = useCallback(async (
       coords: { latitude: number; longitude: number },
       isDefault: boolean,
       exactAddress?: string,
@@ -220,8 +222,8 @@ import { OrderTrackingModal } from "@/features/orders/components/OrderTrackingMo
         );
         return false;
       }
-    };
-    const handleUseCurrentLocationForBranch = async () => {
+    }, [createAddress, customerId, t]);
+    const handleUseCurrentLocationForBranch = useCallback(async () => {
       if (cart.length > 0) {
         Alert.alert(t("cartMustBeEmptyTitle"), t("cartMustBeEmptyForLocation"));
         return;
@@ -248,7 +250,7 @@ import { OrderTrackingModal } from "@/features/orders/components/OrderTrackingMo
         if (addresses.length === 0) {
           await saveLocationAsAddress(here, true);
         }
-      } catch (err) {
+      } catch {
         Alert.alert(
           t("error"),
           t("locationError"),
@@ -256,7 +258,7 @@ import { OrderTrackingModal } from "@/features/orders/components/OrderTrackingMo
       } finally {
         setLocatingGps(false);
       }
-    };
+    }, [addresses.length, cart.length, saveLocationAsAddress, t]);
 
     // Si el cliente elige explícitamente otra dirección guardada, volvemos
     // a calcular la sede a partir de esa dirección (se cancela el modo GPS).
@@ -296,10 +298,9 @@ import { OrderTrackingModal } from "@/features/orders/components/OrderTrackingMo
 
       autoGpsRequested.current = true;
       handleUseCurrentLocationForBranch();
-    }, [loadingAddresses, addresses]);
+    }, [loadingAddresses, addresses, handleUseCurrentLocationForBranch]);
     // Estados Generales
     const [activeCategory, setActiveCategory] = useRememberedUiState<string>("client:category", "__all__");
-    const { cart, addItem, removeItem, clearCart } = useCart();
 
     const handleOpenBranchPicker = () => {
       if (cart.length > 0) {
@@ -342,29 +343,55 @@ import { OrderTrackingModal } from "@/features/orders/components/OrderTrackingMo
         const [orderPaid, setOrderPaid] = useState(false);
 
     // Animaciones Toast
-    const toastAnim = useRef(new Animated.Value(-100)).current;
+    const [toastAnim] = useState(() => new Animated.Value(-100));
     const [toastMessage, setToastMessage] = useState("");
 
-    const categoryNames = [
+    const localizeCategoryName = (name: string) => {
+      const category = categories.find((item) => item.name === name);
+      const product = products.find((item) => item.categoryName === name);
+      return localizeMobileCatalogText(
+        name,
+        {
+          en: category?.nameEn ?? product?.categoryNameEn,
+          pt: category?.namePt ?? product?.categoryNamePt,
+          fr: category?.nameFr ?? product?.categoryNameFr,
+        },
+        language,
+      );
+    };
+
+    const categoryNames = useMemo(() => [
       "__all__",
       ...categories
         .map((c) => c.name)
         .filter((name) => products.some((p) => p.categoryName === name)),
-    ];
+    ], [categories, products]);
 
     useEffect(() => {
       if (products.length > 0 && categories.length > 0 && !categoryNames.includes(activeCategory)) setActiveCategory("__all__");
-    }, [products, categories]);
+    }, [activeCategory, categories.length, categoryNames, products.length, setActiveCategory]);
     const filteredMenu = (
       activeCategory === "__all__"
         ? products
         : products.filter((p) => p.categoryName === activeCategory)
     ).map((p) => ({
       id: String(p.id),
-      name: p.name,
-      category: p.categoryName,
+      name: localizeMobileCatalogText(
+        p.name,
+        { en: p.nameEn, pt: p.namePt, fr: p.nameFr },
+        language,
+      ),
+      category: localizeCategoryName(p.categoryName),
       price: p.price,
-      desc: p.description,
+      desc: localizeMobileCatalogText(
+        p.description,
+        {
+          en: p.descriptionEn,
+          pt: p.descriptionPt,
+          fr: p.descriptionFr,
+        },
+        language,
+      ),
       image: p.photo ? `${SERVER_BASE_URL}${p.photo}` : null,
     }));
      const subtotalCart = cart.reduce((sum, item) => sum + item.price, 0);
@@ -490,6 +517,7 @@ import { OrderTrackingModal } from "@/features/orders/components/OrderTrackingMo
     };
 
     const [submitting, setSubmitting] = useState(false);
+    const orderSubmitLockRef = useRef(false);
     const { polling, startPolling, stopPolling } = useWompiPolling();
     // Pedido/pago Wompi en curso, para poder cancelarlo si no se paga
     const wompiInFlightRef = useRef<{
@@ -563,7 +591,7 @@ import { OrderTrackingModal } from "@/features/orders/components/OrderTrackingMo
       }
     });
     const submitFinalOrder = async () => {
-      if (submitting || polling) return;
+      if (orderSubmitLockRef.current || submitting || polling) return;
       if (!ensureBranchOpen() || !validateDeliveryCoverage()) return;
       if (!selectedAddressId) {
         Alert.alert(
@@ -574,6 +602,7 @@ import { OrderTrackingModal } from "@/features/orders/components/OrderTrackingMo
       }
       if (paymentMethod !== "efectivo" && paymentMethod !== "wompi") return;
 
+      orderSubmitLockRef.current = true;
       setSubmitting(true);
       let createdOrderId: number | null = null;
       let handedOff = false; // true cuando el flujo ya no depende de este try
@@ -670,6 +699,7 @@ import { OrderTrackingModal } from "@/features/orders/components/OrderTrackingMo
           err?.message ?? t("createOrderError"),
         );
       } finally {
+        orderSubmitLockRef.current = false;
         setSubmitting(false);
       }
     };
@@ -1160,7 +1190,7 @@ import { OrderTrackingModal } from "@/features/orders/components/OrderTrackingMo
                       activeCategory === cat && styles.categoryTextActive,
                     ]}
                   >
-                    {cat === "__all__" ? t("all") : cat}
+                    {cat === "__all__" ? t("all") : localizeCategoryName(cat)}
                   </Text>
                 </TouchableOpacity>
               ))}

@@ -35,7 +35,6 @@ export function useCashierNotifications(
 ) {
   const player = useAudioPlayer(cashierSound);
   const playerRef = useRef(player);
-  playerRef.current = player;
   const [soundEnabled, setSoundEnabled] = useState(Platform.OS !== "web");
   const soundEnabledRef = useRef(soundEnabled);
   const preferenceRef = useRef(soundPreference);
@@ -52,8 +51,11 @@ export function useCashierNotifications(
   useEffect(() => {
     vibrationPreferenceRef.current = vibrationPreference;
   }, [vibrationPreference]);
-  callbackRef.current = onNotification;
-  refreshRef.current = onRefresh;
+  useEffect(() => {
+    playerRef.current = player;
+    callbackRef.current = onNotification;
+    refreshRef.current = onRefresh;
+  }, [onNotification, onRefresh, player]);
 
   const enableSound = () => {
     try {

@@ -5,8 +5,6 @@ import {
   TouchableOpacity,
   Modal,
   ScrollView,
-  Alert,
-  LayoutAnimation,
   ActivityIndicator,
 } from "react-native";
 import { Ionicons } from '@expo/vector-icons';

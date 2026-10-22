@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { translateMobileCopy } from "../locales/mobileCopy";
 
 export default function DetailScreen() {
   const router = useRouter();
@@ -8,14 +9,14 @@ export default function DetailScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Detalle del Pedido</Text>
+      <Text style={styles.title}>{translateMobileCopy("Detalle del pedido")}</Text>
       <View style={styles.card}>
-        <Text style={styles.mesaText}>Estás atendiendo la: {mesa}</Text>
-        <Text style={styles.infoText}>Aquí iría la lista de platos seleccionados por el cliente.</Text>
+        <Text style={styles.mesaText}>{translateMobileCopy("Estás atendiendo la:")} {mesa}</Text>
+        <Text style={styles.infoText}>{translateMobileCopy("Aquí iría la lista de platos seleccionados por el cliente.")}</Text>
       </View>
 
       <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-        <Text style={styles.backButtonText}>⬅ Volver a las mesas</Text>
+        <Text style={styles.backButtonText}>⬅ {translateMobileCopy("Volver a las mesas")}</Text>
       </TouchableOpacity>
     </View>
   );

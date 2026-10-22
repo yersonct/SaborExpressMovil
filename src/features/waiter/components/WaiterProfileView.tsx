@@ -5,7 +5,6 @@ import {
   ScrollView,
   TouchableOpacity,
   TextInput,
-  Image,
   ActivityIndicator,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -17,6 +16,9 @@ import { useWaiterLanguage } from "@/features/waiter/context/WaiterLanguageConte
 import { useMyProfile } from "@/features/employees/hooks/useMyProfile";
 import { InitialsAvatar } from "@/features/shared/components/InitialsAvatar";
 import { showAppAlert } from "@/features/shared/services/alertEvents";
+import { translateMobileCopy } from "../../../locales/mobileCopy";
+import { deferEffect } from "@/features/shared/utils/deferEffect";
+import { validateEmployeeProfile } from "@/features/employees/utils/validateEmployeeProfile";
 
 export const WaiterProfileView = () => {
   const { colors } = useWaiterTheme();
@@ -45,28 +47,24 @@ export const WaiterProfileView = () => {
   const [name, setName] = useState("");
   const [lastName, setLastName] = useState("");
   const [phone, setPhone] = useState("");
-  const [nameError, setNameError] = useState("");
+  const [errors, setErrors] = useState({ name: "", lastName: "", phone: "" });
 
-  useEffect(() => {
+  useEffect(() => deferEffect(() => {
     if (profile) {
       setName(profile.name);
       setLastName(profile.lastName ?? "");
       setPhone(profile.phone ?? "");
     }
-  }, [profile]);
+  }), [profile]);
 
   const handleSaveProfile = async () => {
-    if (!name.trim()) {
-      setNameError(t.profileNameErrorRequired || "El nombre es obligatorio.");
-      return;
-    }
-    if (name.trim().length < 3) {
-      setNameError(
-        t.profileNameErrorMin || "El nombre debe tener al menos 3 caracteres.",
-      );
-      return;
-    }
-    setNameError("");
+    const nextErrors = validateEmployeeProfile(name, lastName, phone);
+    setErrors({
+      name: nextErrors.name ?? "",
+      lastName: nextErrors.lastName ?? "",
+      phone: nextErrors.phone ?? "",
+    });
+    if (Object.values(nextErrors).some(Boolean)) return;
     setSaving(true);
     try {
       await updateProfile({
@@ -170,7 +168,7 @@ export const WaiterProfileView = () => {
                 {profile.tablesAttendedToday}
               </Text>
               <Text style={[styles.statLabel, { color: colors.mutedText }]}>
-                {t.profileStatsTables || "Mesas Atendidas"}
+                {t.profileStatsTables || translateMobileCopy("Mesas Atendidas")}
               </Text>
             </View>
             <View style={styles.dividerVertical} />
@@ -225,17 +223,18 @@ export const WaiterProfileView = () => {
                   styles.input,
                   !isEditing && styles.inputDisabled,
                   inputColors(isEditing),
-                  nameError ? styles.inputError : null,
+                  errors.name ? styles.inputError : null,
                 ]}
                 value={name}
                 onChangeText={(text) => {
                   setName(text);
-                  setNameError("");
+                  setErrors((previous) => ({ ...previous, name: "" }));
                 }}
                 editable={isEditing}
+                maxLength={120}
               />
-              {nameError ? (
-                <Text style={styles.errorText}>{nameError}</Text>
+              {errors.name ? (
+                <Text style={styles.errorText}>{translateMobileCopy(errors.name)}</Text>
               ) : null}
             </View>
 
@@ -250,9 +249,16 @@ export const WaiterProfileView = () => {
                   inputColors(isEditing),
                 ]}
                 value={lastName}
-                onChangeText={setLastName}
+                onChangeText={(text) => {
+                  setLastName(text);
+                  setErrors((previous) => ({ ...previous, lastName: "" }));
+                }}
                 editable={isEditing}
+                maxLength={80}
               />
+              {errors.lastName ? (
+                <Text style={styles.errorText}>{translateMobileCopy(errors.lastName)}</Text>
+              ) : null}
             </View>
 
             <View style={styles.inputGroup}>
@@ -266,10 +272,17 @@ export const WaiterProfileView = () => {
                   inputColors(isEditing),
                 ]}
                 value={phone}
-                onChangeText={setPhone}
+                onChangeText={(text) => {
+                  setPhone(text.replace(/\D/g, "").slice(0, 10));
+                  setErrors((previous) => ({ ...previous, phone: "" }));
+                }}
                 editable={isEditing}
                 keyboardType="phone-pad"
+                maxLength={10}
               />
+              {errors.phone ? (
+                <Text style={styles.errorText}>{translateMobileCopy(errors.phone)}</Text>
+              ) : null}
             </View>
 
             <View style={styles.inputGroup}>

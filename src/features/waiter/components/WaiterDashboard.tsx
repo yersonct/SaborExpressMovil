@@ -3,17 +3,14 @@ import { useRememberedUiState } from "@/features/shared/hooks/useRememberedUiSta
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   LayoutAnimation,
-  Platform,
   Text,
   TouchableOpacity,
   View,
-  Modal,
   useWindowDimensions,
 } from "react-native";
 import { useBranchSettings } from "@/features/branches/hooks/useBranchSettings";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { useNavigation } from "expo-router";
 
 import {
   orderService,
@@ -51,11 +48,8 @@ import { useKitchenNotifications } from "@/features/shared/hooks/useKitchenNotif
 import { useRealtimeEvents } from "@/features/shared/hooks/useRealtimeEvents";
 import { getColombiaDayKey } from "@/features/shared/utils/colombia-date";
 import { styles } from "./style/WaiterDashboardStyles";
-
-const baseFontFamily = Platform.select({
-  web: "system-ui, -apple-system, sans-serif",
-  default: undefined,
-});
+import { deferEffect } from "@/features/shared/utils/deferEffect";
+import { ReasonPromptModal } from "@/features/shared/components/ReasonPromptModal";
 
 const WAITER_LAST_NOTIFICATIONS_VIEWED_KEY =
   "saborexpress-waiter-notifications-seen-through";
@@ -73,7 +67,6 @@ function isFromColombiaDay(
 }
 
 export const WaiterDashboard = () => {
-  const navigation = useNavigation();
   const { width: windowWidth } = useWindowDimensions();
   const { colors } = useWaiterTheme();
   const { soundNotifications } = useWaiterNotificationPreferences();
@@ -90,7 +83,6 @@ export const WaiterDashboard = () => {
   const { settings: branchSettings } = useBranchSettings(branchId);
   const {
     tables: realTables,
-    setTableStatus,
     refetch: refetchTables,
   } = useTables(branchId);
 
@@ -124,10 +116,16 @@ export const WaiterDashboard = () => {
     }
   }, [branchId]);
 
-  useEffect(() => {
+  useEffect(() => deferEffect(() => {
     void refetchOccupiedTableWaiters();
-  }, [refetchOccupiedTableWaiters]);
+  }), [refetchOccupiedTableWaiters]);
   const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
+  const [reasonPrompt, setReasonPrompt] = useState<{
+    title: string;
+    action: (reason: string) => Promise<void>;
+  } | null>(null);
+  const [reasonText, setReasonText] = useState("");
+  const [submittingReason, setSubmittingReason] = useState(false);
   const [toasts, setToasts] = useState<ToastNotification[]>([]);
   const [notificationHistory, setNotificationHistory] = useState<
     ToastNotification[]
@@ -139,6 +137,26 @@ export const WaiterDashboard = () => {
     number | null
   >(null);
 
+  const askForReason = (title: string, action: (reason: string) => Promise<void>) => {
+    setReasonText("");
+    setReasonPrompt({ title, action });
+  };
+
+  const submitReason = async () => {
+    const reason = reasonText.trim();
+    if (!reasonPrompt || reason.length < 3 || submittingReason) return;
+    setSubmittingReason(true);
+    try {
+      await reasonPrompt.action(reason);
+      setReasonPrompt(null);
+      setReasonText("");
+    } catch (error: any) {
+      showAppAlert(t.errorTitle || "Error", error?.message || t.orderItemCancelError || "No se pudo completar la acción.");
+    } finally {
+      setSubmittingReason(false);
+    }
+  };
+
   useEffect(() => {
     const timer = setInterval(
       () => setTodayKey(getTodayInColombiaKey(new Date())),
@@ -147,7 +165,7 @@ export const WaiterDashboard = () => {
     return () => clearInterval(timer);
   }, []);
 
-  useEffect(() => {
+  useEffect(() => deferEffect(() => {
     let active = true;
     if (!myUserId) {
       setLastSeenNotificationId(0);
@@ -171,7 +189,7 @@ export const WaiterDashboard = () => {
     return () => {
       active = false;
     };
-  }, [myUserId]);
+  }), [myUserId]);
 
   const todaysNotifications = useMemo(
     () =>
@@ -187,14 +205,14 @@ export const WaiterDashboard = () => {
     ).length;
   }, [todaysNotifications, lastSeenNotificationId]);
 
-  useEffect(() => {
+  useEffect(() => deferEffect(() => {
     setNotificationHistory((prev) =>
       prev.filter((item) => isFromColombiaDay(item.createdAt, todayKey)),
     );
     setToasts((prev) =>
       prev.filter((item) => isFromColombiaDay(item.createdAt, todayKey)),
     );
-  }, [todayKey]);
+  }), [todayKey]);
 
   // Carga historial al entrar y al recibir cambios o recuperar la conexión.
   const loadNotificationHistory = useCallback(async () => {
@@ -227,9 +245,9 @@ export const WaiterDashboard = () => {
     }
   }, [myUserId, todayKey]);
 
-  useEffect(() => {
+  useEffect(() => deferEffect(() => {
     void loadNotificationHistory();
-  }, [loadNotificationHistory]);
+  }), [loadNotificationHistory]);
 
   useRealtimeEvents(
     ["NotificationsChanged", "RealtimeConnected"],
@@ -315,7 +333,6 @@ export const WaiterDashboard = () => {
     });
   };
 
-  const [isQrMenuVisible, setIsQrMenuVisible] = useState(false);
   const [activeTableForOrder, setActiveTableForOrder] = useState<any>(null);
   const [activeOrderId, setActiveOrderId] = useState<number | null>(null);
   const [orderItems, setOrderItems] = useState<any[]>([]);
@@ -414,7 +431,7 @@ export const WaiterDashboard = () => {
     setIsCartExpanded(false);
   };
 
-  const handleCancelOrder = async (orderToCancel: any) => {
+  const cancelOrderWithReason = async (orderToCancel: any, reason: string) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     try {
       // Se consulta el pedido REAL justo ahora: la lista de la pantalla puede
@@ -435,12 +452,12 @@ export const WaiterDashboard = () => {
       if (onlyPending) {
         await orderService.cancel(
           Number(orderToCancel.id),
-          "Cancelado por el mesero",
+          reason,
         );
       } else {
         await Promise.all(
           pending.map((d) =>
-            orderService.voidDetail(d.id, "Quitado por el mesero"),
+            orderService.voidDetail(d.id, reason),
           ),
         );
       }
@@ -452,6 +469,13 @@ export const WaiterDashboard = () => {
         err?.message ?? "No se pudo cancelar el pedido.",
       );
     }
+  };
+
+  const handleCancelOrder = (orderToCancel: any) => {
+    askForReason(
+      t.cancelReasonTitle || "Motivo de cancelación",
+      (reason) => cancelOrderWithReason(orderToCancel, reason),
+    );
   };
 
   const handleDeliverOrder = async (orderToDeliver: any) => {
@@ -640,58 +664,54 @@ export const WaiterDashboard = () => {
         );
         return;
       }
-      try {
-        const orderId = Number(activeOrderId);
-        const freshOrder = await orderService.getById(orderId);
-        const freshDetail = freshOrder.orderDetails.find(
-          (detail) => detail.id === Number(cartId),
-        );
-        if (!freshDetail || freshDetail.status !== OrderDetailStatus.Pending) {
+      askForReason(t.cancelReasonTitle || "Motivo de cancelación", async (reason) => {
+        try {
+          const orderId = Number(activeOrderId);
+          const freshOrder = await orderService.getById(orderId);
+          const freshDetail = freshOrder.orderDetails.find(
+            (detail) => detail.id === Number(cartId),
+          );
+          if (!freshDetail || freshDetail.status !== OrderDetailStatus.Pending) {
+            await refetchOrders();
+            showAppAlert(
+              t.actionNotAllowedTitle || "Acción no permitida",
+              t.orderItemNotPendingCancel ||
+                "Este producto ya no está pendiente y no se puede cancelar.",
+            );
+            return;
+          }
+
+          const liveDetails = freshOrder.orderDetails.filter(
+            (detail) =>
+              detail.status !== OrderDetailStatus.Voided &&
+              detail.status !== OrderDetailStatus.Cancelled,
+          );
+
+          if (liveDetails.length === 1 && liveDetails[0].id === freshDetail.id) {
+            await orderService.cancel(orderId, reason);
+            await Promise.all([refetchOrders(), refetchTables()]);
+            setActiveTableForOrder(null);
+            setActiveOrderId(null);
+            setOrderItems([]);
+            setActiveTab("MESAS");
+            return;
+          }
+
+          await orderService.voidDetail(freshDetail.id, reason);
           await refetchOrders();
+          const updated = orderItems.filter((item) => item.cartId !== cartId);
+          setOrderItems(updated);
+          if (updated.length === 0) setIsCartExpanded(false);
+        } catch (err: any) {
           showAppAlert(
-            t.actionNotAllowedTitle || "Acción no permitida",
-            t.orderItemNotPendingCancel ||
-              "Este producto ya no está pendiente y no se puede cancelar.",
+            t.errorTitle || "Error",
+            err?.message ||
+              t.orderItemCancelError ||
+              "No se pudo cancelar el producto.",
           );
-          return;
         }
-
-        const liveDetails = freshOrder.orderDetails.filter(
-          (detail) =>
-            detail.status !== OrderDetailStatus.Voided &&
-            detail.status !== OrderDetailStatus.Cancelled,
-        );
-
-        if (liveDetails.length === 1 && liveDetails[0].id === freshDetail.id) {
-          // No dejar pedidos vacíos ocupando mesas: al quitar el último
-          // producto, cancelar TODO el pedido por la vía normal del backend.
-          // El backend valida pagos, cocina y genera el historial de cancelación.
-          await orderService.cancel(
-            orderId,
-            "Cancelado al retirar el último producto del pedido",
-          );
-          await Promise.all([refetchOrders(), refetchTables()]);
-          setActiveTableForOrder(null);
-          setActiveOrderId(null);
-          setOrderItems([]);
-          setActiveTab("MESAS");
-          return;
-        }
-
-        await orderService.voidDetail(
-          freshDetail.id,
-          t.orderItemVoidReason || "Quitado por el mesero",
-        );
-        await refetchOrders();
-      } catch (err: any) {
-        showAppAlert(
-          t.errorTitle || "Error",
-          err?.message ||
-            t.orderItemCancelError ||
-            "No se pudo cancelar el producto.",
-        );
-        return;
-      }
+      });
+      return;
     }
 
     const updated = orderItems.filter((item) => item.cartId !== cartId);
@@ -803,18 +823,12 @@ export const WaiterDashboard = () => {
 
     // ----- CASO B: pedido nuevo (mesa libre o para llevar) -----
     let finalTableId: number | null = null;
-    let finalTableName = activeTableForOrder.name;
     let orderType = OrderType.DineIn;
 
     if (activeTableForOrder.isGlobalToGo) {
       orderType = OrderType.ToGo;
       if (destType === "particular") {
         finalTableId = null;
-        const personName =
-          toGoCustomerName.trim() !== ""
-            ? toGoCustomerName.trim()
-            : t.orderToGoDefaultName || "Particular";
-        finalTableName = (t.orderToGoPrefix || "Llevar - ") + personName;
       } else {
         if (!linkedTableId)
           return showAppAlert(
@@ -823,8 +837,6 @@ export const WaiterDashboard = () => {
               "Selecciona a qué mesa asignar este pedido.",
           );
         finalTableId = Number(linkedTableId);
-        const selectedTable = tables.find((x) => x.id === linkedTableId);
-        finalTableName = selectedTable?.name || finalTableName;
       }
     } else {
       finalTableId = Number(activeTableForOrder.id);
@@ -1120,6 +1132,19 @@ export const WaiterDashboard = () => {
           </View>
         </SafeAreaView>
       )}
+      <ReasonPromptModal
+        visible={reasonPrompt !== null}
+        title={reasonPrompt?.title ?? ""}
+        description={t.cancelReasonDescription || "Indica brevemente el motivo. Se guardará en el historial."}
+        placeholder={t.cancelReasonPlaceholder || "Escribe el motivo"}
+        cancelLabel={t.cancelReasonBack || "Volver"}
+        confirmLabel={t.cancelReasonConfirm || "Continuar"}
+        value={reasonText}
+        onChangeText={setReasonText}
+        onCancel={() => { if (!submittingReason) setReasonPrompt(null); }}
+        onConfirm={() => void submitReason()}
+        busy={submittingReason}
+      />
     </>
   );
 };

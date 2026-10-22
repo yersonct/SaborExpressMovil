@@ -10,6 +10,7 @@ import {
 } from "react-native";
 import { authService } from "../services/authService";
 import { AuthInput } from "./AuthInput";
+import { translateMobileCopy } from "../../../locales/mobileCopy";
 
 const StepProgress = ({ currentStep }: { currentStep: number }) => (
   <View style={styles.progressContainer}>
@@ -52,6 +53,7 @@ export const ForgotPasswordFlow = ({
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
@@ -73,17 +75,24 @@ const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const handleSendCode = async () => {
     if (!email.trim()) {
-      setError("Ingresa un correo electrónico");
+      setError("");
+      setFieldErrors({ email: defaultT.identifierRequired || translateMobileCopy("Ingresa un correo electrónico") });
       return;
     }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      setError("");
+      setFieldErrors({ email: defaultT.errEmail || translateMobileCopy("Ingresa un correo electrónico válido.") });
+      return;
+    }
+    setFieldErrors({});
     setError("");
     setLoading(true);
     try {
       await authService.forgotPassword(email.trim());
-      Alert.alert("Código enviado", `Revisa tu correo ${email}`);
+      Alert.alert(translateMobileCopy("Código enviado"), translateMobileCopy("Revisa tu correo {{email}}", { email }));
       setStep(2);
     } catch (err: any) {
-      setError(err.message || "No se pudo enviar el código");
+      setError(translateMobileCopy(err.message || "No se pudo enviar el código"));
     } finally {
       setLoading(false);
     }
@@ -91,9 +100,16 @@ const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const handleVerifyCode = async () => {
     if (!code.trim()) {
-      setError("Ingresa el código");
+      setError("");
+      setFieldErrors({ code: translateMobileCopy("Ingresa el código") });
       return;
     }
+    if (!/^\d{6}$/.test(code.trim())) {
+      setError("");
+      setFieldErrors({ code: defaultT.resetCodeInvalid || translateMobileCopy("El código debe contener exactamente 6 dígitos.") });
+      return;
+    }
+    setFieldErrors({});
     setError("");
     setLoading(true);
     try {
@@ -104,34 +120,32 @@ const [showConfirmPassword, setShowConfirmPassword] = useState(false);
       setResetToken(result.resetToken);
       setStep(3);
     } catch (err: any) {
-      setError(err.message || "Código incorrecto");
+      setError(translateMobileCopy(err.message || "Código incorrecto"));
     } finally {
       setLoading(false);
     }
   };
 
   const handleResetPassword = async () => {
+    const nextErrors: Record<string, string> = {};
     if (!newPassword) {
-      setError("Ingresa una nueva contraseña");
-      return;
+      nextErrors.newPassword = defaultT.newPasswordRequired || translateMobileCopy("Ingresa una nueva contraseña");
+    } else if (newPassword.length < 8) {
+      nextErrors.newPassword = defaultT.passwordMinLength || translateMobileCopy("La contraseña debe tener al menos 8 caracteres.");
     }
-    if (newPassword.length < 6) {
-      setError("La contraseña debe tener al menos 6 caracteres");
-      return;
-    }
-    if (newPassword !== confirmPassword) {
-      setError("Las contraseñas no coinciden");
-      return;
-    }
+    if (!confirmPassword) nextErrors.confirmPassword = defaultT.confirmPasswordRequired || translateMobileCopy("Confirma tu contraseña.");
+    else if (newPassword !== confirmPassword) nextErrors.confirmPassword = defaultT.passwordMismatch || translateMobileCopy("Las contraseñas no coinciden.");
+    setFieldErrors(nextErrors);
+    if (Object.keys(nextErrors).length > 0) { setError(""); return; }
 
     setError("");
     setLoading(true);
     try {
       await authService.resetPassword(resetToken, newPassword, confirmPassword);
-      Alert.alert("¡Listo!", "Contraseña actualizada con éxito");
+      Alert.alert(translateMobileCopy("¡Listo!"), translateMobileCopy("Contraseña actualizada con éxito"));
       onSuccess();
     } catch (err: any) {
-      setError(err.message || "Error al actualizar contraseña");
+      setError(translateMobileCopy(err.message || "Error al actualizar contraseña"));
     } finally {
       setLoading(false);
     }
@@ -146,32 +160,32 @@ const [showConfirmPassword, setShowConfirmPassword] = useState(false);
       <View style={styles.header}>
         <Text style={[styles.title, { color: defaultColors.text }]}>
           {step === 1
-            ? defaultT.forgotPasswordStep1Title || "Recuperar Contraseña"
+            ? defaultT.forgotPasswordStep1Title || translateMobileCopy("Recuperar Contraseña")
             : step === 2
-              ? defaultT.forgotPasswordStep2Title || "Ingresa el Código"
-              : defaultT.forgotPasswordStep3Title || "Nueva Contraseña"}
+              ? defaultT.forgotPasswordStep2Title || translateMobileCopy("Ingresa el Código")
+              : defaultT.forgotPasswordStep3Title || translateMobileCopy("Nueva Contraseña")}
         </Text>
         <Text style={[styles.subtitle, { color: defaultColors.mutedText }]}>
           {step === 1
             ? defaultT.forgotPasswordStep1Subtitle ||
-              "Ingresa tu correo para recibir un código."
+              translateMobileCopy("Ingresa tu correo para recibir un código.")
             : step === 2
               ? defaultT.forgotPasswordStep2Subtitle ||
-                "Revisa tu bandeja de entrada."
+                translateMobileCopy("Revisa tu bandeja de entrada.")
               : defaultT.forgotPasswordStep3Subtitle ||
-                "Crea tu nueva contraseña segura."}
+                translateMobileCopy("Crea tu nueva contraseña segura.")}
         </Text>
       </View>
 
       {step === 1 && (
         <View>
           <Text style={[styles.inputLabel, { color: defaultColors.text }]}>
-            {defaultT.forgotPasswordEmail || "Correo electrónico"}
+            {defaultT.forgotPasswordEmail || translateMobileCopy("Correo electrónico")}
           </Text>
           <TextInput
             style={[
               styles.input,
-              error ? styles.inputError : null,
+              fieldErrors.email ? styles.inputError : null,
               {
                 backgroundColor: defaultColors.inputBackground,
                 borderColor: defaultColors.border,
@@ -185,12 +199,15 @@ const [showConfirmPassword, setShowConfirmPassword] = useState(false);
             value={email}
             onChangeText={(val) => {
               setEmail(val);
+              setFieldErrors((previous) => ({ ...previous, email: "" }));
               setError("");
             }}
             keyboardType="email-address"
             autoCapitalize="none"
+            maxLength={254}
           />
-          {error ? <Text style={styles.errorText}>{error}</Text> : null}
+          {fieldErrors.email ? <Text accessibilityRole="alert" style={styles.errorText}>{fieldErrors.email}</Text> : null}
+          {error ? <Text accessibilityRole="alert" style={styles.errorText}>{error}</Text> : null}
 
           {loading ? (
             <ActivityIndicator
@@ -204,7 +221,7 @@ const [showConfirmPassword, setShowConfirmPassword] = useState(false);
               onPress={handleSendCode}
             >
               <Text style={styles.primaryButtonText}>
-                {defaultT.forgotPasswordSendCode || "Enviar Código"}
+                {defaultT.forgotPasswordSendCode || translateMobileCopy("Enviar Código")}
               </Text>
             </TouchableOpacity>
           )}
@@ -214,7 +231,7 @@ const [showConfirmPassword, setShowConfirmPassword] = useState(false);
             style={{ marginTop: 16, alignItems: "center" }}
           >
             <Text style={{ color: defaultColors.mutedText, fontSize: 14 }}>
-              Cancelar
+              {translateMobileCopy("Cancelar")}
             </Text>
           </TouchableOpacity>
         </View>
@@ -223,13 +240,13 @@ const [showConfirmPassword, setShowConfirmPassword] = useState(false);
       {step === 2 && (
         <View>
           <Text style={[styles.inputLabel, { color: defaultColors.text }]}>
-            {defaultT.forgotPasswordCode || "Código de 6 dígitos"}
+            {defaultT.forgotPasswordCode || translateMobileCopy("Código de 6 dígitos")}
           </Text>
           <TextInput
             style={[
               styles.input,
               styles.inputCenter,
-              error ? styles.inputError : null,
+              fieldErrors.code ? styles.inputError : null,
               {
                 backgroundColor: defaultColors.inputBackground,
                 borderColor: defaultColors.border,
@@ -240,12 +257,14 @@ const [showConfirmPassword, setShowConfirmPassword] = useState(false);
             maxLength={6}
             value={code}
             onChangeText={(val) => {
-              setCode(val);
+              setCode(val.replace(/\D/g, "").slice(0, 6));
+              setFieldErrors((previous) => ({ ...previous, code: "" }));
               setError("");
             }}
             keyboardType="number-pad"
           />
-          {error ? <Text style={styles.errorText}>{error}</Text> : null}
+          {fieldErrors.code ? <Text accessibilityRole="alert" style={styles.errorText}>{fieldErrors.code}</Text> : null}
+          {error ? <Text accessibilityRole="alert" style={styles.errorText}>{error}</Text> : null}
 
           {loading ? (
             <ActivityIndicator
@@ -259,7 +278,7 @@ const [showConfirmPassword, setShowConfirmPassword] = useState(false);
               onPress={handleVerifyCode}
             >
               <Text style={styles.primaryButtonText}>
-                {defaultT.forgotPasswordVerifyCode || "Verificar Código"}
+                {defaultT.forgotPasswordVerifyCode || translateMobileCopy("Verificar Código")}
               </Text>
             </TouchableOpacity>
           )}
@@ -269,26 +288,29 @@ const [showConfirmPassword, setShowConfirmPassword] = useState(false);
       {step === 3 && (
         <View>
           <AuthInput
-            label={defaultT.forgotPasswordNewPassword || "Nueva Contraseña"}
+            label={`${defaultT.forgotPasswordNewPassword || translateMobileCopy("Nueva Contraseña")} *`}
             placeholder="******"
             value={newPassword}
             onChangeText={(val) => {
               setNewPassword(val);
+              setFieldErrors((previous) => ({ ...previous, newPassword: "" }));
               setError("");
             }}
             secureTextEntry={!showPassword}
             showPasswordToggle={true}
             onTogglePassword={() => setShowPassword(!showPassword)}
-            error={!!error}
+            error={!!fieldErrors.newPassword}
+            errorMessage={fieldErrors.newPassword}
             themeColors={defaultColors}
           />
 
           <AuthInput
-            label="Confirmar Contraseña"
+            label={`${translateMobileCopy("Confirmar contraseña")} *`}
             placeholder="******"
             value={confirmPassword}
             onChangeText={(val) => {
               setConfirmPassword(val);
+              setFieldErrors((previous) => ({ ...previous, confirmPassword: "" }));
               setError("");
             }}
             secureTextEntry={!showConfirmPassword}
@@ -296,7 +318,8 @@ const [showConfirmPassword, setShowConfirmPassword] = useState(false);
             onTogglePassword={() =>
               setShowConfirmPassword(!showConfirmPassword)
             }
-            error={!!error}
+            error={!!fieldErrors.confirmPassword}
+            errorMessage={fieldErrors.confirmPassword}
             themeColors={defaultColors}
           />
           {error ? <Text style={styles.errorText}>{error}</Text> : null}
@@ -313,7 +336,7 @@ const [showConfirmPassword, setShowConfirmPassword] = useState(false);
               onPress={handleResetPassword}
             >
               <Text style={styles.primaryButtonText}>
-                {defaultT.forgotPasswordSavePassword || "Guardar Contraseña"}
+                {defaultT.forgotPasswordSavePassword || translateMobileCopy("Guardar Contraseña")}
               </Text>
             </TouchableOpacity>
           )}

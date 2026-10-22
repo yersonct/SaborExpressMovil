@@ -10,6 +10,7 @@ import { tableService } from "@/features/tables/services/tableService";
 import type { Order as CashierOrder } from "../components/CashierData";
 import { formatColombiaTime } from "@/features/shared/utils/colombia-date";
 import { useRealtimeEvents } from "@/features/shared/hooks/useRealtimeEvents";
+import { deferEffect } from "@/features/shared/utils/deferEffect";
 
 // El cajero necesita ver el pedido incluso después de "Delivered" (servido),
 // porque en Mesa/Para Llevar el pago suele cobrarse al final, no antes.
@@ -54,6 +55,7 @@ function mapToCashierOrder(order: OrderSummary): CashierOrder {
   return {
     id: String(order.id),
     type: order.orderType === OrderType.DineIn ? "mesa" : "llevar",
+    orderSubtype: order.orderType,
     table: order.tableNumber ?? undefined,
     customerName: order.customerName ?? undefined,
     employeeName: order.employeeName ?? undefined,
@@ -71,6 +73,14 @@ function mapToCashierOrder(order: OrderSummary): CashierOrder {
           })
           .join("\n")
       : "Sin items registrados",
+    receiptItems: order.orderDetails
+      .filter((detail) => detail.status !== OrderDetailStatus.Voided && detail.status !== OrderDetailStatus.Cancelled)
+      .map((detail) => ({
+        name: `${detail.productName}${detail.isToGo ? " (Para llevar)" : ""}${detail.notes ? ` (Nota: ${detail.notes})` : ""}`,
+        quantity: detail.quantity,
+        unitPrice: detail.unitPrice,
+        total: detail.subTotal,
+      })),
       total: order.total,
     subTotal: order.subTotal,
     tax: order.tax,
@@ -189,9 +199,9 @@ const occupiedTableSessions = new Map(
     setOrders((prev) => prev.filter((o) => o.id !== orderId));
   }, []);
 
-  useEffect(() => {
+  useEffect(() => deferEffect(() => {
     fetchOrders();
-  }, [fetchOrders]);
+  }), [fetchOrders]);
 
 useRealtimeEvents(
   [

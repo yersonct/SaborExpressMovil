@@ -10,6 +10,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { AuthInput } from "../features/auth/components/AuthInput";
 import { authService } from "../features/auth/services/authService";
+import { translateMobileCopy } from "../locales/mobileCopy";
 
 const themeColors = {
   background: "#F8FAFC",
@@ -38,15 +39,15 @@ export default function ActivateScreen() {
 
   const handleActivate = async () => {
     if (!token) {
-      setError("El enlace no es válido.");
+      setError(translateMobileCopy("El enlace no es válido."));
       return;
     }
     if (newPassword.length < 8) {
-      setError("La contraseña debe tener al menos 8 caracteres.");
+      setError(translateMobileCopy("La contraseña debe tener al menos 8 caracteres."));
       return;
     }
     if (newPassword !== confirmPassword) {
-      setError("Las contraseñas no coinciden.");
+      setError(translateMobileCopy("Las contraseñas no coinciden."));
       return;
     }
     setError("");
@@ -55,7 +56,7 @@ export default function ActivateScreen() {
       await authService.activateAccount({ token, newPassword });
       setDone(true);
     } catch (err: any) {
-      setError(err?.message || "El enlace es inválido o ya expiró.");
+      setError(translateMobileCopy(err?.message || "El enlace es inválido o ya expiró."));
     } finally {
       setLoading(false);
     }
@@ -81,7 +82,7 @@ export default function ActivateScreen() {
             marginTop: 16,
           }}
         >
-          ¡Cuenta activada!
+          {translateMobileCopy("¡Cuenta activada!")}
         </Text>
         <Text
           style={{
@@ -91,7 +92,7 @@ export default function ActivateScreen() {
             textAlign: "center",
           }}
         >
-          Ya puedes iniciar sesión con tu nueva contraseña.
+          {translateMobileCopy("Ya puedes iniciar sesión con tu nueva contraseña.")}
         </Text>
         <TouchableOpacity
           onPress={() => router.replace("/")}
@@ -104,7 +105,7 @@ export default function ActivateScreen() {
           }}
         >
           <Text style={{ color: "#FFFFFF", fontWeight: "700" }}>
-            Ir a iniciar sesión
+            {translateMobileCopy("Ir a iniciar sesión")}
           </Text>
         </TouchableOpacity>
       </View>
@@ -136,7 +137,7 @@ export default function ActivateScreen() {
             marginBottom: 8,
           }}
         >
-          Activa tu cuenta
+          {translateMobileCopy("Activa tu cuenta")}
         </Text>
         <Text
           style={{
@@ -145,12 +146,12 @@ export default function ActivateScreen() {
             marginBottom: 16,
           }}
         >
-          Define tu contraseña para terminar de activar tu cuenta.
+          {translateMobileCopy("Define tu contraseña para terminar de activar tu cuenta.")}
         </Text>
 
         <AuthInput
-          label="Nueva contraseña"
-          placeholder="Mínimo 8 caracteres"
+          label={translateMobileCopy("Nueva contraseña")}
+          placeholder={translateMobileCopy("Mínimo 8 caracteres")}
           value={newPassword}
           onChangeText={setNewPassword}
           secureTextEntry={!showPassword}
@@ -159,8 +160,8 @@ export default function ActivateScreen() {
           themeColors={themeColors}
         />
         <AuthInput
-          label="Confirmar contraseña"
-          placeholder="Repite tu contraseña"
+          label={translateMobileCopy("Confirmar contraseña")}
+          placeholder={translateMobileCopy("Repite tu contraseña")}
           value={confirmPassword}
           onChangeText={setConfirmPassword}
           secureTextEntry={!showConfirm}
@@ -191,7 +192,7 @@ export default function ActivateScreen() {
             }}
           >
             <Text style={{ color: themeColors.buttonText, fontWeight: "700" }}>
-              Activar cuenta
+              {translateMobileCopy("Activar cuenta")}
             </Text>
           </TouchableOpacity>
         )}

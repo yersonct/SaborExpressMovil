@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   Animated,
   StyleSheet,
@@ -10,6 +10,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useOptionalClientPreferences } from "@/features/userPreferences/context/ClientPreferencesContext";
 import { localizeClientNotification } from "@/features/notifications/utils/localizeClientNotification";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { translateMobileCopy } from "../../../locales/mobileCopy";
 
 export interface ToastNotification {
   id: number;
@@ -65,10 +66,25 @@ function ToastItem({
   t?: (key: string) => string;
   colors?: Props["colors"];
 }) {
-  const translateY = useRef(new Animated.Value(-80)).current;
-  const opacity = useRef(new Animated.Value(0)).current;
+  const [translateY] = useState(() => new Animated.Value(-80));
+  const [opacity] = useState(() => new Animated.Value(0));
   const icon = ICONS[notification.type] || ICONS.Default;
   const displayNotification = localizeClientNotification(notification, t);
+
+  const handleDismiss = useCallback(() => {
+    Animated.parallel([
+      Animated.timing(translateY, {
+        toValue: -80,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+      Animated.timing(opacity, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+    ]).start(() => onDismiss(notification.id));
+  }, [notification.id, onDismiss, opacity, translateY]);
 
   useEffect(() => {
     Animated.parallel([
@@ -86,22 +102,7 @@ function ToastItem({
 
     const timer = setTimeout(() => handleDismiss(), 4500);
     return () => clearTimeout(timer);
-  }, []);
-
-  const handleDismiss = () => {
-    Animated.parallel([
-      Animated.timing(translateY, {
-        toValue: -80,
-        duration: 200,
-        useNativeDriver: true,
-      }),
-      Animated.timing(opacity, {
-        toValue: 0,
-        duration: 200,
-        useNativeDriver: true,
-      }),
-    ]).start(() => onDismiss(notification.id));
-  };
+  }, [handleDismiss, opacity, translateY]);
 
   return (
     <Animated.View
@@ -118,7 +119,7 @@ function ToastItem({
       <TouchableOpacity
         style={styles.toastBody}
         accessibilityRole="button"
-        accessibilityLabel="Abrir pedido de esta notificación"
+        accessibilityLabel={translateMobileCopy("Abrir pedido de esta notificación")}
         disabled={!(notification.relatedEntityType?.toLowerCase() === "order" && notification.relatedEntityId && onSelect)}
         onPress={() => { onSelect?.(notification); handleDismiss(); }}
       >

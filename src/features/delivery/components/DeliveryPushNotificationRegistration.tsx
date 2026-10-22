@@ -86,7 +86,9 @@ export function DeliveryPushNotificationRegistration() {
   const { setPushStatus } = preferences;
   const expoPushTokenRef = useRef<string | null>(null);
   const preferencesRef = useRef(preferences);
-  preferencesRef.current = preferences;
+  useEffect(() => {
+    preferencesRef.current = preferences;
+  }, [preferences]);
 
   const syncPreferences = useCallback(async (expoPushToken: string) => {
     const current = preferencesRef.current;
@@ -111,7 +113,7 @@ export function DeliveryPushNotificationRegistration() {
       setPushStatus("error");
       if (__DEV__) console.warn("No se pudieron guardar las preferencias push del repartidor:", error);
     }
-  }, []);
+  }, [setPushStatus]);
 
   useEffect(() => {
     if (!user?.token || !preferences.preferencesHydrated) return;
@@ -192,6 +194,7 @@ export function DeliveryPushNotificationRegistration() {
     preferences.preferencesHydrated,
     preferences.pushNotifications,
     syncPreferences,
+    setPushStatus,
   ]);
 
   useEffect(() => {

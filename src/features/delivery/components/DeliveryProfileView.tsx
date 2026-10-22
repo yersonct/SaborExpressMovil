@@ -11,7 +11,6 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { useNavigation } from "expo-router";
 
 import { useDeliveryContext } from "./context/DeliveryContext";
 import { getDeliveryTheme } from "./context/deliveryTheme";
@@ -21,6 +20,9 @@ import {
 } from "../../../locales/DeliveryTranslations";
 import { useMyProfile } from "@/features/employees/hooks/useMyProfile";
 import { InitialsAvatar } from "@/features/shared/components/InitialsAvatar";
+import { translateMobileCopy } from "../../../locales/mobileCopy";
+import { deferEffect } from "@/features/shared/utils/deferEffect";
+import { validateEmployeeProfile } from "@/features/employees/utils/validateEmployeeProfile";
 
 export const DeliveryProfileView = () => {
   const { language, isDark } = useDeliveryContext();
@@ -35,10 +37,10 @@ export const DeliveryProfileView = () => {
     lastName: "",
     phone: "",
   });
-  const [errors, setErrors] = useState({ name: "" });
+  const [errors, setErrors] = useState({ name: "", lastName: "", phone: "" });
 
   // Sincroniza el formulario cuando llegan los datos reales del backend
-  useEffect(() => {
+  useEffect(() => deferEffect(() => {
     if (profile) {
       setFormData({
         name: profile.name ?? "",
@@ -46,26 +48,25 @@ export const DeliveryProfileView = () => {
         phone: profile.phone ?? "",
       });
     }
-  }, [profile]);
+  }), [profile]);
 
   const handleChangeText = (field: keyof typeof formData, value: string) => {
-    setFormData({ ...formData, [field]: value });
-    if (field in errors && errors[field as keyof typeof errors]) {
-      setErrors({ ...errors, [field]: "" });
-    }
+    setFormData((previous) => ({ ...previous, [field]: value }));
+    setErrors((previous) => ({ ...previous, [field]: "" }));
   };
 
   const handleSaveProfile = async () => {
-    let isValid = true;
-    const newErrors = { name: "" };
-
-    if (!formData.name.trim()) {
-      newErrors.name = t.nameRequired || "El nombre es obligatorio.";
-      isValid = false;
-    }
-
-    setErrors(newErrors);
-    if (!isValid) return;
+    const nextErrors = validateEmployeeProfile(
+      formData.name,
+      formData.lastName,
+      formData.phone,
+    );
+    setErrors({
+      name: nextErrors.name ?? "",
+      lastName: nextErrors.lastName ?? "",
+      phone: nextErrors.phone ?? "",
+    });
+    if (Object.values(nextErrors).some(Boolean)) return;
 
     try {
       await updateProfile({
@@ -131,7 +132,7 @@ export const DeliveryProfileView = () => {
               { color: colors.text, marginBottom: 15 },
             ]}
           >
-            {t.todayPerformance || "Mi Desempeño"}
+            {t.todayPerformance || translateMobileCopy("Mi Desempeño")}
           </Text>
           <View
             style={[
@@ -148,7 +149,7 @@ export const DeliveryProfileView = () => {
                 {profile?.tripsCompleted ?? 0}
               </Text>
               <Text style={[styles.statLabel, { color: colors.mutedText }]}>
-                {t.trips || "Viajes"}
+                {t.trips || translateMobileCopy("Viajes")}
               </Text>
             </View>
             <View
@@ -165,7 +166,7 @@ export const DeliveryProfileView = () => {
                   : "—"}
               </Text>
               <Text style={[styles.statLabel, { color: colors.mutedText }]}>
-                {t.rating || "Calificación"}
+                {t.rating || translateMobileCopy("Calificación")}
               </Text>
             </View>
           </View>
@@ -203,7 +204,7 @@ export const DeliveryProfileView = () => {
             {/* Nombre */}
             <View style={styles.inputGroup}>
               <Text style={[styles.inputLabel, { color: colors.mutedText }]}>
-                {t.fullName || "Nombre completo"}
+          {t.fullName || translateMobileCopy("Nombre completo")}
               </Text>
               <TextInput
                 style={[
@@ -222,16 +223,17 @@ export const DeliveryProfileView = () => {
                 value={formData.name}
                 onChangeText={(text) => handleChangeText("name", text)}
                 editable={isEditing}
+                maxLength={120}
               />
               {errors.name ? (
-                <Text style={styles.errorText}>{errors.name}</Text>
+                <Text style={styles.errorText}>{translateMobileCopy(errors.name)}</Text>
               ) : null}
             </View>
 
             {/* Apellido */}
             <View style={styles.inputGroup}>
               <Text style={[styles.inputLabel, { color: colors.mutedText }]}>
-                {t.lastName || "Apellido"}
+          {t.lastName || translateMobileCopy("Apellido")}
               </Text>
               <TextInput
                 style={[
@@ -245,11 +247,16 @@ export const DeliveryProfileView = () => {
                     backgroundColor: colors.inputDisabled,
                     color: colors.mutedText,
                   },
+                  errors.lastName ? styles.inputError : null,
                 ]}
                 value={formData.lastName}
                 onChangeText={(text) => handleChangeText("lastName", text)}
                 editable={isEditing}
+                maxLength={80}
               />
+              {errors.lastName ? (
+                <Text style={styles.errorText}>{translateMobileCopy(errors.lastName)}</Text>
+              ) : null}
             </View>
 
             {/* Correo: siempre bloqueado, viene del backend */}
@@ -274,7 +281,7 @@ export const DeliveryProfileView = () => {
             {/* Teléfono */}
             <View style={styles.inputGroup}>
               <Text style={[styles.inputLabel, { color: colors.mutedText }]}>
-                {t.mobilePhone || "Teléfono móvil"}
+          {t.mobilePhone || translateMobileCopy("Teléfono móvil")}
               </Text>
               <TextInput
                 style={[
@@ -288,12 +295,17 @@ export const DeliveryProfileView = () => {
                     backgroundColor: colors.inputDisabled,
                     color: colors.mutedText,
                   },
+                  errors.phone ? styles.inputError : null,
                 ]}
                 value={formData.phone}
-                onChangeText={(text) => handleChangeText("phone", text)}
+                onChangeText={(text) => handleChangeText("phone", text.replace(/\D/g, "").slice(0, 10))}
                 keyboardType="phone-pad"
+                maxLength={10}
                 editable={isEditing}
               />
+              {errors.phone ? (
+                <Text style={styles.errorText}>{translateMobileCopy(errors.phone)}</Text>
+              ) : null}
             </View>
             {/* Sede: siempre bloqueado, viene del backend */}
             <View style={styles.inputGroup}>

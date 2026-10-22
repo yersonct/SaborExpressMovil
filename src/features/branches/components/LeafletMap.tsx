@@ -33,7 +33,7 @@ export function LeafletMap({
     webRef.current?.injectJavaScript(
       `map.setView([${focus.latitude}, ${focus.longitude}], 16); true;`,
     );
-  }, [ready, focus?.nonce]);
+  }, [ready, focus]);
 
   const handleMessage = (e: WebViewMessageEvent) => {
     try {

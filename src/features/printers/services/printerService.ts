@@ -10,12 +10,31 @@ import {
   printBytes,
   type PrinterDevice,
 } from '@ricka7x/expo-thermal-printer';
+import Constants, { ExecutionEnvironment } from 'expo-constants';
+import { Platform } from 'react-native';
 import { buildSalesReceipt, buildTestReceipt } from './receiptBuilder';
-import { loadSavedPrinter, removePrinter, savePrinter } from './printerStorage';
+import {
+  loadPrinterSelection,
+  loadSavedPrinter,
+  removePrinter,
+  savePrinter,
+  savePrinterSelection,
+} from './printerStorage';
 import type { PaperWidth, SalesReceipt, SavedPrinter } from '../types';
+import type { ApiLanguage } from '@/features/auth/services/apiLanguage';
+import { PRINTER_SETTINGS_COPY } from "@/locales/PrinterSettingsTranslations";
+
+/** The Bluetooth native module is not bundled in Expo Go. */
+export function isNativePrinterAvailable(): boolean {
+  return (Platform.OS === 'android' || Platform.OS === 'ios') &&
+    Constants.executionEnvironment !== ExecutionEnvironment.StoreClient;
+}
 
 function requireSupported(): void {
-  if (!isPrintingSupported()) throw new Error('La impresión Bluetooth requiere Android o iOS con una compilación nativa.');
+  if (Constants.executionEnvironment === ExecutionEnvironment.StoreClient) {
+    throw { code: 'expo_go' };
+  }
+  if (!isPrintingSupported()) throw { code: 'unsupported' };
 }
 
 async function requireBluetooth(): Promise<void> {
@@ -32,22 +51,41 @@ export async function listAvailablePrinters(): Promise<PrinterDevice[]> {
   return Array.from(new Map(devices.map((device) => [device.address, device])).values());
 }
 
+/** Checks the saved classic printer over local Bluetooth, then releases the connection. */
+export async function isClassicPrinterReachable(address: string): Promise<boolean> {
+  await requireBluetooth();
+  let connected = false;
+  try {
+    await connectToPrinter(address);
+    connected = true;
+    return true;
+  } catch {
+    return false;
+  } finally {
+    if (connected) {
+      await disconnectPrinter().catch(() => undefined);
+    }
+  }
+}
+
 /** Conectar PRIMERO y guardar SOLO después de comprobar que conectó. */
-export async function selectPrinter(device: PrinterDevice, paperWidth: PaperWidth): Promise<SavedPrinter> {
+export async function selectPrinter(device: PrinterDevice, paperWidth: PaperWidth, unnamedDeviceLabel = 'Impresora sin nombre'): Promise<SavedPrinter> {
   await requireBluetooth();
   await connectToPrinter(device.address);
   const selected: SavedPrinter = {
     address: device.address,
-    name: device.name || 'Impresora sin nombre',
+    name: device.name || unnamedDeviceLabel,
     paperWidth,
   };
   await savePrinter(selected);
+  await savePrinterSelection('classic');
   return selected;
 }
 
 export async function forgetPrinter(): Promise<void> {
   try { await disconnectPrinter(); } catch { /* Puede estar desconectada. */ }
   await removePrinter();
+  if ((await loadPrinterSelection()) === 'classic') await savePrinterSelection(null);
 }
 
 export function currentPrinterIsConnected(address: string | undefined): boolean {
@@ -73,10 +111,10 @@ async function withPrintLock(job: () => Promise<void>): Promise<void> {
   try { await job(); } finally { sending = false; }
 }
 
-export async function printTestReceipt(): Promise<void> {
+export async function printTestReceipt(language: ApiLanguage = 'es'): Promise<void> {
   await withPrintLock(async () => {
     const saved = await connectSaved();
-    await printBytes(buildTestReceipt(saved.name, saved.paperWidth));
+    await printBytes(buildTestReceipt(saved.name, saved.paperWidth, language));
   });
 }
 
@@ -88,15 +126,42 @@ export async function printSalesReceipt(receipt: SalesReceipt): Promise<void> {
   });
 }
 
-export function printerErrorMessage(error: unknown): string {
+/** Prints once to the device selected for this invoice without changing the saved preference. */
+export async function printSalesReceiptToPrinter(
+  receipt: SalesReceipt,
+  device: PrinterDevice,
+  paperWidth: PaperWidth,
+): Promise<void> {
+  await withPrintLock(async () => {
+    await requireBluetooth();
+    await connectToPrinter(device.address);
+    await printBytes(buildSalesReceipt(receipt, paperWidth));
+  });
+}
+
+export function printerErrorMessage(error: unknown, language: ApiLanguage = 'es'): string {
+  const copy = PRINTER_SETTINGS_COPY[language];
   const code = error && typeof error === 'object' && 'code' in error
     ? String((error as { code: unknown }).code) : '';
-  if (code === 'bluetooth_off') return 'Activa Bluetooth en tu teléfono y vuelve a intentarlo.';
-  if (code === 'permission_denied') return 'Autoriza el permiso de Dispositivos cercanos para conectar la impresora.';
-  if (code === 'printer_missing') return 'Selecciona primero una impresora en Configuración.';
-  if (code === 'busy') return 'Hay otro comprobante enviándose. Espera a que termine.';
-  if (code === 'not_connected') return 'La impresora está desconectada. Comprueba que esté encendida y cerca.';
-  if (code === 'write_failed') return 'No se pudo enviar el comprobante. Verifica la impresora antes de reimprimir.';
-  if (code === 'unsupported') return 'La impresión Bluetooth no funciona en Expo Go ni en el navegador.';
-  return error instanceof Error ? error.message : 'No se pudo completar la operación con la impresora.';
+  if (code === 'bluetooth_off') return copy.bluetoothOn;
+  if (code === 'permission_denied') return copy.permission;
+  if (code === 'printer_missing') return copy.printerMissing;
+  if (code === 'busy') return copy.busy;
+  if (code === 'not_connected') return copy.disconnected;
+  if (code === 'write_failed') return copy.sendFailed;
+  if (code === 'unsupported') return copy.unsupported;
+  if (code === 'expo_go') return copy.nativeBuildRequired;
+  if (code === 'login_required') return copy.loginRequired;
+  if (code === 'ble_connection_failed') return copy.bleConnectionFailed;
+  if (code === 'pd01_missing') return copy.branch;
+  if (error instanceof Error && error.message) {
+    const message = error.message.toLocaleLowerCase();
+    if (message.includes('no confirm')) return copy.bleNoAck;
+    if (message.includes('encien') && message.includes('bluetooth')) return copy.bluetoothOn;
+    if ((message.includes('permiso') && message.includes('dispositivos')) || message.includes('permission')) return copy.permission;
+    if (message.includes('en curso') || message.includes('enviando un recibo')) return copy.busy;
+    if (message.includes('protocolo') || message.includes('no expone')) return copy.bleProtocolError;
+    return error.message;
+  }
+  return copy.generalError;
 }

@@ -8,12 +8,13 @@ import {
   REALTIME_CONNECTED,
   subscribeRealtimeEvent,
 } from "@/features/shared/services/realtimeEvents";
+import { deferEffect } from "@/features/shared/utils/deferEffect";
 
 export function useBranchSettings(branchId: number | null | undefined) {
   const [settings, setSettings] = useState<BranchSettings | null>(null);
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
+  useEffect(() => deferEffect(() => {
     if (!branchId) {
       setSettings(null);
       setLoading(false);
@@ -55,7 +56,7 @@ export function useBranchSettings(branchId: number | null | undefined) {
       unsubscribeSettings();
       unsubscribeReconnect();
     };
-  }, [branchId]);
+  }), [branchId]);
 
   return { settings, loading };
 }

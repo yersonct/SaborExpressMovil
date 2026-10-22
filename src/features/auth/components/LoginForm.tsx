@@ -3,7 +3,6 @@ import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
-  StyleSheet,
   ActivityIndicator,
   Image,
   TouchableOpacity,
@@ -36,6 +35,8 @@ import {
 } from "../services/roleMap";
 import { styles } from "./style/LoginForm.styles";
 import { setNetworkErrorLanguage } from "@/features/shared/services/networkStatus";
+import { translateMobileCopy } from "../../../locales/mobileCopy";
+import { deferEffect } from "@/features/shared/utils/deferEffect";
 
 const translations = require("../../../locales/translations.json") as Record<
   string,
@@ -53,6 +54,10 @@ const serverDownTitles: Record<LanguageCode, string> = {
 export const LoginForm = () => {
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
+  const [loginFieldErrors, setLoginFieldErrors] = useState<{
+    identifier?: string;
+    password?: string;
+  }>({});
   const [selectedLanguage, setSelectedLanguage] = useState<LanguageCode>("es");
   const [themeMode, setThemeMode] = useState<"light" | "dark">("light");
   const [showPassword, setShowPassword] = useState(false);
@@ -81,8 +86,25 @@ export const LoginForm = () => {
   const { width: windowWidth } = useWindowDimensions();
   const t = translations[selectedLanguage] || translations.es;
 
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(30)).current;
+  const submitLogin = () => {
+    const normalizedIdentifier = identifier.trim();
+    const nextErrors: { identifier?: string; password?: string } = {};
+    if (!normalizedIdentifier) {
+      nextErrors.identifier = t.identifierRequired;
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedIdentifier)) {
+      nextErrors.identifier = t.identifierInvalid;
+    }
+    if (!password) nextErrors.password = t.passwordRequired;
+    setLoginFieldErrors(nextErrors);
+    if (Object.keys(nextErrors).length > 0) {
+      clearError();
+      return;
+    }
+    void handleLogin(normalizedIdentifier, password);
+  };
+
+  const [fadeAnim] = useState(() => new Animated.Value(0));
+  const [slideAnim] = useState(() => new Animated.Value(30));
 
   // Registrar el campo enfocado, sin mover el formulario hasta arriba.
   const scrollRef = useRef<ScrollView>(null);
@@ -146,9 +168,9 @@ export const LoginForm = () => {
         useNativeDriver: true,
       }),
     ]).start();
-  }, [activeView]);
+  }, [activeView, fadeAnim, slideAnim]);
 
-  useEffect(() => {
+  useEffect(() => deferEffect(() => {
     const storedLanguage = globalThis.localStorage?.getItem(
       "saborexpress-login-language",
     ) as LanguageCode | null;
@@ -159,7 +181,7 @@ export const LoginForm = () => {
       setSelectedLanguage(storedLanguage);
     if (storedTheme === "light" || storedTheme === "dark")
       setThemeMode(storedTheme);
-  }, []);
+  }), []);
 
   useEffect(() => {
     setNetworkErrorLanguage(selectedLanguage);
@@ -167,15 +189,15 @@ export const LoginForm = () => {
     globalThis.localStorage?.setItem("saborexpress-login-language", selectedLanguage);
   }, [selectedLanguage]);
 
-  useEffect(() => {
+  useEffect(() => deferEffect(() => {
     if (errorCode === "SERVER_DOWN") setShowServerDownAlert(true);
-  }, [errorCode]);
+  }), [errorCode]);
 
   useEffect(() => {
     globalThis.localStorage?.setItem("saborexpress-login-theme", themeMode);
   }, [themeMode]);
 
-  useEffect(() => {
+  useEffect(() => deferEffect(() => {
     if (user) {
       const effectiveRole = resolveEffectiveRole(
         user.roles,
@@ -201,7 +223,7 @@ export const LoginForm = () => {
     } else {
       setIsNavigating(false);
     }
-  }, [user, router]);
+  }), [user, router]);
 
   const isDark = themeMode === "dark";
   const themeColors = {
@@ -237,7 +259,7 @@ export const LoginForm = () => {
             fontWeight: "500",
           }}
         >
-          {t.openingPanel || "Abriendo panel..."}
+          {t.openingPanel || translateMobileCopy("Abriendo panel...")}
         </Text>
       </View>
     );
@@ -266,7 +288,7 @@ export const LoginForm = () => {
             textAlign: "center",
           }}
         >
-          Tu cuenta no tiene acceso a la app móvil
+          {translateMobileCopy("Tu cuenta no tiene acceso a la app móvil")}
         </Text>
         <Text
           style={{
@@ -276,8 +298,7 @@ export const LoginForm = () => {
             textAlign: "center",
           }}
         >
-          Los roles de Gerente y Administrador usan el panel web de
-          SaborExpress.
+          {translateMobileCopy("Los roles de Gerente y Administrador usan el panel web de SaborExpress.")}
         </Text>
         <TouchableOpacity
           style={[styles.logoutButton, { marginTop: 24 }]}
@@ -286,7 +307,7 @@ export const LoginForm = () => {
             setNoMobileAccess(false);
           }}
         >
-          <Text style={styles.logoutButtonText}>Volver a intentar</Text>
+          <Text style={styles.logoutButtonText}>{translateMobileCopy("Volver a intentar")}</Text>
         </TouchableOpacity>
       </View>
     );
@@ -327,7 +348,7 @@ export const LoginForm = () => {
 
           <View style={styles.roleBadge}>
             <Text style={styles.roleText}>
-              {ROLE_LABELS[resolvePrimaryRole(user.roles)] ?? "USUARIO"}
+              {ROLE_LABELS[resolvePrimaryRole(user.roles)] ?? translateMobileCopy("USUARIO")}
             </Text>
           </View>
         </Animated.View>
@@ -490,6 +511,8 @@ export const LoginForm = () => {
                   label={t.identifierLabel || t.usernameLabel}
                   placeholder={t.identifierPlaceholder || t.usernamePlaceholder}
                   value={identifier}
+                  keyboardType="email-address"
+                  maxLength={254}
                   inputRef={identifierRef}
                   onFocus={() => {
                     focusedFieldRef.current = "identifier";
@@ -499,8 +522,13 @@ export const LoginForm = () => {
     : undefined;
                     if (metrics) requestAnimationFrame(() => ensureFocusedFieldVisible(metrics.screenY));
                   }}
-                  onChangeText={setIdentifier}
-                  error={!!error && errorCode !== "SERVER_DOWN"}
+                  onChangeText={(value) => {
+                    setIdentifier(value);
+                    setLoginFieldErrors((previous) => ({ ...previous, identifier: undefined }));
+                    if (error) clearError();
+                  }}
+                  error={!!loginFieldErrors.identifier}
+                  errorMessage={loginFieldErrors.identifier}
                   themeColors={themeColors}
                 />
                 <AuthInput
@@ -516,11 +544,16 @@ export const LoginForm = () => {
     : undefined;
                     if (metrics) requestAnimationFrame(() => ensureFocusedFieldVisible(metrics.screenY));
                   }}
-                  onChangeText={setPassword}
+                  onChangeText={(value) => {
+                    setPassword(value);
+                    setLoginFieldErrors((previous) => ({ ...previous, password: undefined }));
+                    if (error) clearError();
+                  }}
                   secureTextEntry={!showPassword}
                   showPasswordToggle={true}
                   onTogglePassword={() => setShowPassword(!showPassword)}
-                  error={!!error && errorCode !== "SERVER_DOWN"}
+                  error={!!loginFieldErrors.password}
+                  errorMessage={loginFieldErrors.password}
                   themeColors={themeColors}
                 />
 
@@ -532,7 +565,7 @@ export const LoginForm = () => {
                   <Text style={styles.forgotText}>{t.forgotPassword}</Text>
                 </TouchableOpacity>
 
-                {error && errorCode !== "SERVER_DOWN" ? <Text style={styles.errorText}>{error}</Text> : null}
+                {error && errorCode !== "SERVER_DOWN" ? <Text accessibilityRole="alert" style={styles.errorText}>{translateMobileCopy(error)}</Text> : null}
 
                 {loading ? (
                   <ActivityIndicator
@@ -546,7 +579,7 @@ export const LoginForm = () => {
                       styles.loginButton,
                       { backgroundColor: themeColors.buttonBackground },
                     ]}
-                    onPress={() => handleLogin(identifier, password)}
+                    onPress={submitLogin}
                     activeOpacity={0.8}
                   >
                     <Text
@@ -612,8 +645,8 @@ export const LoginForm = () => {
       />
       <AnimatedSuccessModal
         visible={showClientSuccess}
-        title="¡Cuenta Creada!"
-        text="Te enviamos un correo. Presiona el botón 'Activar cuenta' para poder iniciar sesión."
+        title={translateMobileCopy("¡Cuenta Creada!")}
+        text={translateMobileCopy("Te enviamos un correo. Presiona el botón 'Activar cuenta' para poder iniciar sesión.")}
       />
       <EmailConfirmationModal
         visible={errorCode === "EMAIL_NOT_CONFIRMED"}
@@ -680,8 +713,8 @@ export const LoginForm = () => {
                 textAlign: "center",
               }}
             >
-              {error ||
-                "No se pudo conectar con el servicio del sistema. Revisa la conexión o inténtalo más tarde."}
+              {translateMobileCopy(error ||
+                "No se pudo conectar con el servicio del sistema. Revisa la conexión o inténtalo más tarde.")}
             </Text>
             <TouchableOpacity
               onPress={() => {
@@ -698,7 +731,7 @@ export const LoginForm = () => {
               }}
             >
               <Text style={{ color: "#FFFFFF", fontWeight: "700" }}>
-                Entendido
+                {translateMobileCopy("Entendido")}
               </Text>
             </TouchableOpacity>
           </View>

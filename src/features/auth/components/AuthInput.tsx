@@ -17,6 +17,7 @@ interface AuthInputProps {
   showPasswordToggle?: boolean;
   onTogglePassword?: () => void;
   error?: boolean;
+  errorMessage?: string;
   themeColors: any;
   inputRef?: React.Ref<TextInput>;
   onFocus?: () => void;
@@ -33,6 +34,7 @@ export const AuthInput: React.FC<AuthInputProps> = ({
   showPasswordToggle = false,
   onTogglePassword,
   error,
+  errorMessage,
   themeColors,
   inputRef,
   onFocus,
@@ -81,6 +83,11 @@ export const AuthInput: React.FC<AuthInputProps> = ({
           </TouchableOpacity>
         )}
       </View>
+      {errorMessage ? (
+        <Text accessibilityRole="alert" style={styles.errorText}>
+          {errorMessage}
+        </Text>
+      ) : null}
     </>
   );
 };
@@ -103,4 +110,5 @@ const styles = StyleSheet.create({
   },
   inputErrorBorder: { borderColor: "#E61C24" },
   input: { flex: 1, fontSize: 15 },
+  errorText: { color: "#E61C24", fontSize: 12, marginTop: -10, marginBottom: 12, marginLeft: 4 },
 });

@@ -5,6 +5,7 @@ import type {
   CreateAddressPayload,
   UpdateAddressPayload,
 } from "../types/address.types";
+import { deferEffect } from "@/features/shared/utils/deferEffect";
 
 export function useAddresses(customerId: number | null) {
   const [addresses, setAddresses] = useState<Address[]>([]);
@@ -36,9 +37,9 @@ export function useAddresses(customerId: number | null) {
     }
   }, [customerId]);
 
-  useEffect(() => {
+  useEffect(() => deferEffect(() => {
     fetchAddresses();
-  }, [fetchAddresses]);
+  }), [fetchAddresses]);
 
 const createAddress = async (payload: CreateAddressPayload) => {
   const created = await addressService.create(payload);

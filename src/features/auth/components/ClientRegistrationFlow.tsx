@@ -10,8 +10,8 @@ import {
 import { AuthInput } from "./AuthInput";
 import { Ionicons } from "@expo/vector-icons";
 import { authService } from "../services/authService";
-import { ROLE_NAMES } from "../types";
 import { styles } from "./style/ClientRegistrationFlow.styles";
+import { getMobileTermsAndConditions, translateMobileCopy } from "../../../locales/mobileCopy";
 
 interface ClientRegistrationFlowProps {
   onSuccess: () => void;
@@ -43,6 +43,7 @@ export const ClientRegistrationFlow: React.FC<ClientRegistrationFlowProps> = ({
   themeColors,
   t,
 }) => {
+  const termsText = getMobileTermsAndConditions() || TERMS_TEXT;
   const [formData, setFormData] = useState({
     name: "",
     lastName: "",
@@ -57,45 +58,46 @@ export const ClientRegistrationFlow: React.FC<ClientRegistrationFlowProps> = ({
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   // 🔥 nuevo: términos y condiciones
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [termsModalVisible, setTermsModalVisible] = useState(false);
 
   const validateForm = () => {
-    if (!formData.name.trim()) return "Ingresa tu nombre.";
-    if (/\d/.test(formData.name)) return "El nombre no puede contener números.";
-
-    if (!formData.lastName.trim()) return "Ingresa tu apellido.";
-    if (/\d/.test(formData.lastName))
-      return "El apellido no puede contener números.";
-
-    if (!formData.document.trim()) return "Ingresa tu documento de identidad.";
-
-    if (!formData.phone.trim()) return "Ingresa tu número de teléfono.";
-    if (!/^\d{10}$/.test(formData.phone))
-      return "Ingresa un número de teléfono válido (10 dígitos).";
-
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email))
-      return t?.errEmail || "Ingresa un correo electrónico válido.";
-    if (formData.password.length < 6)
-      return (
-        t?.clientErrPassword ||
-        "La contraseña debe tener al menos 6 caracteres."
-      );
-    if (formData.password !== formData.confirmPassword)
-      return t?.clientErrPasswordMatch || "Las contraseñas no coinciden.";
-
-    if (!acceptedTerms)
-      return "Debes aceptar los Términos y Condiciones para continuar.";
-
-    return "";
+    const errors: Record<string, string> = {};
+    if (!formData.name.trim()) errors.name = translateMobileCopy("Ingresa tu nombre.");
+    else if (/\d/.test(formData.name)) errors.name = translateMobileCopy("El nombre no puede contener números.");
+    if (!formData.lastName.trim()) errors.lastName = translateMobileCopy("Ingresa tu apellido.");
+    else if (/\d/.test(formData.lastName)) errors.lastName = translateMobileCopy("El apellido no puede contener números.");
+    if (formData.phone.trim() && !/^(?:\d{7}|\d{10})$/.test(formData.phone.trim())) {
+      errors.phone = t?.errPhone || translateMobileCopy("Ingresa un teléfono fijo de 7 dígitos o un celular de 10 dígitos.");
+    }
+    if (!formData.email.trim()) errors.email = translateMobileCopy("Ingresa un correo electrónico.");
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email.trim())) {
+      errors.email = t?.errEmail || translateMobileCopy("Ingresa un correo electrónico válido.");
+    }
+    if (!formData.password) errors.password = t?.passwordRequired || translateMobileCopy("Ingresa tu contraseña.");
+    else if (formData.password.length < 8) {
+      errors.password = t?.clientErrPassword || translateMobileCopy("La contraseña debe tener al menos 8 caracteres.");
+    }
+    if (!formData.confirmPassword) errors.confirmPassword = t?.confirmPasswordRequired || translateMobileCopy("Confirma tu contraseña.");
+    else if (formData.password !== formData.confirmPassword) {
+      errors.confirmPassword = t?.clientErrPasswordMatch || translateMobileCopy("Las contraseñas no coinciden.");
+    }
+    return {
+      errors,
+      formError: !acceptedTerms
+        ? translateMobileCopy("Debes aceptar los Términos y Condiciones para continuar.")
+        : "",
+    };
   };
 
   const handleRegister = async () => {
-    const validationError = validateForm();
-    if (validationError) {
-      setError(validationError);
+    const validation = validateForm();
+    setFieldErrors(validation.errors);
+    if (validation.formError || Object.keys(validation.errors).length > 0) {
+      setError(validation.formError);
       return;
     }
 
@@ -103,12 +105,12 @@ export const ClientRegistrationFlow: React.FC<ClientRegistrationFlowProps> = ({
     setLoading(true);
 
     try {
-      const result = await authService.registerClient({
-        name: formData.name,
-        lastName: formData.lastName,
-        document: formData.document,
-        phone: formData.phone, // 🔥 nuevo
-        email: formData.email,
+      await authService.registerClient({
+        name: formData.name.trim(),
+        lastName: formData.lastName.trim(),
+        document: formData.document.trim() || undefined,
+        phone: formData.phone.trim() || undefined,
+        email: formData.email.trim().toLowerCase(),
         password: formData.password,
       });
 
@@ -119,7 +121,7 @@ export const ClientRegistrationFlow: React.FC<ClientRegistrationFlowProps> = ({
       if (__DEV__) {
         console.log("ERROR REAL DE FETCH:", err);
       }
-      setError(err.message || "Error al conectar con el servidor.");
+      setError(translateMobileCopy(err.message || "Error al conectar con el servidor."));
     }
   };
 
@@ -134,95 +136,109 @@ export const ClientRegistrationFlow: React.FC<ClientRegistrationFlowProps> = ({
           <Ionicons name="arrow-back" size={24} color={themeColors.text} />
         </TouchableOpacity>
         <Text style={[styles.title, { color: themeColors.text }]}>
-          {t?.clientRegistrationTitle || "Crear Cuenta"}
+          {t?.clientRegistrationTitle || translateMobileCopy("Crear Cuenta")}
         </Text>
       </View>
 
       <Text style={[styles.subtitle, { color: themeColors.mutedText }]}>
         {t?.clientRegistrationSubtitle ||
-          "Regístrate para pedir tus platos favoritos más rápido."}
+          translateMobileCopy("Regístrate para pedir tus platos favoritos más rápido.")}
       </Text>
 
       <AuthInput
-        label="Nombre"
-        placeholder="Ej. Marcos"
+        label={`${translateMobileCopy("Nombre")} *`}
+        placeholder={translateMobileCopy("Ej. Marcos")}
         value={formData.name}
-        onChangeText={(text) => setFormData({ ...formData, name: text })}
+        onChangeText={(text) => { setFormData({ ...formData, name: text }); setFieldErrors((current) => ({ ...current, name: "" })); setError(""); }}
+        error={!!fieldErrors.name}
+        errorMessage={fieldErrors.name}
+        maxLength={120}
         themeColors={themeColors}
       />
 
       <AuthInput
-        label="Apellido"
-        placeholder="Ej. García"
+        label={`${translateMobileCopy("Apellido")} *`}
+        placeholder={translateMobileCopy("Ej. García")}
         value={formData.lastName}
-        onChangeText={(text) => setFormData({ ...formData, lastName: text })}
+        onChangeText={(text) => { setFormData({ ...formData, lastName: text }); setFieldErrors((current) => ({ ...current, lastName: "" })); setError(""); }}
+        error={!!fieldErrors.lastName}
+        errorMessage={fieldErrors.lastName}
+        maxLength={120}
         themeColors={themeColors}
       />
 
       <AuthInput
-        label="Documento de Identidad"
-        placeholder="Ej. 12345678"
+        label={t?.clientDocumentLabel || translateMobileCopy("Documento de Identidad")}
+        placeholder={translateMobileCopy("Ej. 12345678")}
         value={formData.document}
-        onChangeText={(text) =>
-          setFormData({ ...formData, document: text.replace(/[^0-9]/g, "") })
-        }
+        onChangeText={(text) => {
+          setFormData({ ...formData, document: text.replace(/[^0-9]/g, "") });
+          setError("");
+        }}
         themeColors={themeColors}
         keyboardType="numeric"
+        maxLength={20}
       />
 
       <AuthInput
-        label="Teléfono"
-        placeholder="Ej. 3001234567"
+        label={t?.clientPhoneLabel || translateMobileCopy("Teléfono")}
+        placeholder={translateMobileCopy("Ej. 3001234567")}
         value={formData.phone}
-        onChangeText={(text) =>
-          setFormData({ ...formData, phone: text.replace(/[^0-9]/g, "") })
-        }
+        onChangeText={(text) => { setFormData({ ...formData, phone: text.replace(/[^0-9]/g, "") }); setFieldErrors((current) => ({ ...current, phone: "" })); setError(""); }}
         themeColors={themeColors}
         keyboardType="phone-pad"
         maxLength={10}
+        error={!!fieldErrors.phone}
+        errorMessage={fieldErrors.phone}
       />
 
       <AuthInput
-        label={t?.emailLabel || "Correo Electrónico"}
+        label={`${t?.emailLabel || translateMobileCopy("Correo Electrónico")} *`}
         placeholder={t?.clientEmailPlaceholder || "correo@ejemplo.com"}
         value={formData.email}
-        onChangeText={(text) => setFormData({ ...formData, email: text })}
+        onChangeText={(text) => { setFormData({ ...formData, email: text }); setFieldErrors((current) => ({ ...current, email: "" })); setError(""); }}
         themeColors={themeColors}
+        keyboardType="email-address"
+        maxLength={254}
+        error={!!fieldErrors.email}
+        errorMessage={fieldErrors.email}
       />
 
       <AuthInput
-        label={t?.passwordLabel || "Contraseña"}
+        label={`${t?.passwordLabel || translateMobileCopy("Contraseña")} *`}
         placeholder={
           t?.clientPasswordPlaceholder || "Crea una contraseña segura"
         }
         value={formData.password}
-        onChangeText={(text) => setFormData({ ...formData, password: text })}
+        onChangeText={(text) => { setFormData({ ...formData, password: text }); setFieldErrors((current) => ({ ...current, password: "" })); setError(""); }}
         secureTextEntry={!showPassword}
         showPasswordToggle={true}
         onTogglePassword={() => setShowPassword(!showPassword)}
         themeColors={themeColors}
+        error={!!fieldErrors.password}
+        errorMessage={fieldErrors.password}
       />
 
       <AuthInput
-        label={t?.clientConfirmPasswordLabel || "Confirmar Contraseña"}
+        label={`${t?.clientConfirmPasswordLabel || translateMobileCopy("Confirmar contraseña")} *`}
         placeholder={
           t?.clientConfirmPasswordPlaceholder || "Repite tu contraseña"
         }
         value={formData.confirmPassword}
-        onChangeText={(text) =>
-          setFormData({ ...formData, confirmPassword: text })
-        }
+        onChangeText={(text) => { setFormData({ ...formData, confirmPassword: text }); setFieldErrors((current) => ({ ...current, confirmPassword: "" })); setError(""); }}
         secureTextEntry={!showConfirmPassword}
         showPasswordToggle={true}
         onTogglePassword={() => setShowConfirmPassword(!showConfirmPassword)}
         themeColors={themeColors}
+        error={!!fieldErrors.confirmPassword}
+        errorMessage={fieldErrors.confirmPassword}
       />
 
       {/* 🔥 CHECKBOX TÉRMINOS Y CONDICIONES */}
       <TouchableOpacity
         style={styles.termsRow}
         activeOpacity={0.7}
-        onPress={() => setAcceptedTerms(!acceptedTerms)}
+        onPress={() => { setAcceptedTerms(!acceptedTerms); setError(""); }}
       >
         <View
           style={[styles.checkbox, acceptedTerms && styles.checkboxChecked]}
@@ -232,12 +248,12 @@ export const ClientRegistrationFlow: React.FC<ClientRegistrationFlowProps> = ({
           )}
         </View>
         <Text style={[styles.termsText, { color: themeColors.text }]}>
-          Acepto los{" "}
+          {translateMobileCopy("Acepto los")}{" "}
           <Text
             style={styles.termsLink}
             onPress={() => setTermsModalVisible(true)}
           >
-            Términos y Condiciones
+            {translateMobileCopy("Términos y Condiciones")}
           </Text>
         </Text>
       </TouchableOpacity>
@@ -262,7 +278,7 @@ export const ClientRegistrationFlow: React.FC<ClientRegistrationFlowProps> = ({
           <Text
             style={[styles.submitButtonText, { color: themeColors.buttonText }]}
           >
-            {t?.clientRegisterButton || "Registrarme"}
+            {t?.clientRegisterButton || translateMobileCopy("Registrarme")}
           </Text>
         </TouchableOpacity>
       )}
@@ -283,7 +299,7 @@ export const ClientRegistrationFlow: React.FC<ClientRegistrationFlowProps> = ({
           >
             <View style={styles.modalHeader}>
               <Text style={[styles.modalTitle, { color: themeColors.text }]}>
-                Términos y Condiciones
+                {translateMobileCopy("Términos y Condiciones")}
               </Text>
               <TouchableOpacity onPress={() => setTermsModalVisible(false)}>
                 <Ionicons name="close" size={26} color={themeColors.text} />
@@ -291,7 +307,7 @@ export const ClientRegistrationFlow: React.FC<ClientRegistrationFlowProps> = ({
             </View>
             <ScrollView style={styles.modalScroll}>
               <Text style={[styles.modalBodyText, { color: themeColors.text }]}>
-                {TERMS_TEXT}
+                {termsText}
               </Text>
             </ScrollView>
             <TouchableOpacity
@@ -310,7 +326,7 @@ export const ClientRegistrationFlow: React.FC<ClientRegistrationFlowProps> = ({
                   { color: themeColors.buttonText },
                 ]}
               >
-                Aceptar
+                {translateMobileCopy("Aceptar")}
               </Text>
             </TouchableOpacity>
           </View>
