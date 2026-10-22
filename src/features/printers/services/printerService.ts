@@ -23,6 +23,7 @@ import {
 import type { PaperWidth, SalesReceipt, SavedPrinter } from '../types';
 import type { ApiLanguage } from '@/features/auth/services/apiLanguage';
 import { PRINTER_SETTINGS_COPY } from "@/locales/PrinterSettingsTranslations";
+import { persistPrinterAfterSuccessfulTest } from './printerSelectionWorkflow';
 
 /** The Bluetooth native module is not bundled in Expo Go. */
 export function isNativePrinterAvailable(): boolean {
@@ -69,16 +70,35 @@ export async function isClassicPrinterReachable(address: string): Promise<boolea
 }
 
 /** Conectar PRIMERO y guardar SOLO después de comprobar que conectó. */
-export async function selectPrinter(device: PrinterDevice, paperWidth: PaperWidth, unnamedDeviceLabel = 'Impresora sin nombre'): Promise<SavedPrinter> {
+export async function selectPrinter(
+  device: PrinterDevice,
+  paperWidth: PaperWidth,
+  unnamedDeviceLabel = 'Impresora sin nombre',
+  language: ApiLanguage = 'es',
+): Promise<SavedPrinter> {
   await requireBluetooth();
-  await connectToPrinter(device.address);
   const selected: SavedPrinter = {
     address: device.address,
     name: device.name || unnamedDeviceLabel,
     paperWidth,
   };
-  await savePrinter(selected);
-  await savePrinterSelection('classic');
+  await withPrintLock(async () => {
+    let connected = false;
+    try {
+      await connectToPrinter(device.address);
+      connected = true;
+      await persistPrinterAfterSuccessfulTest(
+        selected,
+        () => printBytes(buildTestReceipt(selected.name, selected.paperWidth, language)),
+        async () => {
+          await savePrinter(selected);
+          await savePrinterSelection('classic');
+        },
+      );
+    } finally {
+      if (connected) await disconnectPrinter().catch(() => undefined);
+    }
+  });
   return selected;
 }
 
@@ -161,7 +181,7 @@ export function printerErrorMessage(error: unknown, language: ApiLanguage = 'es'
     if ((message.includes('permiso') && message.includes('dispositivos')) || message.includes('permission')) return copy.permission;
     if (message.includes('en curso') || message.includes('enviando un recibo')) return copy.busy;
     if (message.includes('protocolo') || message.includes('no expone')) return copy.bleProtocolError;
-    return error.message;
+    return copy.generalError;
   }
   return copy.generalError;
 }
