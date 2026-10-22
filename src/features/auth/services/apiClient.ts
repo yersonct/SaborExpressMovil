@@ -6,7 +6,7 @@ import {
   clearSession,
 } from "./tokenStorage";
 import { AUTH_ENDPOINTS } from "./authEndpoints";
-import { notifySessionExpired } from "./authEvents";
+import { notifySessionExpired, notifySessionUpdated } from "./authEvents";
 import { isServerDownStatus } from "./serverHealth";
 import { ROLE_NAMES } from "../types/role";
 import { getApiLanguage } from "./apiLanguage";
@@ -137,10 +137,10 @@ async function doRefresh(): Promise<string | null> {
 
     const previous = await loadSession();
     const newRoles: string[] = data.roles ?? [];
-    const lostRole = (previous?.roles ?? []).some(
-      (r) => OPERATIVE_ROLES.includes(r) && !newRoles.includes(r),
+    const retainsMobileAccess = newRoles.some(
+      (role) => role === ROLE_NAMES.Cliente || OPERATIVE_ROLES.includes(role),
     );
-    if (lostRole) {
+    if (previous?.roles.length && !retainsMobileAccess) {
       await clearSession();
       notifySessionExpired("role_revoked");
       return null;
@@ -148,14 +148,16 @@ async function doRefresh(): Promise<string | null> {
 
     // Guardamos la sesión completa renovada (nuevo token + nuevo refreshToken rotado)
     if (!(await refreshTokenIsCurrent())) return await getToken();
-    await saveSession({
+    const updatedSession = {
       token: data.token,
       refreshToken: data.refreshToken,
       identifier: data.identifier,
       roles: data.roles ?? [],
       hasActiveShift: data.hasActiveShift ?? true,
       activeShiftRoleName: data.activeShiftRoleName ?? null,
-    });
+    };
+    await saveSession(updatedSession);
+    notifySessionUpdated(updatedSession);
 
     return data.token;
   } catch (error) {

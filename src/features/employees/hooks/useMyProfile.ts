@@ -4,6 +4,7 @@ import type {
   EmployeeMe,
   UpdateEmployeeMePayload,
 } from "../types/employee.types";
+import { deferEffect } from "@/features/shared/utils/deferEffect";
 
 export function useMyProfile() {
   const [profile, setProfile] = useState<EmployeeMe | null>(null);
@@ -23,9 +24,9 @@ export function useMyProfile() {
     }
   }, []);
 
-  useEffect(() => {
+  useEffect(() => deferEffect(() => {
     fetchProfile();
-  }, [fetchProfile]);
+  }), [fetchProfile]);
 
   const updateProfile = async (payload: UpdateEmployeeMePayload) => {
     const updated = await employeeService.updateMe(payload);

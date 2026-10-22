@@ -25,6 +25,7 @@ import {
   LanguageCode,
 } from "../../../locales/DeliveryTranslations";
 import { styles } from "./style/DeliveryOrdersListStyles";
+import { translateMobileCopy } from "../../../locales/mobileCopy";
 import { NotificationBell } from "@/features/notifications/components/NotificationBell";
 import {
   useUserNotifications,
@@ -33,6 +34,7 @@ import { employeeService } from "@/features/employees/services/employeeService";
 import { subscribeToNetworkRecovery } from "@/features/shared/services/networkStatus";
 import { loadSession } from "@/features/auth/services/tokenStorage";
 import { useRealtimeEvents } from "@/features/shared/hooks/useRealtimeEvents";
+import { deferEffect } from "@/features/shared/utils/deferEffect";
 
 
 export const DeliveryOrdersList = () => {
@@ -132,10 +134,10 @@ export const DeliveryOrdersList = () => {
       }
     },
     [
-      profile?.id,
-      profile?.isAvailable,
+      profile,
       hasInTransitDelivery,
       reportDeliveryLocation,
+      t.gpsPermissionRequired,
     ],
   );
 
@@ -144,9 +146,9 @@ export const DeliveryOrdersList = () => {
       if (!profile?.id) return;
       if (!silent) setLoading(true);
       try {
-        // Actualizar GPS antes del GET: ese endpoint también reintenta pedidos
-        // que esperaban un repartidor y así toma la ubicación más reciente.
-        await reportDriverLocation();
+        // GPS y pedidos se cargan en paralelo. Esperar una lectura GPS puede
+        // dejar la lista vacía varios segundos, aunque la entrega ya esté asignada.
+        void reportDriverLocation().catch(() => undefined);
         const data = await deliveryService.getByEmployee(profile.id);
         // Solo lo activo — lo ya entregado no se muestra aquí
         setDeliveries(
@@ -176,7 +178,7 @@ export const DeliveryOrdersList = () => {
         if (!silent) setLoading(false);
       }
     },
-    [language, profile?.id, reportDriverLocation],
+    [profile, reportDriverLocation, t.deliveryLoadError, t.errorTitle],
   );
 
   useEffect(() => {
@@ -253,9 +255,10 @@ export const DeliveryOrdersList = () => {
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (state) => {
       if (state !== "active") return;
-      void employeeService.setAvailability(true)
-        .then(() => fetchDeliveries(true))
-        .catch(() => undefined);
+      // No retener la lista mientras el backend reactiva presencia y reintenta
+      // asignaciones pendientes. Los eventos de entregas refrescan lo nuevo.
+      void fetchDeliveries(true);
+      void employeeService.setAvailability(true).catch(() => undefined);
       void refetchProfile();
     });
     return () => subscription.remove();
@@ -287,15 +290,15 @@ export const DeliveryOrdersList = () => {
         mounted = false;
         clearInterval(heartbeat);
       };
-    }, [profile?.id, profile?.isAvailable, refetchProfile]),
+    }, [profile, refetchProfile]),
   );
 
   // Mantiene el modal abierto sincronizado con el último refresco de la lista
-  useEffect(() => {
+  useEffect(() => deferEffect(() => {
     setSelectedDelivery((prev) =>
       prev ? (deliveries.find((d) => d.id === prev.id) ?? prev) : prev,
     );
-  }, [deliveries]);
+  }), [deliveries]);
 
   const handleOpenDelivery = (delivery: Delivery) => {
     setSelectedDelivery(delivery);
@@ -372,7 +375,7 @@ export const DeliveryOrdersList = () => {
       >
         <View style={styles.orderHeader}>
           <Text style={[styles.orderId, { color: colors.text }]}>
-            Pedido #{item.orderId}
+            {translateMobileCopy("Pedido #{{id}}", { id: item.orderId })}
           </Text>
           <View
             style={[
@@ -448,8 +451,10 @@ export const DeliveryOrdersList = () => {
               ]}
             >
               {mustCollect
-                ? `Cobrar $${Math.round(item.amountPending).toLocaleString("es-CO")}`
-                : (item.paymentMethod ?? "Pagado")}
+                ? translateMobileCopy("Cobrar ${{amount}}", {
+                    amount: Math.round(item.amountPending).toLocaleString(language === "fr" ? "fr-FR" : language === "pt" ? "pt-BR" : language === "en" ? "en-US" : "es-CO"),
+                  })
+                : translateMobileCopy(item.paymentMethod ?? "Pagado")}
             </Text>
           </View>
         </View>
@@ -594,7 +599,7 @@ export const DeliveryOrdersList = () => {
               {t.noAssignedOrders}
             </Text>
             <Text style={{ color: colors.muted, textAlign: "center", marginTop: 12, paddingHorizontal: 24 }}>
-              Los pedidos pendientes se asignarán automáticamente cuando haya cupo en tu turno.
+              {translateMobileCopy("Los pedidos pendientes se asignarán automáticamente cuando haya cupo en tu turno.")}
             </Text>
           </View>
         }

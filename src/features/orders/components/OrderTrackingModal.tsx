@@ -28,6 +28,8 @@ import {
 import { getClientLocale, useClientPreferences, useClientThemedStyles } from "@/features/userPreferences/context/ClientPreferencesContext";
 import { DELIVERY_LOCATION_UPDATED } from "@/features/shared/services/realtimeEvents";
 import { useRealtimeEvents } from "@/features/shared/hooks/useRealtimeEvents";
+import { translateMobileCopy } from "../../../locales/mobileCopy";
+import { deferEffect } from "@/features/shared/utils/deferEffect";
 
 type Props = {
   visible: boolean;
@@ -46,6 +48,8 @@ export function OrderTrackingModal({
 }: Props) {
   const s = useClientThemedStyles(baseStyles);
   const { t, language } = useClientPreferences();
+  const orderId = order?.id;
+  const orderType = order?.orderType;
   const [delivery, setDelivery] = useState<Delivery | null>(null);
   const [driverPosition, setDriverPosition] = useState<{
     latitude: number;
@@ -55,7 +59,7 @@ export function OrderTrackingModal({
   const [isDriverPositionLive, setIsDriverPositionLive] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
+  useEffect(() => deferEffect(() => {
     if (!driverPosition?.updatedAt) {
       setIsDriverPositionLive(false);
       return;
@@ -71,11 +75,11 @@ export function OrderTrackingModal({
     refreshFreshness();
     const interval = setInterval(refreshFreshness, 10_000);
     return () => clearInterval(interval);
-  }, [driverPosition?.updatedAt]);
+  }), [driverPosition?.updatedAt]);
 
   const load = useCallback(
     async (silent = false) => {
-      if (!order || order.orderType !== OrderType.Delivery) {
+      if (!orderId || orderType !== OrderType.Delivery) {
         setDelivery(null);
         setDriverPosition(null);
         return;
@@ -83,8 +87,8 @@ export function OrderTrackingModal({
       if (!silent) setLoading(true);
       try {
         const [list, tracking] = await Promise.all([
-          deliveryService.getByOrder(order.id).catch(() => null),
-          deliveryService.getCustomerTracking(order.id).catch(() => null),
+          deliveryService.getByOrder(orderId).catch(() => null),
+          deliveryService.getCustomerTracking(orderId).catch(() => null),
         ]);
         if (list) setDelivery(list[0] ?? null);
         if (tracking) {
@@ -104,23 +108,23 @@ export function OrderTrackingModal({
         if (!silent) setLoading(false);
       }
     },
-    [order?.id, order?.orderType],
+    [orderId, orderType],
   );
 
-  useEffect(() => {
+  useEffect(() => deferEffect(() => {
     if (!visible) return;
     setDelivery(null);
     setDriverPosition(null);
     load();
-  }, [visible, load, refreshKey]);
+  }), [visible, load, refreshKey]);
 
   // Mientras el mapa esté abierto, consulta de respaldo cada 15 segundos.
   // Sólo el pedido del cliente autorizado; el backend controla la propiedad.
   useEffect(() => {
-    if (!visible || !order || order.orderType !== OrderType.Delivery) return;
+    if (!visible || !orderId || orderType !== OrderType.Delivery) return;
     const timer = setInterval(() => { void load(true); }, 15000);
     return () => clearInterval(timer);
-  }, [visible, order?.id, order?.orderType, load]);
+  }, [visible, orderId, orderType, load]);
 
   useRealtimeEvents(
     [DELIVERY_LOCATION_UPDATED, "OrdersChanged", "DeliveriesChanged", "RealtimeConnected"],
@@ -193,7 +197,7 @@ export function OrderTrackingModal({
               : []),
           ]
         : [],
-    [destination, delivery?.addressText, delivery?.status, driverPosition, isDriverPositionLive],
+    [destination, delivery?.addressText, delivery?.status, driverPosition, isDriverPositionLive, t],
   );
 
   if (!order) return null;
@@ -275,7 +279,7 @@ export function OrderTrackingModal({
         {delivery?.status === DeliveryStatus.Assigned && !cancelled && (
           <View style={{ paddingHorizontal: 16, paddingVertical: 10, backgroundColor: "#EFF6FF" }}>
             <Text style={{ color: "#1D4ED8", fontSize: 12, fontWeight: "600" }}>
-              Repartidor asignado. Verás su ubicación cuando inicie el recorrido.
+              {translateMobileCopy("Repartidor asignado. Verás su ubicación cuando inicie el recorrido.")}
             </Text>
           </View>
         )}
@@ -349,7 +353,7 @@ export function OrderTrackingModal({
               <View style={s.ratedBox}>
                 <Ionicons name="star" size={18} color="#F59E0B" />
                 <Text style={s.ratedText}>
-                  Calificaste al repartidor con {delivery.customerRating}/5
+                  {translateMobileCopy("Calificaste al repartidor con {{rating}}/5", { rating: delivery.customerRating })}
                 </Text>
               </View>
             ) : (

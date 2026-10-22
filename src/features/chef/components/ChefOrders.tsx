@@ -2,7 +2,6 @@ import React, { useCallback, useEffect, useState } from "react";
 import {
   View,
   Text,
-  ScrollView,
   RefreshControl,
   ActivityIndicator,
   TouchableOpacity,
@@ -18,7 +17,7 @@ import {
 } from "@/features/orders/types/order.types";
 import { useMyBranch } from "@/features/employees/hooks/useMyBranch";
 import { useMyProfile } from "@/features/employees/hooks/useMyProfile";
-import { chefStyles, boardStyles } from "./style/ChefStyles";
+import { chefStyles } from "./style/ChefStyles";
 import { useChefTheme } from "../context/ChefThemeContext";
 import { useChefLanguage } from "../context/ChefLanguageContext";
 import PedidoCard from "./PedidoCard";
@@ -54,19 +53,6 @@ const nextStatus = (status: OrderDetailStatus): OrderDetailStatus | null => {
   return null;
 };
 
-const COLUMNS: { status: OrderDetailStatus; label: string; color: string }[] = [
-  {
-    status: OrderDetailStatus.Pending,
-    label: "Por preparar",
-    color: "#f97316",
-  },
-  {
-    status: OrderDetailStatus.InPreparation,
-    label: "En preparación",
-    color: "#3b82f6",
-  },
-  { status: OrderDetailStatus.Ready, label: "Listos", color: "#22c55e" },
-];
 
 // Agrupa los items de todos los pedidos en "lotes" (orderId + batchNumber).
 // El estado del lote es el estado del primer item vivo (todos los items de
@@ -199,7 +185,7 @@ export default function ChefOrders() {
         next,
       );
       await loadOrders();
-    } catch (err) {
+    } catch {
       loadOrders();
     }
   };

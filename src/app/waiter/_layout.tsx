@@ -2,17 +2,17 @@ import React from "react";
 import { View, ActivityIndicator } from "react-native";
 import { Tabs, Redirect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { WaiterThemeProvider } from "@/features/waiter/context/WaiterThemeContext";
+import { WaiterThemeProvider , useWaiterTheme } from "@/features/waiter/context/WaiterThemeContext";
 import { WaiterNotificationPreferencesProvider } from "@/features/waiter/context/WaiterNotificationPreferencesContext";
 import {
   WaiterLanguageProvider,
   useWaiterLanguage,
 } from "@/features/waiter/context/WaiterLanguageContext";
 import { useAuth } from "../../features/auth/context/AuthContext";
-import { resolveEffectiveRole, resolvePrimaryRole } from "../../features/auth/services/roleMap";
+import { resolveEffectiveRole } from "../../features/auth/services/roleMap";
 import { ROLE_NAMES } from "../../features/auth/types/role";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useWaiterTheme } from "@/features/waiter/context/WaiterThemeContext";
+import { MOBILE_TYPOGRAPHY } from "@/features/shared/theme/mobileTypography";
 import { WaiterPushNotificationRegistration } from "@/features/waiter/components/WaiterPushNotificationRegistration";
 import { AppAlertModal } from "@/features/shared/components/AppAlertModal";
 import { getUserIdFromToken } from "@/features/auth/services/decodeToken";
@@ -36,13 +36,7 @@ function WaiterAppAlertModal() {
   );
 }
 
-export default function WaiterTabsLayout() {
-  const { user, initializing } = useAuth();
-  const preferenceScope = user
-    ? String(getUserIdFromToken(user.token) ?? user.identifier.trim().toLowerCase())
-    : "anonymous";
-
-  const WrappedTabs = () => {
+function WrappedTabs() {
     const { t, hydrated } = useWaiterLanguage();
     const { colors } = useWaiterTheme();
     const insets = useSafeAreaInsets();
@@ -70,10 +64,7 @@ export default function WaiterTabsLayout() {
           },
           tabBarActiveTintColor: colors.accent,
           tabBarInactiveTintColor: colors.mutedText,
-          tabBarLabelStyle: {
-            fontSize: 12,
-            fontWeight: "bold",
-          },
+          tabBarLabelStyle: MOBILE_TYPOGRAPHY.tabLabel,
         }}
       >
         <Tabs.Screen
@@ -105,7 +96,15 @@ export default function WaiterTabsLayout() {
         />
       </Tabs>
     );
-  };
+}
+
+export default function WaiterTabsLayout() {
+  const { user, initializing } = useAuth();
+  const preferenceScope = user
+    ? String(getUserIdFromToken(user.token) ?? user.identifier.trim().toLowerCase())
+    : "anonymous";
+
+
 
   if (initializing) {
     return (

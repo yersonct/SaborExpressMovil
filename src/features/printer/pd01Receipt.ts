@@ -1,5 +1,8 @@
 import type { Invoice } from "@/features/invoices/types/invoice.types";
 import type { Order } from "@/features/cashier/components/CashierData";
+import type { InvoicePdfLabels } from "@/features/invoices/services/invoicePdfTemplate";
+import type { ApiLanguage } from "@/features/auth/services/apiLanguage";
+import { PRINTER_SETTINGS_COPY } from "@/locales/PrinterSettingsTranslations";
 import { GLYPHS } from "./pd01Font";
 
 export const PD01_WIDTH = 384;
@@ -14,30 +17,57 @@ const printable = (value: string) => value
   .replace(/ñ/gi, (m) => m === "ñ" ? "n" : "N")
   .replace(/[^\x20-\x7e]/g, "?");
 
-export function buildReceiptLines(invoice: Invoice, order: Order, paymentMethod: string): string[] {
-  const fmt = (v: number) => `$${Number(v || 0).toLocaleString("es-CO", {maximumFractionDigits: 0})}`;
+export function buildReceiptLines(invoice: Invoice, order: Order, paymentMethod: string, labels: InvoicePdfLabels): string[] {
+  const fmt = (v: number) => new Intl.NumberFormat(labels.locale || "es-CO", {
+    style: "currency", currency: "COP", maximumFractionDigits: 0,
+  }).format(Number(v || 0));
+  const items = invoice.items?.length
+    ? invoice.items.map((item) => ({
+        name: `${item.name}${item.isToGo ? ` (${labels.takeaway})` : ""}${item.notes ? ` — ${item.notes}` : ""}`,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        total: item.total,
+      }))
+    : order.receiptItems || [];
   const lines = [
     "           SABOREXPRESS",
-    invoice.branchName || "Sede SaborExpress",
+    invoice.branchName || "SaborExpress",
+    ...(invoice.branchAddress ? [`${labels.branchAddressLabel}: ${invoice.branchAddress}`] : []),
+    ...(invoice.branchPhone ? [`${labels.branchPhone}: ${invoice.branchPhone}`] : []),
     "--------------------------------",
-    `FACTURA ${invoice.invoiceNumber}`,
-    `Pedido #${invoice.orderId}`,
-    new Date(invoice.issuedAt).toLocaleString("es-CO", { timeZone: "America/Bogota" }),
-    `Cliente: ${invoice.customerName || order.customerName || "Consumidor final"}`,
-    `Tipo: ${order.type === "mesa" ? `Mesa ${order.table || ""}` : "Para llevar"}`,
-    `Pago: ${paymentMethod}`,
+    labels.title,
+    `${labels.invoiceNumber}: ${invoice.invoiceNumber}`,
+    `${labels.date}: ${new Intl.DateTimeFormat(labels.locale || "es-CO", { timeZone: "America/Bogota", dateStyle: "short", timeStyle: "short" }).format(new Date(invoice.issuedAt))}`,
+    `${labels.order}: #${invoice.orderId}`,
+    ...(order.type === "mesa" ? [`${labels.table}: ${order.table ?? invoice.tableNumber ?? "—"}`] : []),
+    `${labels.customer}: ${invoice.customerName || order.customerName || "—"}`,
+    ...(invoice.customerDocument ? [`${labels.customerDocument}: ${invoice.customerDocument}`] : []),
+    ...(invoice.customerEmail ? [`${labels.customerEmail}: ${invoice.customerEmail}`] : []),
+    ...(invoice.deliveryAddressLine ? [`${labels.deliveryAddress}: ${invoice.deliveryAddressLine}`] : []),
+    ...(invoice.deliveryAddressReference ? [`${labels.deliveryReference}: ${invoice.deliveryAddressReference}`] : []),
+    ...(invoice.cashierName ? [`${labels.cashier}: ${invoice.cashierName}`] : []),
+    `${labels.orderType}: ${labels.orderTypeValue}`,
+    `${labels.payment}: ${paymentMethod}`,
     "--------------------------------",
-    "PRODUCTOS",
-    ...(order.items?.split("\n").filter(Boolean) || []),
+    labels.items,
+    ...items.flatMap((item) => [
+      item.name,
+      `${labels.quantity}: ${item.quantity} x ${fmt(item.unitPrice)}`,
+      `${labels.itemTotal}: ${fmt(item.total ?? item.quantity * item.unitPrice)}`,
+    ]),
+    ...(!items.length ? (order.items?.split("\n").filter(Boolean) || []) : []),
     "--------------------------------",
-    `Subtotal productos: ${fmt(invoice.subTotal)}`,
+    `${labels.subtotal}: ${fmt(invoice.subTotal)}`,
   ];
   if (invoice.tax > 0) {
-    const taxMode = invoice.taxIncludedInPrice ? "incluido" : "adicional";
-    lines.push(`Impoconsumo ${taxMode} (${invoice.taxRate}%): ${fmt(invoice.tax)}`);
+    const taxLabel = invoice.taxIncludedInPrice ? labels.tax : labels.taxLegacy || labels.tax;
+    lines.push(`${taxLabel}${invoice.taxRate > 0 ? ` (${invoice.taxRate}%)` : ""}: ${fmt(invoice.tax)}`);
   }
-  if (invoice.deliveryFee > 0) lines.push(`Domicilio: ${fmt(invoice.deliveryFee)}`);
-  lines.push("--------------------------------", `TOTAL: ${fmt(invoice.total)}`, "--------------------------------", "Gracias por tu compra", "", "");
+  if (invoice.deliveryFee > 0) lines.push(`${labels.deliveryFee || labels.orderType}: ${fmt(invoice.deliveryFee)}`);
+  if (invoice.paymentAmount !== undefined && invoice.paymentAmount !== null) {
+    lines.push(`${labels.paymentAmount}: ${fmt(invoice.paymentAmount)}`);
+  }
+  lines.push("--------------------------------", `${labels.total}: ${fmt(invoice.total)}`, "--------------------------------", labels.receiptNotice, labels.receiptFooter, "", "");
   return lines;
 }
 
@@ -83,6 +113,7 @@ export function receiptLinesToBitmap(lines: string[]): Pd01Row[] {
   return rows;
 }
 
-export function buildPd01TestRows(): Pd01Row[] {
-  return receiptLinesToBitmap(["SABOREXPRESS", "PRUEBA DE IMPRESION", "Impresora PD01", "Bluetooth OK", "", ""]);
+export function buildPd01TestRows(language: ApiLanguage = "es"): Pd01Row[] {
+  const copy = PRINTER_SETTINGS_COPY[language];
+  return receiptLinesToBitmap(["SABOREXPRESS", copy.testHeading, copy.pd01Title, copy.connectedSuccess, "", ""]);
 }

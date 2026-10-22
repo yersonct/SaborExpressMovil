@@ -4,6 +4,7 @@ import type {
   CustomerMe,
   UpdateCustomerMePayload,
 } from "../types/customer.types";
+import { deferEffect } from "@/features/shared/utils/deferEffect";
 
 export function useCompleteProfile() {
   const [customer, setCustomer] = useState<CustomerMe | null>(null);
@@ -23,9 +24,9 @@ export function useCompleteProfile() {
     }
   }, []);
 
-  useEffect(() => {
+  useEffect(() => deferEffect(() => {
     fetchMe();
-  }, [fetchMe]);
+  }), [fetchMe]);
 
   const completeProfile = async (payload: UpdateCustomerMePayload) => {
     const updated = await customerService.updateMe(payload);

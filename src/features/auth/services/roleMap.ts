@@ -1,4 +1,4 @@
-import { ROLE_NAMES, type RoleName } from "../types/role";
+import { ROLE_NAMES, type RoleName } from "../types/role.ts";
 
 export const ROLE_ROUTES: Record<RoleName, string> = {
   [ROLE_NAMES.Cliente]: "/client",
@@ -50,6 +50,8 @@ export function resolveEffectiveRole(
   hasActiveShift: boolean,
   activeShiftRoleName?: string | null
 ): RoleName {
+  if (!hasActiveShift) return ROLE_NAMES.Cliente;
+
   // Si el backend ya nos dice EXACTAMENTE cuál rol tiene el turno activo,
   // usamos ese directo — sin adivinar por prioridad fija. Esto resuelve
   // el caso de un empleado con más de un rol operativo (ej. Mesero +
@@ -60,10 +62,6 @@ export function resolveEffectiveRole(
   }
 
   const primary = resolvePrimaryRole(roles);
-
-  if (primary !== ROLE_NAMES.Cliente && !hasActiveShift) {
-    return ROLE_NAMES.Cliente;
-  }
 
   return primary;
 }

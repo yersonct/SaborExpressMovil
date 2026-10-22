@@ -18,7 +18,6 @@ import { isColombiaToday } from "@/features/shared/utils/colombia-date";
 import { useAuth } from "@/features/auth/context/AuthContext";
 import { getCustomerIdFromToken } from "@/features/auth/services/decodeToken";
 import { useAddresses } from "@/features/addresses/hooks/useAddresses";
-import { DrawerActions } from "expo-router/react-navigation";
 import { useCompleteProfile } from "@/features/customers/hooks/useCompleteProfile";
 import { useActiveClientOrder } from "@/features/orders/hooks/useActiveClientOrder";
 import { useClientOrders } from "@/features/orders/hooks/useClientOrders";
@@ -33,6 +32,8 @@ import type { Delivery } from "@/features/delivery/types/delivery.types";
 import { deliveryService } from "@/features/delivery/services/deliveryService";
 import { OrderTrackingModal } from "@/features/orders/components/OrderTrackingModal";
 import RateDriverModal from "@/features/delivery/components/RateDriverModal";
+import { translateMobileCopy } from "../../locales/mobileCopy";
+import { deferEffect } from "@/features/shared/utils/deferEffect";
 
 const STATUS_UI: Record<
   OrderStatus,
@@ -81,6 +82,7 @@ type FieldProps = {
   locked?: boolean;
   error?: string;
   keyboardType?: "default" | "phone-pad";
+  maxLength?: number;
   placeholder?: string;
 };
 
@@ -92,6 +94,7 @@ function Field({
   locked = false,
   error,
   keyboardType = "default",
+  maxLength,
   placeholder,
 }: FieldProps) {
   const styles = useClientThemedStyles(baseStyles);
@@ -109,6 +112,7 @@ function Field({
         onChangeText={onChangeText}
         editable={!disabled}
         keyboardType={keyboardType}
+        maxLength={maxLength}
         placeholder={placeholder}
         placeholderTextColor="#94A3B8"
       />
@@ -165,12 +169,12 @@ export default function ClientProfile() {
   const [trackingOrder, setTrackingOrder] = useState<OrderSummary | null>(null);
 
   // Las notificaciones abren un pedido concreto del propio cliente.
-  useEffect(() => {
+  useEffect(() => deferEffect(() => {
     const id = Number(Array.isArray(requestedOrderId) ? requestedOrderId[0] : requestedOrderId);
     if (!Number.isSafeInteger(id) || id <= 0 || loadingOrders) return;
     const myOrder = orders.find((o) => o.id === id);
     if (myOrder) setTrackingOrder(myOrder);
-  }, [requestedOrderId, loadingOrders, orders]);
+  }), [requestedOrderId, loadingOrders, orders]);
   const [rateTarget, setRateTarget] = useState<Delivery | null>(null);
   const [trackingRefresh, setTrackingRefresh] = useState(0);
   const askedRatingFor = useRef<number | null>(null);
@@ -199,22 +203,22 @@ export default function ClientProfile() {
     lastName: "",
     phone: "",
   });
-  const [errors, setErrors] = useState({ name: "", phone: "" });
+  const [errors, setErrors] = useState({ name: "", lastName: "", phone: "" });
 
-  const fillForm = () => {
+  const fillForm = useCallback(() => {
     if (!customer) return;
     setFormData({
       name: customer.name ?? "",
       lastName: customer.lastName ?? "",
       phone: customer.phone ?? "",
     });
-    setErrors({ name: "", phone: "" });
-  };
+    setErrors({ name: "", lastName: "", phone: "" });
+  }, [customer]);
 
   // Sincroniza el formulario cuando llegan los datos reales del backend
-  useEffect(() => {
+  useEffect(() => deferEffect(() => {
     fillForm();
-  }, [customer]);
+  }), [fillForm]);
 
   const setField = (field: keyof typeof formData, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -227,8 +231,9 @@ export default function ClientProfile() {
   };
 
   const handleSaveProfile = async () => {
-    const newErrors = { name: "", phone: "" };
+    const newErrors = { name: "", lastName: "", phone: "" };
     const name = formData.name.trim();
+    const lastName = formData.lastName.trim();
     const phone = formData.phone.replace(/\s/g, "");
 
     if (!name) newErrors.name = t("nameRequired");
@@ -237,13 +242,16 @@ export default function ClientProfile() {
     else if (/\d/.test(name))
       newErrors.name = t("nameNoDigits");
 
+    if (lastName && /\d/.test(lastName))
+      newErrors.lastName = translateMobileCopy("El apellido no puede contener números.");
+
     // Mismo formato que valida el backend: 7 dígitos (fijo) o 10 (celular).
     if (!phone) newErrors.phone = t("phoneRequired");
     else if (!/^\d{7}(\d{3})?$/.test(phone))
       newErrors.phone = t("phoneFormat");
 
     setErrors(newErrors);
-    if (newErrors.name || newErrors.phone) return;
+    if (newErrors.name || newErrors.lastName || newErrors.phone) return;
 
     // La dirección registrada es la predeterminada. Se envía siempre, porque
     // si no, el backend la deja en null. Debe medir entre 5 y 150 caracteres.
@@ -256,7 +264,7 @@ export default function ClientProfile() {
     try {
       await completeProfile({
         name,
-        lastName: formData.lastName.trim() || undefined,
+        lastName: lastName || undefined,
         phone,
         address: addressToSend,
       });
@@ -432,7 +440,11 @@ export default function ClientProfile() {
                 >
                   <Ionicons name="map-outline" size={20} color="#FFFFFF" />
                   <Text style={{ color: "#FFFFFF", fontWeight: "800" }}>
-                    {activeOrder.delivery.status === "InTransit" ? "Seguir repartidor en el mapa" : "Ver mapa de mi entrega"}
+                    {translateMobileCopy(
+                      activeOrder.delivery.status === "InTransit"
+                        ? "Seguir repartidor en el mapa"
+                        : "Ver mapa de mi entrega",
+                    )}
                   </Text>
                 </TouchableOpacity>
               )}
@@ -448,13 +460,13 @@ export default function ClientProfile() {
                     <View style={styles.driverDetails}>
                       <Text style={styles.driverName}>
                         {activeOrder.delivery.deliveryPersonName ??
-                          "Repartidor asignado"}
+                          translateMobileCopy("Repartidor asignado")}
                       </Text>
                       <Text style={styles.driverPhoneLabel}>
-                        Contacto:{" "}
+                        {translateMobileCopy("Contacto:")}{" "}
                         <Text style={styles.driverPhone}>
                           {activeOrder.delivery.deliveryPersonPhone ??
-                            "No disponible"}
+                            translateMobileCopy("No disponible")}
                         </Text>
                       </Text>
                     </View>
@@ -579,6 +591,7 @@ export default function ClientProfile() {
               value={formData.name}
               onChangeText={(t) => setField("name", t)}
               editable={isEditing}
+              maxLength={120}
               error={errors.name}
             />
             <Field
@@ -586,23 +599,26 @@ export default function ClientProfile() {
               value={formData.lastName}
               onChangeText={(t) => setField("lastName", t)}
               editable={isEditing}
+              maxLength={120}
+              error={errors.lastName}
             />
             <Field
               label={t("document")}
-              value={customer?.document ?? "No registrado"}
+              value={customer?.document ?? translateMobileCopy("No registrado")}
               locked
             />
             <Field
               label={t("email")}
-              value={customer?.email ?? "No disponible"}
+              value={customer?.email ?? translateMobileCopy("No disponible")}
               locked
             />
             <Field
               label={t("phone")}
               value={formData.phone}
-              onChangeText={(t) => setField("phone", t)}
+              onChangeText={(value) => setField("phone", value.replace(/\D/g, "").slice(0, 10))}
               editable={isEditing}
               keyboardType="phone-pad"
+              maxLength={10}
               error={errors.phone}
             />
             <Field

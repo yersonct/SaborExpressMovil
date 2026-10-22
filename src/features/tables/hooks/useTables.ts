@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { tableService } from "../services/tableService";
 import { TableStatus, type Table } from "../types/table.types";
 import { useRealtimeEvents } from "@/features/shared/hooks/useRealtimeEvents";
+import { deferEffect } from "@/features/shared/utils/deferEffect";
 
 export function useTables(branchId: number | null) {
   const [tables, setTables] = useState<Table[]>([]);
@@ -30,9 +31,9 @@ export function useTables(branchId: number | null) {
     }
   }, [branchId]);
 
-  useEffect(() => {
+  useEffect(() => deferEffect(() => {
     fetchTables();
-  }, [fetchTables]);
+  }), [fetchTables]);
 
   useRealtimeEvents(["TablesChanged", "RealtimeConnected"], () => {
     void fetchTables(true);

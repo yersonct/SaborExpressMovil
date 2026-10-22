@@ -9,6 +9,9 @@ import { useCashierContext } from '../../features/cashier/context/CashierContext
 import { TRANSLATIONS, LanguageCode } from '../../locales/CashierTranslations';
 import { useMyProfile } from '@/features/employees/hooks/useMyProfile';
 import { InitialsAvatar } from '@/features/shared/components/InitialsAvatar';
+import { deferEffect } from "@/features/shared/utils/deferEffect";
+import { validateEmployeeProfile } from "@/features/employees/utils/validateEmployeeProfile";
+import { translateMobileCopy } from "@/locales/mobileCopy";
 
 export default function CashierProfile() {
   const { width: screenWidth } = useWindowDimensions();
@@ -29,7 +32,7 @@ export default function CashierProfile() {
     accent: '#E61C24', // Rojo de la marca SaborExpress
   };
 
-  const { profile, loading, error, updateProfile } = useMyProfile();
+  const { profile, loading, updateProfile } = useMyProfile();
 
   const [isEditing, setIsEditing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -40,10 +43,10 @@ export default function CashierProfile() {
     phone: '',
   });
 
-  const [errors, setErrors] = useState({ name: '' });
+  const [errors, setErrors] = useState({ name: '', lastName: '', phone: '' });
 
   // Sincroniza el formulario cuando llegan los datos reales del backend
-  useEffect(() => {
+  useEffect(() => deferEffect(() => {
     if (profile) {
       setFormData({
         name: profile.name ?? '',
@@ -51,25 +54,25 @@ export default function CashierProfile() {
         phone: profile.phone ?? '',
       });
     }
-  }, [profile]);
+  }), [profile]);
 
   const handleChangeText = (field: keyof typeof formData, value: string) => {
-    setFormData({ ...formData, [field]: value });
-    if (field in errors && errors[field as keyof typeof errors]) {
-      setErrors({ ...errors, [field]: '' });
-    }
+    setFormData((previous) => ({ ...previous, [field]: value }));
+    setErrors((previous) => ({ ...previous, [field]: '' }));
   };
 
   const handleSaveProfile = async () => {
-    if (!formData.name.trim()) {
-      setErrors({ name: t.nameRequired });
-      return;
-    }
-    if (formData.name.trim().length < 3) {
-      setErrors({ name: t.nameMinChars });
-      return;
-    }
-    setErrors({ name: '' });
+    const nextErrors = validateEmployeeProfile(
+      formData.name,
+      formData.lastName,
+      formData.phone,
+    );
+    setErrors({
+      name: nextErrors.name ?? '',
+      lastName: nextErrors.lastName ?? '',
+      phone: nextErrors.phone ?? '',
+    });
+    if (Object.values(nextErrors).some(Boolean)) return;
     setSaving(true);
     try {
       await updateProfile({
@@ -237,9 +240,10 @@ export default function CashierProfile() {
                 value={formData.name}
                 onChangeText={(text) => handleChangeText("name", text)}
                 editable={isEditing}
+                maxLength={120}
               />
               {errors.name ? (
-                <Text style={styles.errorText}>{errors.name}</Text>
+                <Text style={styles.errorText}>{translateMobileCopy(errors.name)}</Text>
               ) : null}
             </View>
 
@@ -263,7 +267,11 @@ export default function CashierProfile() {
                 value={formData.lastName}
                 onChangeText={(text) => handleChangeText("lastName", text)}
                 editable={isEditing}
+                maxLength={80}
               />
+              {errors.lastName ? (
+                <Text style={styles.errorText}>{translateMobileCopy(errors.lastName)}</Text>
+              ) : null}
             </View>
 
             <View style={styles.inputGroup}>
@@ -302,10 +310,14 @@ export default function CashierProfile() {
                   },
                 ]}
                 value={formData.phone}
-                onChangeText={(text) => handleChangeText("phone", text)}
+                onChangeText={(text) => handleChangeText("phone", text.replace(/\D/g, "").slice(0, 10))}
                 keyboardType="phone-pad"
+                maxLength={10}
                 editable={isEditing}
               />
+              {errors.phone ? (
+                <Text style={styles.errorText}>{translateMobileCopy(errors.phone)}</Text>
+              ) : null}
             </View>
 
             <View style={styles.inputGroup}>

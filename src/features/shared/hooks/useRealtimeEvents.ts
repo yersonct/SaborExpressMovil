@@ -6,8 +6,11 @@ export function useRealtimeEvents(
   callback: (eventName: string, ...args: unknown[]) => void,
 ) {
   const callbackRef = useRef(callback);
-  callbackRef.current = callback;
   const eventsKey = [...new Set(eventNames)].sort().join("|");
+
+  useEffect(() => {
+    callbackRef.current = callback;
+  }, [callback]);
 
   useEffect(() => {
     if (!eventsKey) return;

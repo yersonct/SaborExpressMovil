@@ -9,6 +9,7 @@ import { getUserIdFromToken } from "../../features/auth/services/decodeToken";
 import { UserNotificationsProvider } from "../../features/notifications/context/UserNotificationsContext";
 import { ClientPreferencesProvider, useClientPreferences } from "../../features/userPreferences/context/ClientPreferencesContext";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { MOBILE_TYPOGRAPHY } from "@/features/shared/theme/mobileTypography";
 
 export default function ClientTabsLayout() {
   const { user, initializing } = useAuth();
@@ -71,7 +72,7 @@ function ClientTabs() {
         },
         tabBarActiveTintColor: colors.accent,
         tabBarInactiveTintColor: colors.muted,
-        tabBarLabelStyle: { fontSize: 12, fontWeight: "bold" },
+        tabBarLabelStyle: MOBILE_TYPOGRAPHY.tabLabel,
       }}
     >
       <Tabs.Screen

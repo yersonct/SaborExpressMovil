@@ -12,6 +12,7 @@ import { ToastNotification } from "./NotificationToast";
 import { showAppAlert } from "../services/alertEvents";
 import { localizeClientNotification } from "@/features/notifications/utils/localizeClientNotification";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { translateMobileCopy } from "../../../locales/mobileCopy";
 
 interface Props {
   notifications: ToastNotification[];
@@ -61,11 +62,11 @@ export function NotificationCenter({
     setVisible(false);
     setTimeout(() => {
       showAppAlert(
-        t?.("clearNotificationsTitle") ?? "¿Eliminar notificaciones?",
-        t?.("clearNotificationsMessage") ?? "Se eliminarán todas las notificaciones de esta lista. Esta acción no se puede deshacer.",
+        t?.("clearNotificationsTitle") ?? translateMobileCopy("¿Eliminar notificaciones?"),
+        t?.("clearNotificationsMessage") ?? translateMobileCopy("Se eliminarán todas las notificaciones de esta lista. Esta acción no se puede deshacer."),
         [
-          { text: t?.("cancel") ?? "Cancelar", style: "cancel" },
-          { text: t?.("yesDelete") ?? "Sí, eliminar", style: "destructive", onPress: onClear },
+          { text: t?.("cancel") ?? translateMobileCopy("Cancelar"), style: "cancel" },
+          { text: t?.("yesDelete") ?? translateMobileCopy("Sí, eliminar"), style: "destructive", onPress: onClear },
         ],
       );
     }, 200);
@@ -103,11 +104,11 @@ export function NotificationCenter({
         >
           <TouchableOpacity activeOpacity={1} style={[styles.sheet, { paddingBottom: Math.max(16, insets.bottom) }, colors && { backgroundColor: colors.surface }]}>
             <View style={styles.sheetHeader}>
-              <Text style={[styles.sheetTitle, colors && { color: colors.text }]}>{t?.("notificationTitle") ?? "Notificaciones"}</Text>
+              <Text style={[styles.sheetTitle, colors && { color: colors.text }]}>{t?.("notificationTitle") ?? translateMobileCopy("Notificaciones")}</Text>
               <View style={{ flexDirection: "row", gap: 16 }}>
                 {notifications.length > 0 && (
                   <TouchableOpacity onPress={handleClearPress}>
-                    <Text style={[styles.clearText, colors && { color: colors.accent }]}>{t?.("clear") ?? "Limpiar"}</Text>
+                    <Text style={[styles.clearText, colors && { color: colors.accent }]}>{t?.("clear") ?? translateMobileCopy("Limpiar")}</Text>
                   </TouchableOpacity>
                 )}
                 <TouchableOpacity onPress={() => setVisible(false)}>
@@ -124,7 +125,7 @@ export function NotificationCenter({
                   color="#CBD5E1"
                 />
                     <Text style={[styles.emptyText, colors && { color: colors.muted }]}>
-                  {t?.("noNotifications") ?? "Sin notificaciones por ahora"}
+                  {t?.("noNotifications") ?? translateMobileCopy("Sin notificaciones por ahora")}
                 </Text>
               </View>
             ) : (
