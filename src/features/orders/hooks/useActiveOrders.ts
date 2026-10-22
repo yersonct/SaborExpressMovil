@@ -11,6 +11,7 @@ import {
   formatColombiaTime,
   isColombiaToday,
 } from "@/features/shared/utils/colombia-date";
+import { deferEffect } from "@/features/shared/utils/deferEffect";
 
 export interface WaiterOrderItem {
   id: number;
@@ -217,9 +218,9 @@ export function useActiveOrders(branchId: number | null) {
     }
   }, [branchId]);
 
-  useEffect(() => {
+  useEffect(() => deferEffect(() => {
     fetchOrders();
-  }, [fetchOrders]);
+  }), [fetchOrders]);
 
 useRealtimeEvents(
   [

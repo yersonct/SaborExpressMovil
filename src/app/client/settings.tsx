@@ -24,7 +24,7 @@ const switchWebProps = { activeThumbColor: "#FFFFFF" } as object;
 
 // En web, RN usa una perilla verde al encender; la forzamos a blanco.
 
-const languages: Array<{ code: ClientLanguage; label: string }> = [
+const languages: { code: ClientLanguage; label: string }[] = [
   { code: "es", label: "Español" },
   { code: "en", label: "English" },
   { code: "pt", label: "Português" },

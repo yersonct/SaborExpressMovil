@@ -12,7 +12,6 @@ import { useAuth } from "../features/auth/context/AuthContext";
 import {
   ROLE_ROUTES,
   resolveEffectiveRole,
-  resolvePrimaryRole,
 } from "../features/auth/services/roleMap";
 
 export default function IndexScreen() {

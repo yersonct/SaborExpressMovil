@@ -1,6 +1,8 @@
 import { StyleSheet, View, ActivityIndicator } from "react-native";
 import { Tabs, Redirect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { MOBILE_TYPOGRAPHY } from "@/features/shared/theme/mobileTypography";
 
 import {
   CashierProvider,
@@ -8,12 +10,13 @@ import {
 } from "../../features/cashier/context/CashierContext";
 import { TRANSLATIONS, LanguageCode } from "../../locales/CashierTranslations";
 import { useAuth } from "../../features/auth/context/AuthContext";
-import { resolveEffectiveRole, resolvePrimaryRole } from "../../features/auth/services/roleMap";
+import { resolveEffectiveRole } from "../../features/auth/services/roleMap";
 import { ROLE_NAMES } from "../../features/auth/types/role";
 import { getUserIdFromToken } from "@/features/auth/services/decodeToken";
 import { CashierPushNotificationRegistration } from "@/features/cashier/components/CashierPushNotificationRegistration";
 
 function CashierTabs() {
+  const insets = useSafeAreaInsets();
 
   const { language, isDark } = useCashierContext();
   const t = TRANSLATIONS[language as LanguageCode] || TRANSLATIONS["es"];
@@ -28,7 +31,12 @@ function CashierTabs() {
         headerShown: false,
         tabBarStyle: [
           styles.tabBar,
-          { backgroundColor: tabBarBg, borderTopColor: tabBarBorder },
+          {
+            backgroundColor: tabBarBg,
+            borderTopColor: tabBarBorder,
+            height: 60 + insets.bottom,
+            paddingBottom: Math.max(insets.bottom, 8),
+          },
         ],
         tabBarActiveTintColor: "#E61C24",
         tabBarInactiveTintColor: inactiveColor,
@@ -132,8 +140,5 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 10,
   },
-  tabLabel: {
-    fontSize: 12,
-    fontWeight: "600",
-  },
+  tabLabel: { ...MOBILE_TYPOGRAPHY.tabLabel },
 });

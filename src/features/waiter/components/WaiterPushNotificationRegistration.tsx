@@ -73,7 +73,25 @@ export function WaiterPushNotificationRegistration() {
   const preferences = useWaiterNotificationPreferences();
   const expoPushTokenRef = useRef<string | null>(null);
   const preferencesRef = useRef(preferences);
-  preferencesRef.current = preferences;
+
+  useEffect(() => {
+    preferencesRef.current = preferences;
+  }, [preferences]);
+
+  async function syncPreferences(expoPushToken: string) {
+    const current = preferencesRef.current;
+    const settings: WaiterPushDeviceSettings = {
+      expoPushToken,
+      platform: Platform.OS,
+      soundEnabled: current.soundNotifications,
+      vibrationEnabled: current.vibrationNotifications,
+    };
+    try {
+      await registerWaiterPushDevice(settings);
+    } catch (error) {
+      if (__DEV__) console.warn("No se pudieron guardar las preferencias push:", error);
+    }
+  }
 
   useEffect(() => {
     if (!user?.token || !preferences.hydrated) return;
@@ -141,21 +159,6 @@ export function WaiterPushNotificationRegistration() {
     if (!token || !preferences.hydrated) return;
     void syncPreferences(token);
   }, [preferences.hydrated, preferences.soundNotifications, preferences.vibrationNotifications]);
-
-  async function syncPreferences(expoPushToken: string) {
-    const current = preferencesRef.current;
-    const settings: WaiterPushDeviceSettings = {
-      expoPushToken,
-      platform: Platform.OS,
-      soundEnabled: current.soundNotifications,
-      vibrationEnabled: current.vibrationNotifications,
-    };
-    try {
-      await registerWaiterPushDevice(settings);
-    } catch (error) {
-      if (__DEV__) console.warn("No se pudieron guardar las preferencias push:", error);
-    }
-  }
 
   return null;
 }

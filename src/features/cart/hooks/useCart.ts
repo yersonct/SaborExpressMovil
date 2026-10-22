@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useAuth } from "@/features/auth/context/AuthContext";
 import { getUserIdFromToken } from "@/features/auth/services/decodeToken";
+import { deferEffect } from "@/features/shared/utils/deferEffect";
 
 const CART_STORAGE_PREFIX = "saborexpress_client_cart";
 
@@ -30,7 +31,7 @@ export function useCart() {
   const loaded = cartState.storageKey === storageKey && cartState.loaded;
 
   // Each account gets its own cart on shared devices.
-  useEffect(() => {
+  useEffect(() => deferEffect(() => {
     let active = true;
     setCartState({ storageKey, cart: [], loaded: false });
     (async () => {
@@ -43,15 +44,15 @@ export function useCart() {
       }
     })();
     return () => { active = false; };
-  }, [storageKey]);
+  }), [storageKey]);
 
   // Save only state belonging to the currently active account.
   useEffect(() => {
-    if (!loaded) return;
-    AsyncStorage.setItem(storageKey, JSON.stringify(cart)).catch(
+    if (cartState.storageKey !== storageKey || !cartState.loaded) return;
+    AsyncStorage.setItem(storageKey, JSON.stringify(cartState.cart)).catch(
       () => {},
     );
-  }, [cart, loaded, storageKey]);
+  }, [cartState, storageKey]);
 
   const addItem = useCallback((item: Omit<CartItem, "cartId">) => {
     setCartState((current) => ({

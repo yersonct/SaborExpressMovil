@@ -1,4 +1,4 @@
-import type { ClientRegisterData, AuthResponse } from "../types";
+import type { ClientRegisterData } from "../types";
 import { handleResponse } from "./handleResponse";
 import { AUTH_ENDPOINTS } from "./authEndpoints";
 import { fetchWithNetworkHandling } from "@/features/shared/services/networkStatus";

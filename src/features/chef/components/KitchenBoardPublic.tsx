@@ -1,15 +1,17 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { AppState, View, Text, ScrollView, ActivityIndicator } from "react-native";
+import { AppState, View, Text, ActivityIndicator } from "react-native";
 import * as signalR from "@microsoft/signalr";
 import { Ionicons } from "@expo/vector-icons";
 import { API_BASE_URL } from "@/config/api";
 import { orderService } from "@/features/orders/services/orderService";
 import { OrderDetailStatus } from "@/features/orders/types/order.types";
-import { chefStyles, boardStyles } from "./style/ChefStyles";
+import { chefStyles } from "./style/ChefStyles";
 import { useChefTheme } from "../context/ChefThemeContext";
 import { buildBatches, KitchenBatch } from "./ChefOrders";
 import KitchenColumns from "./KitchenColumns";
 import { formatColombiaTime } from "@/features/shared/utils/colombia-date";
+import { translateMobileCopy } from "../../../locales/mobileCopy";
+import { getApiLanguage } from "../../auth/services/apiLanguage";
 
 
 
@@ -17,15 +19,16 @@ const getElapsedLabel = (createdAt: string) => {
   const minutes = Math.floor(
     (Date.now() - new Date(createdAt).getTime()) / 60000,
   );
-  if (minutes < 1) return "recién";
-  if (minutes < 60) return `hace ${minutes} min`;
+  if (minutes < 1) return translateMobileCopy("recién");
+  if (minutes < 60) return translateMobileCopy("hace {{count}} min", { count: minutes });
   const hours = Math.floor(minutes / 60);
-  return `hace ${hours} h`;
+  return translateMobileCopy("hace {{count}} h", { count: hours });
 };
 
 // Tarjeta de solo lectura: mismo look que PedidoCard, pero sin modal ni botón.
 function PedidoCardReadOnly({ batch }: { batch: KitchenBatch }) {
   const { colors } = useChefTheme();
+  const language = getApiLanguage();
   const STATUS_LABEL: Partial<Record<OrderDetailStatus, string>> = {
     [OrderDetailStatus.Pending]: "Por preparar",
     [OrderDetailStatus.InPreparation]: "En preparación",
@@ -51,12 +54,12 @@ function PedidoCardReadOnly({ batch }: { batch: KitchenBatch }) {
         <View>
           <Text style={[chefStyles.mesaBadge, { color: colors.text }]}>
             {batch.tableNumber
-              ? `Mesa ${batch.tableNumber}`
-              : batch.customerName || "Para llevar"}
+              ? `${translateMobileCopy("Mesa")} ${batch.tableNumber}`
+              : batch.customerName || translateMobileCopy("Para llevar")}
           </Text>
           {!!batch.employeeName && (
             <Text style={[chefStyles.mesero, { color: colors.mutedText }]}>
-              Mesero: {batch.employeeName}
+              {translateMobileCopy("Mesero:")} {batch.employeeName}
             </Text>
           )}
           {batch.orderType === "Delivery" && (
@@ -72,8 +75,8 @@ function PedidoCardReadOnly({ batch }: { batch: KitchenBatch }) {
             >
               🛵{" "}
               {batch.assignedDeliveryPersonName
-                ? `Repartidor: ${batch.assignedDeliveryPersonName}`
-                : "Sin repartidor asignado"}
+                ? `${translateMobileCopy("Repartidor:")} ${batch.assignedDeliveryPersonName}`
+                : translateMobileCopy("Sin repartidor asignado")}
             </Text>
           )}
         </View>
@@ -89,7 +92,7 @@ function PedidoCardReadOnly({ batch }: { batch: KitchenBatch }) {
         ]}
       >
         <Text style={{ color: statusColor, fontSize: 12, fontWeight: "700" }}>
-          {STATUS_LABEL[batch.status]}
+          {translateMobileCopy(STATUS_LABEL[batch.status] ?? "")}
         </Text>
       </View>
 
@@ -109,14 +112,14 @@ function PedidoCardReadOnly({ batch }: { batch: KitchenBatch }) {
         >
           <Ionicons name="lock-closed" size={16} color="#92400E" />
           <Text style={{ color: "#78350F", fontSize: 12, flex: 1 }}>
-            Esperando confirmación de caja para iniciar la preparación.
+            {translateMobileCopy("Esperando confirmación de caja para iniciar la preparación.")}
           </Text>
         </View>
       )}
 
       <View style={chefStyles.tagTiempo}>
         <Text style={{ fontSize: 11, color: colors.mutedText }}>
-          {formatColombiaTime(batch.createdAt, "es-CO", {
+          {formatColombiaTime(batch.createdAt, language === "en" ? "en-US" : language === "pt" ? "pt-BR" : language === "fr" ? "fr-FR" : "es-CO", {
             hour: "2-digit",
             minute: "2-digit",
           })}{" "}
@@ -146,13 +149,13 @@ function PedidoCardReadOnly({ batch }: { batch: KitchenBatch }) {
                     },
                   ]}
                 >
-                  Para llevar
+                  {translateMobileCopy("Para llevar")}
                 </Text>
               )}
             </View>
             {!!item.notes && (
               <Text style={[chefStyles.nota, { color: colors.mutedText }]}>
-                Nota: {item.notes}
+                {translateMobileCopy("Nota:")} {item.notes}
               </Text>
             )}
           </View>
@@ -303,7 +306,7 @@ export default function KitchenBoardPublic({
             SABOREXPRESS
           </Text>
           <Text style={[chefStyles.roleBadge, { color: colors.mutedText }]}>
-            MONITOR DE COCINA
+            {translateMobileCopy("MONITOR DE COCINA")}
           </Text>
         </View>
       </View>

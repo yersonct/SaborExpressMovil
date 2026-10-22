@@ -16,6 +16,8 @@ import { LeafletMap, type MapMarker } from "./LeafletMap";
 import type { MapCircle } from "./leafletShared";
 import { useDeliveryCoverage } from "../hooks/useDeliveryCoverage";
 import { useClientPreferences } from "@/features/userPreferences/context/ClientPreferencesContext";
+import { translateMobileCopy } from "../../../locales/mobileCopy";
+import { deferEffect } from "@/features/shared/utils/deferEffect";
 
 type Coords = { latitude: number; longitude: number };
 
@@ -24,7 +26,7 @@ type Props = {
   onClose: () => void;
   onConfirm: (coords: Coords, exactAddress?: string) => void;
   initialLocation?: Coords | null;
-  savedAddresses?: Array<Coords & { id: number; addressLine: string }>;
+  savedAddresses?: (Coords & { id: number; addressLine: string })[];
   selectedAddressId?: number | null;
   onChooseSavedAddress?: (id: number) => void;
   saving?: boolean;
@@ -84,14 +86,14 @@ export function LocationPickerModal({
   const { radii, loading: coverageLoading } = useDeliveryCoverage(located, visible);
 
   // Cada vez que se abre, el pin parte de la ubicación actual (si hay)
-  useEffect(() => {
+  useEffect(() => deferEffect(() => {
     if (visible) {
       setPin(initialLocation ?? null);
       setChosenSavedId(selectedAddressId);
       setExactAddress("");
       setAddressOptionsOpen(false);
     }
-  }, [visible]);
+  }), [visible, initialLocation, selectedAddressId]);
 
   // Prioriza sedes con cobertura real; si no hay, informa la más cercana.
   const nearest = useMemo(() => {
@@ -296,6 +298,7 @@ export function LocationPickerModal({
                 onChangeText={setExactAddress}
                 placeholder={copy.addressHint}
                 placeholderTextColor={colors.muted}
+                maxLength={255}
                 autoCapitalize="words"
                 style={{ borderWidth: 1, borderColor: colors.border, backgroundColor: colors.background,
                   color: colors.text, borderRadius: 9, paddingHorizontal: 12, paddingVertical: 9, fontSize: 14 }}
@@ -308,10 +311,10 @@ export function LocationPickerModal({
               ? t("tapMapGps")
               : nearest
                 ? coverageLoading
-                  ? "Consultando zonas de cobertura..."
+                  ? translateMobileCopy("Consultando zonas de cobertura...")
                   : nearest.inCoverage
-                    ? nearest.branch.name + ": " + nearest.km.toFixed(1) + " km en línea recta (radio " + nearest.radiusKm + " km). " + t("dragPinAdjust")
-                    : "Fuera de la zona de entrega. La sede más cercana es " + nearest.branch.name + " (" + nearest.km.toFixed(1) + " km). Mueve el punto dentro de un círculo."
+                    ? translateMobileCopy("{{branch}}: {{distance}} km en línea recta (radio {{radius}} km). {{adjust}}", { branch: nearest.branch.name, distance: nearest.km.toFixed(1), radius: nearest.radiusKm ?? "", adjust: t("dragPinAdjust") })
+                    : translateMobileCopy("Fuera de la zona de entrega. La sede más cercana es {{branch}} ({{distance}} km). Mueve el punto dentro de un círculo.", { branch: nearest.branch.name, distance: nearest.km.toFixed(1) })
                 : t("dragPin")}
           </Text>
 
@@ -320,7 +323,7 @@ export function LocationPickerModal({
             onPress={() => {
               if (!pin || coverageLoading || saving) return;
               if (!nearest?.inCoverage) {
-                Alert.alert("Fuera de cobertura", "Mueve el marcador dentro del círculo de entrega de una sede antes de confirmar.");
+                  Alert.alert(translateMobileCopy("Fuera de cobertura"), translateMobileCopy("Mueve el marcador dentro del círculo de entrega de una sede antes de confirmar."));
                 return;
               }
               if (chosenSavedId != null && onChooseSavedAddress) {

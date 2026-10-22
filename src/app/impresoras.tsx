@@ -4,6 +4,7 @@ import { Redirect } from 'expo-router';
 import { useAuth } from '../features/auth/context/AuthContext';
 import { resolveEffectiveRole } from '../features/auth/services/roleMap';
 import PrinterSettingsScreen from '../features/printers/components/PrinterSettingsScreen';
+import { CashierProvider } from '../features/cashier/context/CashierContext';
 
 /** Acceso reservado al cajero con turno activo; no depende de ocultar un botón. */
 export default function PrinterRoute() {
@@ -17,5 +18,5 @@ export default function PrinterRoute() {
   if (!normalized.includes('cajer') && !normalized.includes('cashier')) {
     return <Redirect href="/" />;
   }
-  return <PrinterSettingsScreen />;
+  return <CashierProvider><PrinterSettingsScreen /></CashierProvider>;
 }

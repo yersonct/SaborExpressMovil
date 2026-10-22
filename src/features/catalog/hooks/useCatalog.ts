@@ -6,6 +6,7 @@ import {
   REALTIME_CONNECTED,
   subscribeRealtimeEvent,
 } from "@/features/shared/services/realtimeEvents";
+import { deferEffect } from "@/features/shared/utils/deferEffect";
 
 export function useCatalog(branchId?: number | null) {
   const [categories, setCategories] = useState<Category[]>([]);
@@ -24,7 +25,7 @@ export function useCatalog(branchId?: number | null) {
     };
   }, []);
 
-  useEffect(() => {
+  useEffect(() => deferEffect(() => {
     // Sin sede resuelta no mostramos nada
     if (!branchId) {
       setCategories([]);
@@ -67,7 +68,7 @@ export function useCatalog(branchId?: number | null) {
     return () => {
       cancelled = true;
     };
-  }, [branchId, refreshVersion]);
+  }), [branchId, refreshVersion]);
 
   return { categories, products, loading, error };
 }

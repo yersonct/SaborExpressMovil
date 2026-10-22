@@ -21,8 +21,10 @@ export function LeafletMap({
   // Los callbacks se guardan en refs para no tener que re-suscribir el listener.
   const onPressRef = useRef(onPress);
   const onDragRef = useRef(onMarkerDragEnd);
-  onPressRef.current = onPress;
-  onDragRef.current = onMarkerDragEnd;
+  useEffect(() => {
+    onPressRef.current = onPress;
+    onDragRef.current = onMarkerDragEnd;
+  }, [onPress, onMarkerDragEnd]);
 
   const send = (msg: object) =>
     frameRef.current?.contentWindow?.postMessage(JSON.stringify(msg), "*");
@@ -61,7 +63,7 @@ export function LeafletMap({
   useEffect(() => {
     if (!ready || !focus) return;
     send({ cmd: "focus", lat: focus.latitude, lng: focus.longitude });
-  }, [ready, focus?.nonce]);
+  }, [ready, focus]);
 
   return (
     <View style={{ flex: 1 }}>

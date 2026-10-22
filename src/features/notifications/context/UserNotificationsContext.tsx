@@ -24,6 +24,7 @@ import { useOptionalDeliveryNotificationPreferences } from "@/features/delivery/
 import { getDeliveryTheme } from "@/features/delivery/components/context/deliveryTheme";
 import { invokeRealtimeMethod } from "@/features/shared/services/realtimeEvents";
 import { useRealtimeEvents } from "@/features/shared/hooks/useRealtimeEvents";
+import { deferEffect } from "@/features/shared/utils/deferEffect";
 
 const notifySound = require("../../../../assets/sounds/notify.wav");
 
@@ -70,12 +71,14 @@ export function UserNotificationsProvider({
     ? getDeliveryTheme(deliveryPreferences.isDark)
     : undefined;
   const clientSettingsRef = useRef(clientPreferences?.settings);
-  clientSettingsRef.current = clientPreferences?.settings;
   const deliveryPreferencesRef = useRef(deliveryPreferences);
-  deliveryPreferencesRef.current = deliveryPreferences;
   const player = useAudioPlayer(notifySound);
   const playerRef = useRef(player);
-  playerRef.current = player;
+  useEffect(() => {
+    clientSettingsRef.current = clientPreferences?.settings;
+    deliveryPreferencesRef.current = deliveryPreferences;
+    playerRef.current = player;
+  }, [clientPreferences?.settings, deliveryPreferences, player]);
 
   const [history, setHistory] = useState<ToastNotification[]>([]);
   const [toasts, setToasts] = useState<ToastNotification[]>([]);
@@ -120,9 +123,9 @@ export function UserNotificationsProvider({
     }
   }, [userId]);
 
-  useEffect(() => {
+  useEffect(() => deferEffect(() => {
     loadHistory();
-  }, [loadHistory]);
+  }), [loadHistory]);
 
   const handleRealtimeEvent = useCallback((eventName: string, ...args: unknown[]) => {
     if (eventName === "ReceiveNotification") {
@@ -325,6 +328,8 @@ export function useUserNotifications() {
 export function useNotificationListener(cb: Listener) {
   const { subscribe } = useUserNotifications();
   const ref = useRef(cb);
-  ref.current = cb;
+  useEffect(() => {
+    ref.current = cb;
+  }, [cb]);
   useEffect(() => subscribe((n) => ref.current(n)), [subscribe]);
 }

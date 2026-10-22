@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { branchService } from "../services/branchService";
 import type { PublicBranch } from "../types/branch.types";
+import { deferEffect } from "@/features/shared/utils/deferEffect";
 
 // Recalcula la sede más cercana cada vez que cambian las coordenadas
 // (ej. el cliente elige otra dirección de entrega).
@@ -12,7 +13,7 @@ export function useNearestBranch(
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  useEffect(() => deferEffect(() => {
     if (latitude == null || longitude == null) {
       setBranch(null);
       setLoading(false);
@@ -38,7 +39,7 @@ export function useNearestBranch(
     return () => {
       mounted = false;
     };
-  }, [latitude, longitude]);
+  }), [latitude, longitude]);
 
   return { branch, loading, error };
 }

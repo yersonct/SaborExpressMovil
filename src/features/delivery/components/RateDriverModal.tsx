@@ -12,6 +12,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { deliveryService } from "../services/deliveryService";
 import { useClientPreferences, useClientThemedStyles } from "@/features/userPreferences/context/ClientPreferencesContext";
+import { deferEffect } from "@/features/shared/utils/deferEffect";
 
 type Props = {
   visible: boolean;
@@ -34,12 +35,12 @@ export default function RateDriverModal({
   const [comment, setComment] = useState("");
   const [sending, setSending] = useState(false);
 
-  useEffect(() => {
+  useEffect(() => deferEffect(() => {
     if (visible) {
       setScore(0);
       setComment("");
     }
-  }, [visible, deliveryId]);
+  }), [visible, deliveryId]);
 
   const submit = async () => {
     if (!deliveryId || score === 0) return;

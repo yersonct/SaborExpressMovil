@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Modal, View, Text, TouchableOpacity } from "react-native";
 import { authService } from "../services/authService";
+import { translateMobileCopy } from "../../../locales/mobileCopy";
 
 interface AccountActivationModalProps {
   visible: boolean;
@@ -26,10 +27,10 @@ export const AccountActivationModal: React.FC<AccountActivationModalProps> = ({
     try {
       await authService.resendActivationCode({ identifier });
       setResendMessage(
-        "Si tu cuenta está pendiente, te enviamos un nuevo enlace.",
+        translateMobileCopy("Si tu cuenta está pendiente, te enviamos un nuevo enlace."),
       );
     } catch (err: any) {
-      setError(err.message || "No se pudo reenviar el enlace.");
+      setError(translateMobileCopy(err.message || "No se pudo reenviar el enlace."));
     } finally {
       setResendLoading(false);
     }
@@ -60,7 +61,7 @@ export const AccountActivationModal: React.FC<AccountActivationModalProps> = ({
               marginBottom: 8,
             }}
           >
-            Activa tu cuenta
+            {translateMobileCopy("Activa tu cuenta")}
           </Text>
           <Text
             style={{
@@ -69,9 +70,10 @@ export const AccountActivationModal: React.FC<AccountActivationModalProps> = ({
               marginBottom: 16,
             }}
           >
-            Tu cuenta ({identifier}) todavía no ha sido activada. Revisa tu
-            correo y presiona el botón "Activar cuenta" para definir tu
-            contraseña.
+            {translateMobileCopy(
+              'Tu cuenta ({{email}}) todavía no ha sido activada. Revisa tu correo y presiona el botón "Activar cuenta" para definir tu contraseña.',
+              { email: identifier },
+            )}
           </Text>
 
           {error ? (
@@ -95,7 +97,7 @@ export const AccountActivationModal: React.FC<AccountActivationModalProps> = ({
             }}
           >
             <Text style={{ color: themeColors.buttonText, fontWeight: "700" }}>
-              {resendLoading ? "Enviando..." : "Reenviar enlace"}
+              {resendLoading ? translateMobileCopy("Enviando...") : translateMobileCopy("Reenviar enlace")}
             </Text>
           </TouchableOpacity>
 
@@ -103,7 +105,7 @@ export const AccountActivationModal: React.FC<AccountActivationModalProps> = ({
             onPress={onCancel}
             style={{ marginTop: 16, alignItems: "center" }}
           >
-            <Text style={{ color: themeColors.mutedText }}>Cerrar</Text>
+            <Text style={{ color: themeColors.mutedText }}>{translateMobileCopy("Cerrar")}</Text>
           </TouchableOpacity>
         </View>
       </View>

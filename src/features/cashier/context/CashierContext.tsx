@@ -27,6 +27,7 @@ import {
   persistCashierPreferences,
   type CashierPreferences,
 } from "../services/cashierPreferences";
+import { deferEffect } from "@/features/shared/utils/deferEffect";
 
 type CashierContextType = CashierPreferences & {
   hydrated: boolean;
@@ -37,7 +38,6 @@ type CashierContextType = CashierPreferences & {
   setIsDark: (dark: boolean) => void;
   setNotificationSound: (on: boolean) => void;
   setVibrationNotifications: (on: boolean) => void;
-  setAutoPrint: (on: boolean) => void;
 };
 
 const CashierContext = createContext<CashierContextType | undefined>(undefined);
@@ -57,7 +57,7 @@ export const CashierProvider: React.FC<{ children: ReactNode }> = ({
   const [preferencesError, setPreferencesError] = useState<string | null>(null);
   const [pushStatus, setPushStatus] = useState<CashierContextType["pushStatus"]>("checking");
 
-  useEffect(() => {
+  useEffect(() => deferEffect(() => {
     let active = true;
     const languageSelectedBeforeLogin = getApiLanguage();
     setHydrated(false);
@@ -88,10 +88,6 @@ export const CashierProvider: React.FC<{ children: ReactNode }> = ({
           typeof cached.vibrationNotifications === "boolean"
             ? cached.vibrationNotifications
             : DEFAULT_CASHIER_PREFERENCES.vibrationNotifications,
-        autoPrint:
-          typeof cached.autoPrint === "boolean"
-            ? cached.autoPrint
-            : DEFAULT_CASHIER_PREFERENCES.autoPrint,
       });
 
       let resolvedLanguage = cachedLanguage ?? languageSelectedBeforeLogin;
@@ -120,7 +116,7 @@ export const CashierProvider: React.FC<{ children: ReactNode }> = ({
     return () => {
       active = false;
     };
-  }, [storageKey]);
+  }), [storageKey]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -151,10 +147,6 @@ export const CashierProvider: React.FC<{ children: ReactNode }> = ({
     },
     [],
   );
-  const setAutoPrint = useCallback((autoPrint: boolean) => {
-    setPreferences((current) => ({ ...current, autoPrint }));
-  }, []);
-
   const value = useMemo(
     () => ({
       ...preferences,
@@ -166,7 +158,6 @@ export const CashierProvider: React.FC<{ children: ReactNode }> = ({
       setIsDark,
       setNotificationSound,
       setVibrationNotifications,
-      setAutoPrint,
     }),
     [
       preferences,
@@ -178,7 +169,6 @@ export const CashierProvider: React.FC<{ children: ReactNode }> = ({
       setIsDark,
       setNotificationSound,
       setVibrationNotifications,
-      setAutoPrint,
     ],
   );
 

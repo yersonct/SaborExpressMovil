@@ -1,13 +1,12 @@
-import { getToken } from "@/features/auth/services/tokenStorage";
 import { handleResponse } from "@/features/auth/services/handleResponse";
 import type { Category, Product } from "../types/catalog.types";
 
 import { API_BASE_URL as BASE_URL } from "@/config/api";
 
+import { fetchAuthed } from "@/features/auth/services/apiClient";
+
 const API_BASE_URL = `${BASE_URL}/api`;
 export const SERVER_BASE_URL = BASE_URL;
-
-import { fetchAuthed } from "@/features/auth/services/apiClient";
 
 export const catalogService = {
   getCategories: async (): Promise<Category[]> => {
