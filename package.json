@@ -70,7 +70,8 @@
     "web": "cross-env NODE_OPTIONS=--max-old-space-size=8192 expo start --web",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "node --experimental-strip-types src/features/auth/services/role-map.test.mjs"
+    "test": "node --experimental-strip-types src/features/auth/services/role-map.test.mjs && node --experimental-strip-types src/features/printers/services/printerSelectionWorkflow.test.mjs && node scripts/i18n-audit.test.mjs",
+    "i18n:audit": "node scripts/audit-i18n.mjs"
   },
   "private": true
 }
