@@ -131,10 +131,10 @@ export default function PrinterSettingsScreen() {
   }, t.pairing);
 
   const choose = (device: PrinterDevice) => run(async () => {
-    const printer = await selectPrinter(device, width, t.noName);
-    setSaved(printer); setConnected(true); setSelectedKind('classic');
+    const printer = await selectPrinter(device, width, t.noName, language);
+    setSaved(printer); setConnected(currentPrinterIsConnected(printer.address)); setSelectedKind('classic');
     setMessage(t.printerSaved.replace('{name}', printer.name));
-  }, t.pairing);
+  }, t.savingClassic);
 
   const refreshPd01 = () => run(async () => {
     const found = await scanPd01Printers();
@@ -260,7 +260,7 @@ export default function PrinterSettingsScreen() {
                     <Text style={printerNameStyle}>{device.name || t.noName}</Text>
                     <Text style={mutedTextStyle}>{device.address}</Text>
                   </View>
-                  <Text style={styles.arrow}>{t.select} ›</Text>
+                  <Text style={styles.arrow}>{t.testAndUse} ›</Text>
                 </Pressable>
               ))}
             </>

@@ -7,8 +7,8 @@ export const PRINTER_SETTINGS_COPY: Record<ApiLanguage, {
   searchingPd01: string; noPd01: string; choosePd01: string; forgetPd01: string;
   unavailable: string; paperWidth: string; linkedDevices: string; nearbyPrinters: string;
   pairInstructions: string; nearbyInstructions: string; searchDevices: string; processing: string;
-  noName: string; select: string; selectedDevice: string; printPd01: string; pairing: string;
-  searching: string; savingPd01: string; removing: string; savingWidth: string;
+  noName: string; select: string; testAndUse: string; selectedDevice: string; printPd01: string; pairing: string;
+  searching: string; savingClassic: string; savingPd01: string; removing: string; savingWidth: string;
   sent: string; printerSaved: string; pd01Saved: string; printerRemoved: string; pd01Removed: string;
   bluetoothOn: string; permission: string; printerMissing: string; busy: string;
   disconnected: string; sendFailed: string; unsupported: string; nativeBuildRequired: string; generalError: string;
@@ -28,9 +28,9 @@ export const PRINTER_SETTINGS_COPY: Record<ApiLanguage, {
     paperWidth: 'Ancho del papel', linkedDevices: 'Dispositivos vinculados', nearbyPrinters: 'Impresoras cercanas',
     pairInstructions: 'Esta opción es para impresoras clásicas ya emparejadas en Ajustes de Bluetooth.',
     nearbyInstructions: 'Activa Bluetooth para buscar impresoras térmicas compatibles con BLE.',
-    searchDevices: 'Buscar otras emparejadas', processing: 'Procesando…', noName: 'Dispositivo sin nombre', select: 'Elegir',
+    searchDevices: 'Buscar otras emparejadas', processing: 'Procesando…', noName: 'Dispositivo sin nombre', select: 'Elegir', testAndUse: 'Probar y usar',
     selectedDevice: 'Seleccionada', printPd01: 'Imprimir prueba Bluetooth', pairing: 'Buscando impresoras emparejadas…',
-    searching: 'Buscando impresoras BLE…', savingPd01: 'Imprimiendo prueba y guardando…', removing: 'Quitando la impresora guardada…',
+    searching: 'Buscando impresoras BLE…', savingClassic: 'Enviando prueba y guardando…', savingPd01: 'Imprimiendo prueba y guardando…', removing: 'Quitando la impresora guardada…',
     savingWidth: 'Guardando el ancho del papel…', sent: 'Comprobante enviado. Comprueba que el papel haya salido correctamente.',
     printerSaved: 'Impresora {name} guardada correctamente.', pd01Saved: 'Prueba enviada a {name}. Si no salió papel, comprueba la impresora antes de cobrar.',
     printerRemoved: 'Se quitó la impresora Bluetooth guardada.', pd01Removed: 'Se quitó la impresora BLE guardada.',
@@ -61,8 +61,8 @@ export const PRINTER_SETTINGS_COPY: Record<ApiLanguage, {
     paperWidth: 'Paper width', linkedDevices: 'Paired devices', nearbyPrinters: 'Nearby printers',
     pairInstructions: 'This option is for classic printers already paired in Bluetooth settings.',
     nearbyInstructions: 'Turn on Bluetooth to find BLE-compatible thermal printers.', searchDevices: 'Find other paired printers', processing: 'Working…',
-    noName: 'Unnamed device', select: 'Choose', selectedDevice: 'Selected', printPd01: 'Print Bluetooth test',
-    pairing: 'Searching paired printers…', searching: 'Searching for BLE printers…', savingPd01: 'Printing test and saving…',
+    noName: 'Unnamed device', select: 'Choose', testAndUse: 'Test and use', selectedDevice: 'Selected', printPd01: 'Print Bluetooth test',
+    pairing: 'Searching paired printers…', searching: 'Searching for BLE printers…', savingClassic: 'Sending test and saving…', savingPd01: 'Printing test and saving…',
     removing: 'Removing saved printer…', savingWidth: 'Saving paper width…',
     sent: 'Receipt sent. Check that it printed correctly.', printerSaved: 'Printer {name} saved.',
     pd01Saved: 'Test sent to {name}. If no paper came out, check the printer before taking payment.', printerRemoved: 'Saved Bluetooth printer removed.',
@@ -93,8 +93,8 @@ export const PRINTER_SETTINGS_COPY: Record<ApiLanguage, {
     paperWidth: 'Largura do papel', linkedDevices: 'Dispositivos pareados', nearbyPrinters: 'Impressoras próximas',
     pairInstructions: 'Esta opção é para impressoras clássicas já pareadas nas configurações de Bluetooth.',
     nearbyInstructions: 'Ative o Bluetooth para buscar impressoras térmicas compatíveis com BLE.', searchDevices: 'Buscar outras pareadas', processing: 'Processando…',
-    noName: 'Dispositivo sem nome', select: 'Escolher', selectedDevice: 'Selecionada', printPd01: 'Imprimir teste Bluetooth',
-    pairing: 'Buscando impressoras pareadas…', searching: 'Buscando impressoras BLE…', savingPd01: 'Imprimindo teste e salvando…',
+    noName: 'Dispositivo sem nome', select: 'Escolher', testAndUse: 'Testar e usar', selectedDevice: 'Selecionada', printPd01: 'Imprimir teste Bluetooth',
+    pairing: 'Buscando impressoras pareadas…', searching: 'Buscando impressoras BLE…', savingClassic: 'Enviando teste e salvando…', savingPd01: 'Imprimindo teste e salvando…',
     removing: 'Removendo impressora salva…', savingWidth: 'Salvando largura do papel…',
     sent: 'Comprovante enviado. Confira se o papel saiu corretamente.', printerSaved: 'Impressora {name} salva corretamente.',
     pd01Saved: 'Teste enviado para {name}. Se não saiu papel, confira a impressora antes de cobrar.', printerRemoved: 'A impressora Bluetooth salva foi removida.',
@@ -125,8 +125,8 @@ export const PRINTER_SETTINGS_COPY: Record<ApiLanguage, {
     paperWidth: 'Largeur du papier', linkedDevices: 'Appareils associés', nearbyPrinters: 'Imprimantes à proximité',
     pairInstructions: 'Cette option concerne les imprimantes classiques déjà associées dans les réglages Bluetooth.',
     nearbyInstructions: 'Activez le Bluetooth pour rechercher des imprimantes thermiques compatibles BLE.', searchDevices: 'Rechercher d’autres imprimantes associées', processing: 'Traitement…',
-    noName: 'Appareil sans nom', select: 'Choisir', selectedDevice: 'Sélectionnée', printPd01: 'Imprimer un test Bluetooth',
-    pairing: 'Recherche des imprimantes associées…', searching: 'Recherche d’imprimantes BLE…', savingPd01: 'Impression du test et enregistrement…',
+    noName: 'Appareil sans nom', select: 'Choisir', testAndUse: 'Tester et utiliser', selectedDevice: 'Sélectionnée', printPd01: 'Imprimer un test Bluetooth',
+    pairing: 'Recherche des imprimantes associées…', searching: 'Recherche d’imprimantes BLE…', savingClassic: 'Envoi du test et enregistrement…', savingPd01: 'Impression du test et enregistrement…',
     removing: 'Suppression de l’imprimante enregistrée…', savingWidth: 'Enregistrement de la largeur du papier…',
     sent: 'Reçu envoyé. Vérifiez que le papier est sorti correctement.', printerSaved: 'Imprimante {name} enregistrée.',
     pd01Saved: 'Test envoyé à {name}. Si aucun papier ne sort, vérifiez l’imprimante avant le paiement.', printerRemoved: 'L’imprimante Bluetooth enregistrée a été supprimée.',
