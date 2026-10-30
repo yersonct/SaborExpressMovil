@@ -1,4 +1,6 @@
 export interface ClientRegisterData {
+  acceptedPrivacyPolicy: boolean;
+  privacyPolicyVersion: string;
   name: string;
   lastName: string;
   email: string;

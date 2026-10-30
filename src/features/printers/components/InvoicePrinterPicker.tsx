@@ -96,13 +96,14 @@ export function InvoicePrinterPicker({ visible, language, isDark, onClose, onPri
   useEffect(() => {
     if (!visible) return;
     let active = true;
-    setChecking(true);
-    setSelectedName('');
-    setAvailableTarget(null);
-    setPrintError('');
-    setStatus(copy.noneSelected);
-
     void (async () => {
+      await Promise.resolve();
+      if (!active) return;
+      setChecking(true);
+      setSelectedName('');
+      setAvailableTarget(null);
+      setPrintError('');
+      setStatus(copy.noneSelected);
       try {
         const [savedSelection, classicPrinter, pd01Printer] = await Promise.all([
           loadPrinterSelection().catch(() => null),

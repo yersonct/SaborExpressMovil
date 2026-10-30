@@ -58,5 +58,6 @@ export async function handleResponse<T>(res: Response): Promise<T> {
 
     throw errorData;
   }
+  if (res.status === 204 || res.status === 205) return undefined as T;
   return res.json();
 }

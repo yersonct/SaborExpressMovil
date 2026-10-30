@@ -1,8 +1,0 @@
-{
-  "mcpServers": {
-    "html-to-design": {
-      "type": "http",
-      "url": "https://mcp.to.design"
-    }
-  }
-}

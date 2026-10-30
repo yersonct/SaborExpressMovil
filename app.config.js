@@ -1,9 +1,16 @@
+const fs = require('node:fs');
 const appJson = require('./app.json');
 
 module.exports = ({ config }) => {
   const expoConfig = config ?? appJson.expo;
   const appEnvironment = process.env.APP_ENV ?? 'development';
   const isProduction = appEnvironment === 'production';
+  const googleServicesFile = process.env.GOOGLE_SERVICES_JSON ?? (!isProduction && fs.existsSync('./google-services.json') ? './google-services.json' : undefined);
+  if (isProduction && process.env.EAS_BUILD_PLATFORM === 'android' && !process.env.GOOGLE_SERVICES_JSON) {
+    throw new Error('Configura GOOGLE_SERVICES_JSON como archivo secreto de EAS para Android.');
+  }
+  const androidConfig = { ...expoConfig.android };
+  delete androidConfig.googleServicesFile;
   const apiUrl = process.env.EXPO_PUBLIC_API_URL;
 
   if (isProduction && (!apiUrl || !/^https:\/\//i.test(apiUrl))) {
@@ -29,5 +36,5 @@ module.exports = ({ config }) => {
     ];
   });
 
-  return { ...expoConfig, plugins };
+  return { ...expoConfig, plugins, android: { ...androidConfig, ...(googleServicesFile ? { googleServicesFile } : {}) } };
 };
