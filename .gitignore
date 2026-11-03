@@ -44,3 +44,15 @@ example
 # generated native folders
 /ios
 /android
+
+# Local configuration, secrets and generated artifacts
+!.env.example
+/.idea/
+/.vscode/
+/.claude/
+/.mcp.json
+/google-services.json
+/google-services.*.json
+/login-debug.txt
+/estructura
+/local.properties
