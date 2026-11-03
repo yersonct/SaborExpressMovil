@@ -44,14 +44,12 @@ export async function handleResponse<T>(res: Response): Promise<T> {
         : res.status >= 500
           ? messages.server
           : messages.request;
+    const responseMessage = res.status >= 500
+      ? undefined
+      : body?.error ?? body?.message ?? body?.detail ?? validationMessage;
 
     const errorData: ApiError = {
-      message:
-        body?.error ??
-        body?.message ??
-        body?.detail ??
-        validationMessage ??
-        statusMessage,
+      message: responseMessage ?? statusMessage,
       statusCode: res.status,
       code: body?.code,
     };
