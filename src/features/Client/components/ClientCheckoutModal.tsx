@@ -28,9 +28,6 @@ export const ClientCheckoutModal = ({
   paymentMethod,
   setPaymentMethod,
   handlePaymentNextStep,
-  receiptUploaded,
-  setReceiptUploaded,
-  handleFakeUploadReceipt,
   submitFinalOrder,
   setIsUploadingReceipt,
   setIsCheckingOut,
@@ -329,7 +326,6 @@ export const ClientCheckoutModal = ({
                   ]}
                   onPress={() => {
                     setPaymentMethod("efectivo");
-                    setReceiptUploaded(true); // Engañamos al sistema para que no pida foto
                   }}
                   activeOpacity={0.8}
                 >

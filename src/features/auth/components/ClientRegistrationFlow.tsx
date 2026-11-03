@@ -112,6 +112,8 @@ export const ClientRegistrationFlow: React.FC<ClientRegistrationFlowProps> = ({
         phone: formData.phone.trim() || undefined,
         email: formData.email.trim().toLowerCase(),
         password: formData.password,
+        acceptedPrivacyPolicy: acceptedTerms,
+        privacyPolicyVersion: "2026-10-30",
       });
 
       setLoading(false);
@@ -236,6 +238,8 @@ export const ClientRegistrationFlow: React.FC<ClientRegistrationFlowProps> = ({
 
       {/* 🔥 CHECKBOX TÉRMINOS Y CONDICIONES */}
       <TouchableOpacity
+        accessibilityRole="checkbox"
+        accessibilityState={{ checked: acceptedTerms }}
         style={styles.termsRow}
         activeOpacity={0.7}
         onPress={() => { setAcceptedTerms(!acceptedTerms); setError(""); }}
@@ -253,7 +257,7 @@ export const ClientRegistrationFlow: React.FC<ClientRegistrationFlowProps> = ({
             style={styles.termsLink}
             onPress={() => setTermsModalVisible(true)}
           >
-            {translateMobileCopy("Términos y Condiciones")}
+            {translateMobileCopy("Términos y Condiciones")} · {translateMobileCopy("Política de privacidad")}
           </Text>
         </Text>
       </TouchableOpacity>
