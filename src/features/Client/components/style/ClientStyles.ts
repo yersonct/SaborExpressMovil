@@ -1,7 +1,7 @@
 import { StyleSheet, Platform } from 'react-native';
 
 export const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F8FAFC' },
+  container: { flex: 1, backgroundColor: '#F8FAFC', width: "100%", maxWidth: 1280, alignSelf: "center" },
   toastContainer: { position: 'absolute', top: Platform.OS === 'ios' ? 60 : 30, left: 20, right: 20, backgroundColor: '#10B981', padding: 16, borderRadius: 12, zIndex: 999, elevation: 10, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 5 },
   toastText: { color: '#FFFFFF', fontWeight: 'bold', textAlign: 'center', fontSize: 16 },
 
@@ -20,43 +20,43 @@ export const styles = StyleSheet.create({
   categoryTextActive: { color: '#E61C24', fontWeight: 'bold' },
 
   menuList: { padding: 15, paddingBottom: 92 },
-  menuCard: { flexDirection: 'row', backgroundColor: '#FFFFFF', borderRadius: 20, padding: 14, marginBottom: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 10, elevation: 3 },
+  menuCard: { flexDirection: 'row', backgroundColor: '#FFFFFF', borderRadius: 20, padding: 14, marginBottom: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 10, elevation: 3, flex: 1 },
   menuCardImagePlaceholder: { width: 85, height: 85, backgroundColor: '#F8FAFC', borderRadius: 16, justifyContent: 'center', alignItems: 'center', marginRight: 15 },
-  menuCardInfo: { flex: 1, justifyContent: 'space-between' },
-  menuCardTitle: { fontSize: 17, fontWeight: 'bold', color: '#1E293B' },
+  menuCardInfo: { flex: 1, justifyContent: 'space-between', minWidth: 0 },
+  menuCardTitle: { fontSize: 17, fontWeight: 'bold', color: '#1E293B', flexShrink: 1 },
   menuCardDesc: { fontSize: 13, color: '#64748B', marginTop: 4, lineHeight: 18 },
   menuCardFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 12 },
   menuCardPrice: { fontSize: 18, fontWeight: '900', color: '#10B981' },
-  
+
   addButton: { backgroundColor: '#E61C24', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 12 },
 
   floatingCartBtn: { position: 'absolute', bottom: 0, left: 15, right: 15, backgroundColor: '#E61C24', borderRadius: 16, padding: 14, minHeight: 58, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', elevation: 8, shadowColor: '#E61C24', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.3, shadowRadius: 8 },
-  floatingCartLeft: { flexDirection: 'row', alignItems: 'center' },
+  floatingCartLeft: { flexDirection: 'row', alignItems: 'center', flex: 1, minWidth: 0 },
   floatingCartCount: { backgroundColor: '#FFFFFF', width: 30, height: 30, borderRadius: 15, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
   floatingCartCountText: { color: '#E61C24', fontWeight: 'bold', fontSize: 16 },
-  floatingCartText: { color: '#FFFFFF', fontSize: 16, fontWeight: 'bold' },
+  floatingCartText: { color: '#FFFFFF', fontSize: 16, fontWeight: 'bold', flexShrink: 1 },
   floatingCartTotal: { color: '#FFFFFF', fontSize: 18, fontWeight: '900' },
 
   confirmOverlay: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.7)', justifyContent: 'center', alignItems: 'center', padding: 20 },
-  confirmBox: { backgroundColor: '#FFFFFF', borderRadius: 24, padding: 25, width: '100%', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.2, shadowRadius: 20, elevation: 15 },
+  confirmBox: { backgroundColor: '#FFFFFF', borderRadius: 24, padding: 25, width: '100%', shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.2, shadowRadius: 20, elevation: 15, maxWidth: 560, maxHeight: "90%", alignItems: undefined },
   confirmImageCircle: { width: 90, height: 90, borderRadius: 45, backgroundColor: '#F8FAFC', justifyContent: 'center', alignItems: 'center', marginBottom: 15, borderWidth: 4, borderColor: '#F1F5F9' },
   confirmTitle: { fontSize: 16, color: '#64748B', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 5 },
   confirmItemName: { fontSize: 24, fontWeight: '900', color: '#1E293B', textAlign: 'center', marginBottom: 5 },
   confirmItemPrice: { fontSize: 22, fontWeight: 'bold', color: '#10B981', marginBottom: 15 },
   confirmDesc: { fontSize: 14, color: '#64748B', textAlign: 'center', marginBottom: 25, paddingHorizontal: 10 },
-  confirmActionsRow: { flexDirection: 'row', justifyContent: 'space-between', width: '100%', gap: 15 },
-  confirmCancelBtn: { flex: 1, paddingVertical: 16, backgroundColor: '#F1F5F9', borderRadius: 14, alignItems: 'center' },
+  confirmActionsRow: { flexDirection: 'row', justifyContent: 'space-between', width: '100%', gap: 15, flexWrap: "wrap" },
+  confirmCancelBtn: { flex: 1, paddingVertical: 16, backgroundColor: '#F1F5F9', borderRadius: 14, alignItems: 'center', minHeight: 48, minWidth: 110 },
   confirmCancelText: { color: '#64748B', fontWeight: 'bold', fontSize: 16 },
-  confirmAcceptBtn: { flex: 1, flexDirection: 'row', justifyContent: 'center', paddingVertical: 16, backgroundColor: '#E61C24', borderRadius: 14, alignItems: 'center', shadowColor: '#E61C24', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 5 },
+  confirmAcceptBtn: { flex: 1, flexDirection: 'row', justifyContent: 'center', paddingVertical: 16, backgroundColor: '#E61C24', borderRadius: 14, alignItems: 'center', shadowColor: '#E61C24', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 5, minHeight: 48, minWidth: 110 },
   confirmAcceptText: { color: '#FFFFFF', fontWeight: 'bold', fontSize: 16 },
 
   modalOverlay: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.6)', justifyContent: 'flex-end' },
-  modalBox: { backgroundColor: '#FFFFFF', borderTopLeftRadius: 30, borderTopRightRadius: 30, padding: 20, paddingBottom: 24, minHeight: '45%', maxHeight: '92%' },
+  modalBox: { backgroundColor: '#FFFFFF', borderTopLeftRadius: 30, borderTopRightRadius: 30, padding: 20, paddingBottom: 24, minHeight: '45%', maxHeight: '92%', width: "100%", maxWidth: 720, alignSelf: "center" },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 25 },
-  modalTitle: { fontSize: 22, fontWeight: '900', color: '#1E293B' },
+  modalTitle: { fontSize: 22, fontWeight: '900', color: '#1E293B', flexShrink: 1 },
   backButton: { width: 26 },
   emptyCartText: { textAlign: 'center', fontSize: 16, color: '#94A3B8', marginTop: 15, fontWeight: '500' },
-  
+
   cartItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },
   cartItemImageMini: { width: 45, height: 45, backgroundColor: '#F8FAFC', borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
   cartItemName: { fontSize: 16, color: '#1E293B', fontWeight: '600' },
@@ -66,10 +66,10 @@ export const styles = StyleSheet.create({
   paymentTotalBox: { alignItems: 'center', backgroundColor: '#F8FAFC', paddingVertical: 20, borderRadius: 16, marginBottom: 25 },
   paymentTotalLabel: { color: '#64748B', fontSize: 14, textTransform: 'uppercase', fontWeight: 'bold', marginBottom: 5 },
   paymentTotalBig: { color: '#1E293B', fontSize: 36, fontWeight: '900' },
-  
+
   paymentSubtitle: { fontSize: 16, color: '#1E293B', fontWeight: 'bold', marginBottom: 15 },
   paymentGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
-  
+
   paymentCard: { width: '48%', backgroundColor: '#FFFFFF', borderWidth: 2, borderColor: '#E2E8F0', borderRadius: 16, padding: 15, marginBottom: 15, alignItems: 'center', justifyContent: 'center' },
   paymentCardActive: { borderColor: '#E61C24', backgroundColor: '#FEF2F2' },
   iconCircle: { width: 50, height: 50, borderRadius: 25, backgroundColor: '#F1F5F9', justifyContent: 'center', alignItems: 'center', marginBottom: 10 },
@@ -86,12 +86,12 @@ export const styles = StyleSheet.create({
   bankDataValue: { color: '#1E293B', fontWeight: 'bold' },
   payLinkBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#3B82F6', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 12, marginTop: 10 },
   payLinkBtnText: { color: '#FFF', fontWeight: 'bold', fontSize: 15 },
-  
+
   uploadSubtitle: { fontSize: 15, color: '#1E293B', fontWeight: 'bold', marginBottom: 15, textAlign: 'center', paddingHorizontal: 10 },
   uploadArea: { borderWidth: 2, borderColor: '#CBD5E1', borderStyle: 'dashed', borderRadius: 16, padding: 30, alignItems: 'center', backgroundColor: '#F8FAFC' },
   uploadTextTitle: { color: '#3B82F6', fontWeight: 'bold', fontSize: 16, marginTop: 10, marginBottom: 4 },
   uploadTextSub: { color: '#94A3B8', fontSize: 12 },
-  
+
   uploadedBox: { backgroundColor: '#ECFDF5', borderWidth: 1, borderColor: '#10B981', borderRadius: 16, padding: 20, alignItems: 'center' },
   uploadedText: { color: '#065F46', fontWeight: 'bold', fontSize: 16, marginTop: 10, marginBottom: 10 },
   reuploadText: { color: '#3B82F6', fontWeight: 'bold', textDecorationLine: 'underline' },
@@ -100,10 +100,10 @@ export const styles = StyleSheet.create({
   checkoutTotalRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
   checkoutTotalLabel: { fontSize: 18, color: '#64748B', fontWeight: 'bold' },
   checkoutTotalValue: { fontSize: 26, color: '#1E293B', fontWeight: '900' },
-  
+
   confirmOrderBtn: { flexDirection: 'row', justifyContent: 'center', backgroundColor: '#10B981', paddingVertical: 18, borderRadius: 16, alignItems: 'center', shadowColor: '#10B981', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 5 },
   confirmOrderBtnDisabled: { backgroundColor: '#A7F3D0', shadowOpacity: 0 },
-  confirmOrderBtnText: { color: '#FFFFFF', fontSize: 18, fontWeight: 'bold' },
+  confirmOrderBtnText: { color: '#FFFFFF', fontSize: 18, fontWeight: 'bold', flexShrink: 1, textAlign: "center", paddingHorizontal: 8 },
 
   successContainer: { alignItems: 'center', justifyContent: 'center', paddingVertical: 30 },
   successTitle: { fontSize: 28, fontWeight: '900', color: '#1E293B', marginTop: 20, marginBottom: 8 },

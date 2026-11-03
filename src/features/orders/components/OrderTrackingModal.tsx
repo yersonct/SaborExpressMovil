@@ -1,3 +1,4 @@
+import { OrderReviewForm } from "@/features/reviews/components/OrderReviewForm";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -365,7 +366,8 @@ export function OrderTrackingModal({
                 <Text style={s.rateBtnText}>{t("rateDriver")}</Text>
               </TouchableOpacity>
             ))}
-        </ScrollView>
+        {order.status === OrderStatus.Delivered && order.channel === "App" && (<OrderReviewForm key={order.id} orderId={order.id} />)}
+</ScrollView>
       </View>
     </Modal>
   );

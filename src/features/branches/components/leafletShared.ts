@@ -33,6 +33,10 @@ export type LeafletMapProps = {
 
 // Funciona dentro de un WebView (móvil) y dentro de un iframe (web):
 // post() detecta dónde está corriendo y manda el mensaje por el canal correcto.
+const mapTilerKey = process.env.EXPO_PUBLIC_MAPTILER_KEY?.trim();
+const mapTileUrl = mapTilerKey ? "https://api.maptiler.com/maps/streets-v2/{z}/{x}/{y}.png?key=" + encodeURIComponent(mapTilerKey) : "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
+const mapAttribution = mapTilerKey ? "&copy; MapTiler &copy; OpenStreetMap contributors" : "&copy; OpenStreetMap contributors";
+
 export const LEAFLET_HTML = `<!DOCTYPE html>
 <html>
 <head>
@@ -49,9 +53,9 @@ html,body,#map{height:100%;margin:0;padding:0;background:#e5e7eb}
 <div id="map"></div>
 <script>
 var map = L.map('map').setView([2.9273, -75.2819], 13);
-L.tileLayer('https://api.maptiler.com/maps/streets-v2/{z}/{x}/{y}.png?key=4MD748DSh1hxGOF9NqM7', {
+L.tileLayer(${JSON.stringify(mapTileUrl)}, {
   maxZoom: 20,
-  attribution: '&copy; MapTiler &copy; OpenStreetMap contributors'
+  attribution: ${JSON.stringify(mapAttribution)}
 }).addTo(map);
 var layer = L.layerGroup().addTo(map);
 

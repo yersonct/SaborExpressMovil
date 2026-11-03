@@ -1,9 +1,7 @@
 import { StyleSheet } from "react-native";
 
 export const styles = StyleSheet.create({
-  container: {
-    width: "100%",
-  },
+  container: { width: "100%", maxWidth: 560, alignSelf: "center" },
   header: {
     flexDirection: "row",
     alignItems: "center",
@@ -50,12 +48,7 @@ export const styles = StyleSheet.create({
   },
 
   // 🔥 NUEVO: checkbox de términos
-  termsRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    marginBottom: 20,
-    marginTop: 4,
-  },
+  termsRow: { flexDirection: "row", alignItems: "flex-start", marginBottom: 20, marginTop: 4, minHeight: 44 },
   checkbox: {
     width: 22,
     height: 22,
@@ -88,24 +81,14 @@ export const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.5)",
     justifyContent: "flex-end",
   },
-  modalContent: {
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    paddingTop: 16,
-    paddingHorizontal: 20,
-    paddingBottom: 24,
-    maxHeight: "80%",
-  },
+  modalContent: { borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingTop: 16, paddingHorizontal: 20, paddingBottom: 24, maxHeight: "80%", width: "100%", maxWidth: 720, alignSelf: "center" },
   modalHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     marginBottom: 14,
   },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: "bold",
-  },
+  modalTitle: { fontSize: 18, fontWeight: "bold", flex: 1, flexShrink: 1 },
   modalScroll: {
     marginBottom: 16,
   },
