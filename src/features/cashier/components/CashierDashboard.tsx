@@ -268,7 +268,9 @@ export default function CashierDashboard() {
               : o.orderType === OrderType.Delivery
                 ? t.tabDelivery
                 : t.tabTakeaway;
-        } catch {}
+        } catch (error) {
+          console.warn("[CashierDashboard] Could not load the new order location", error);
+        }
       }
       const location = lugar ? t.toastTabSuffix.replace("{tab}", lugar) : "";
       const orderNumber = n.relatedEntityId ? ` #${n.relatedEntityId}` : "";

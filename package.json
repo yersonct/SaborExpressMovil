@@ -71,6 +71,7 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "node --import ./scripts/register-typescript.mjs --test src/features/auth/services/role-map.test.mjs src/features/printers/services/printerSelectionWorkflow.test.mjs src/features/auth/services/handle-response.test.mjs scripts/i18n-audit.test.mjs scripts/api-base.test.mjs",
+    "test:coverage": "node --experimental-test-coverage --import ./scripts/register-typescript.mjs --test src/features/auth/services/role-map.test.mjs src/features/printers/services/printerSelectionWorkflow.test.mjs src/features/auth/services/handle-response.test.mjs scripts/i18n-audit.test.mjs scripts/api-base.test.mjs",
     "i18n:audit": "node scripts/audit-i18n.mjs",
     "build": "expo export --platform android"
   },

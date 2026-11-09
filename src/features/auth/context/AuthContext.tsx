@@ -235,7 +235,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       // Cierra todas las pantallas y manda al login
       try {
         router.replace("/");
-      } catch {}
+      } catch (error) {
+        console.warn("[AuthContext] Failed to redirect after session expiration", error);
+      }
     });
   }, []);
 
@@ -308,8 +310,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
           // renueve o cierre la sesión local aunque no haya llegado el evento.
           try {
             await fetchAuthed(AUTH_ENDPOINTS.session);
-          } catch {
-            // apiClient gestiona 401/403; los errores de red se reintentan abajo.
+          } catch (error) {
+            // apiClient handles 401/403; network errors are retried below.
+            console.warn("[AuthContext] Session validation failed after realtime recovery", error);
           }
         }
       } finally {
@@ -466,14 +469,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         })(),
         new Promise((resolve) => setTimeout(resolve, 1500)),
       ]);
-    } catch {
-      // el logout local no debe depender del servidor
+    } catch (error) {
+      // Local logout must not depend on the server.
+      console.warn("[AuthContext] Remote logout failed; clearing the local session", error);
     } finally {
       await clearSession();
       setUser(null);
       try {
         router.replace("/");
-      } catch {}
+      } catch (error) {
+        console.warn("[AuthContext] Failed to redirect after local logout", error);
+      }
     }
   };
 

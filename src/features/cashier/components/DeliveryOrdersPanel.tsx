@@ -163,7 +163,9 @@ export function DeliveryOrdersPanel({
       try {
         const fresh = await orderService.getById(order.id);
         driver = fresh.assignedDeliveryPersonName;
-      } catch {}
+      } catch (error) {
+        console.warn("[DeliveryOrdersPanel] Could not refresh the assigned driver", error);
+      }
 
       if (driver) {
         showToast(
